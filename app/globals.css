@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/*
+ * The landing page is a dark, cinematic surface in both schemes: the orbit
+ * gallery is lit imagery on a near-black ground, and a light background would
+ * wash the tiles out.
+ */
+:root {
+  --background: #08080a;
+  --foreground: #f4f4f5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
