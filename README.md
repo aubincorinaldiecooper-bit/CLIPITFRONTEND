@@ -75,9 +75,38 @@ skipped), follow the `atelier-ui` skill it writes under `.agents/skills` and
 
 ## Demo imagery
 
-`public/images/demo/shared/1..20.webp` are generated placeholder gradients
-(~2 KB each, 84 KB total), not photography. Replace them with real frames —
-the paths are the only thing the page depends on.
+`public/images/demo/shared/1..20.webp` currently hold generated placeholder
+gradients (~2 KB each, 84 KB total), not photography.
+
+To replace them with real imagery from [Pexels](https://www.pexels.com/api/)
+(free key, commercial use, no attribution required):
+
+```bash
+PEXELS_API_KEY=xxxx npm run tiles:fetch
+```
+
+By default it pulls a still out of an actual video clip for each tile — which
+is what the gallery is meant to depict — crops to 16:9 at 640×360, applies a
+shared colour grade so twenty unrelated sources read as one set, and writes
+`credits.json` recording the provenance of every tile.
+
+```bash
+npm run tiles:fetch -- --photos                    # photo library instead of video frames
+npm run tiles:fetch -- --count 24 --width 960      # more, larger tiles
+npm run tiles:fetch -- --queries "surfing,rally racing,live band"
+npm run tiles:fetch -- --no-grade                  # keep the sources ungraded
+```
+
+Requires `ffmpeg` on PATH. The key is read from the environment and must never
+be committed. Check the total weight before committing the result — twenty
+photographic tiles land near 1 MB, against 84 KB for the placeholders:
+
+```bash
+du -sh public/images/demo/shared
+```
+
+Tiles render around 200 px wide, tilted and in motion, so favour high
+contrast and a single clear subject; busy frames turn to mush at that size.
 
 ## Routes
 

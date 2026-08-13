@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "tiles:fetch": "node scripts/fetch-demo-tiles.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
