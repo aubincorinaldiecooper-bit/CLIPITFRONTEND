@@ -141,7 +141,17 @@ export function OrbitGallery({
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setClearColor(0x000000, 0)
-    container.appendChild(renderer.domElement)
+
+    // The drawing buffer is scaled by the pixel ratio, so the canvas must be
+    // sized in CSS separately or it lays out at buffer size — on a DPR-2 phone
+    // that is twice the viewport, which pushes the rings off centre and throws
+    // off pointer hit-testing. Percentages track the container at any ratio,
+    // and `setSize` below is told not to touch these.
+    const canvas = renderer.domElement
+    canvas.style.display = "block"
+    canvas.style.width = "100%"
+    canvas.style.height = "100%"
+    container.appendChild(canvas)
 
     const ringGroups: THREE.Group[] = []
     const tiles: Tile[] = []
