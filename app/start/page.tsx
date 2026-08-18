@@ -1,33 +1,30 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
 import type { Clip, ClipRequest, Video } from "@/lib/types"
-import { EASE, StepShell, type StepState } from "@/components/flow/step-shell"
 import { SourceStep } from "@/components/flow/source-step"
-import { ProcessingStep } from "@/components/flow/processing-step"
-import { InstructionStep } from "@/components/flow/instruction-step"
-import { ResultsStep } from "@/components/flow/results-step"
+import { VideoStage } from "@/components/theater/video-stage"
+import { QueryDrawer } from "@/components/theater/query-drawer"
 
 const POLL_MS = 2000
+const EASE = [0.23, 1, 0.32, 1] as const
 
 /**
- * The whole clipping flow on one page.
- *
- * Each stage is revealed as the previous one completes and collapses to a
- * summary line, so the path from source to finished clip stays on screen.
+ * The theater: the video seated centre stage with one progress arc from
+ * upload through understanding, and a collapsible drawer on the right where
+ * questions are asked and their evidence lands.
  */
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
   const [clipRequest, setClipRequest] = useState<ClipRequest | null>(null)
   const [clips, setClips] = useState<Clip[]>([])
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [uploadFraction, setUploadFraction] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
-  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [seekRequest, setSeekRequest] = useState<{ seconds: number; token: number } | null>(null)
 
   const configured = api.isConfigured()
 
@@ -35,7 +32,6 @@ export default function StartPage() {
     setError(cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.")
     setBusy(false)
     setUploadFraction(null)
-    setGenerating(false)
   }, [])
 
   // --- source -------------------------------------------------------------
@@ -80,7 +76,14 @@ export default function StartPage() {
   // --- polling ------------------------------------------------------------
 
   const videoId = video?.id
-  const videoSettled = video?.status === "ready" || video?.status === "failed"
+  // Playback and the understanding phase both land after "ready", so keep
+  // polling until the index settles too.
+  const indexSettled =
+    video?.index == null ||
+    video.index.status === "ready" ||
+    video.index.status === "failed" ||
+    video.index.status === "unavailable"
+  const videoSettled = video?.status === "failed" || (video?.status === "ready" && indexSettled && !!video?.playback)
 
   useEffect(() => {
     if (!videoId || videoSettled || uploadFraction !== null) return
@@ -102,7 +105,6 @@ export default function StartPage() {
   }, [videoId, videoSettled, uploadFraction])
 
   const requestId = clipRequest?.id
-  // Keep polling past completion while clips are still rendering.
   const clipsPending = clips.some((clip) => clip.status === "pending" || clip.status === "generating")
   const requestSettled =
     (clipRequest?.status === "completed" || clipRequest?.status === "failed") && !clipsPending
@@ -128,18 +130,6 @@ export default function StartPage() {
     }
   }, [requestId, requestSettled])
 
-  // Preselect every match the first time a search completes, so the common
-  // case is one click rather than N.
-  const preselected = useRef(false)
-  useEffect(() => {
-    if (preselected.current) return
-    if (clipRequest?.status !== "completed") return
-    const matches = clipRequest.matches ?? []
-    if (matches.length === 0) return
-    preselected.current = true
-    setSelected(new Set(matches.map((match) => match.id)))
-  }, [clipRequest])
-
   // --- actions ------------------------------------------------------------
 
   const startSearch = useCallback(
@@ -151,8 +141,6 @@ export default function StartPage() {
         const { clipRequest: created } = await api.createClipRequest(video.id, instruction)
         setClipRequest(created)
         setClips([])
-        setSelected(new Set())
-        preselected.current = false
       } catch (cause) {
         fail(cause)
       } finally {
@@ -162,48 +150,35 @@ export default function StartPage() {
     [video, fail],
   )
 
-  const generate = useCallback(async () => {
-    if (!clipRequest) return
-    setError(null)
-    setGenerating(true)
-    try {
-      const { clips: created } = await api.generateClips(clipRequest.id, Array.from(selected))
-      setClips((current) => {
-        const merged = new Map(current.map((clip) => [clip.id, clip]))
-        for (const clip of created) merged.set(clip.id, clip)
-        return Array.from(merged.values())
-      })
-    } catch (cause) {
-      fail(cause)
-    } finally {
-      setGenerating(false)
-    }
-  }, [clipRequest, selected, fail])
+  const clipMatch = useCallback(
+    async (matchId: string) => {
+      if (!clipRequest) return
+      setError(null)
+      try {
+        const { clips: created } = await api.generateClips(clipRequest.id, [matchId])
+        setClips((current) => {
+          const merged = new Map(current.map((clip) => [clip.id, clip]))
+          for (const clip of created) merged.set(clip.id, clip)
+          return Array.from(merged.values())
+        })
+      } catch (cause) {
+        fail(cause)
+      }
+    },
+    [clipRequest, fail],
+  )
 
-  const toggle = useCallback((matchId: string) => {
-    setSelected((current) => {
-      const next = new Set(current)
-      if (next.has(matchId)) next.delete(matchId)
-      else next.add(matchId)
-      return next
-    })
+  const seekTo = useCallback((seconds: number) => {
+    setSeekRequest((current) => ({ seconds, token: (current?.token ?? 0) + 1 }))
   }, [])
 
   const reset = useCallback(() => {
     setVideo(null)
     setClipRequest(null)
     setClips([])
-    setSelected(new Set())
     setError(null)
-    preselected.current = false
+    setSeekRequest(null)
   }, [])
-
-  // --- stage derivation ---------------------------------------------------
-
-  const sourceState: StepState = video ? "done" : "active"
-  const processingState: StepState = !video ? "upcoming" : video.readyForSearch ? "done" : "active"
-  const instructionState: StepState = !video?.readyForSearch ? "upcoming" : clipRequest ? "done" : "active"
-  const resultsState: StepState = clipRequest ? "active" : "upcoming"
 
   if (!configured) {
     return (
@@ -217,9 +192,11 @@ export default function StartPage() {
     )
   }
 
+  const matches = clipRequest?.status === "completed" ? (clipRequest.matches ?? []) : []
+
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-12 sm:py-16">
-      <header className="mb-10 flex items-baseline justify-between gap-4">
+    <main className="flex min-h-dvh w-full flex-col px-6 py-8">
+      <header className="mx-auto flex w-full max-w-6xl items-baseline justify-between gap-4">
         <Link href="/" className="font-serif text-2xl tracking-tight">
           CLIPIT
         </Link>
@@ -234,61 +211,49 @@ export default function StartPage() {
         )}
       </header>
 
-      <div className="space-y-3">
-        <StepShell
-          index={1}
-          title="Add a video"
-          state={sourceState}
-          summary={video?.title ?? video?.originalFilename ?? video?.sourceUrl ?? undefined}
+      {!video ? (
+        <motion.div
+          className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center py-10"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
         >
-          <SourceStep
-            onUpload={startUpload}
-            onYoutube={startYoutube}
+          <h1 className="font-serif text-3xl">Add a video</h1>
+          <p className="mt-2 text-sm text-foreground/55">
+            Upload a file or paste a YouTube link. The video takes the stage while it is read once, end to end —
+            then ask it anything.
+          </p>
+          <div className="mt-8">
+            <SourceStep onUpload={startUpload} onYoutube={startYoutube} busy={busy} uploadFraction={uploadFraction} />
+          </div>
+        </motion.div>
+      ) : (
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center py-8 lg:pr-[380px]">
+          <VideoStage video={video} uploadFraction={uploadFraction} matches={matches} seekRequest={seekRequest} />
+
+          <p className="mx-auto mt-3 max-w-xl truncate text-center text-xs text-foreground/40">
+            {video.title ?? video.originalFilename ?? video.sourceUrl}
+            {video.durationTimecode ? ` · ${video.durationTimecode}` : ""}
+          </p>
+
+          <QueryDrawer
+            video={video}
+            clipRequest={clipRequest}
+            clips={clips}
             busy={busy}
-            uploadFraction={uploadFraction}
+            onSearch={startSearch}
+            onSeek={seekTo}
+            onClip={clipMatch}
           />
-        </StepShell>
-
-        <StepShell
-          index={2}
-          title="Processing"
-          state={processingState}
-          summary={
-            video?.durationTimecode ? `${video.durationTimecode} · ${video.chunkCount} segments` : "Ready"
-          }
-        >
-          {video && <ProcessingStep video={video} />}
-        </StepShell>
-
-        <StepShell
-          index={3}
-          title="What do you want to find?"
-          state={instructionState}
-          summary={clipRequest?.instruction}
-        >
-          {video && <InstructionStep video={video} onSubmit={startSearch} busy={busy} />}
-        </StepShell>
-
-        <StepShell index={4} title="Moments" state={resultsState}>
-          {clipRequest && (
-            <ResultsStep
-              clipRequest={clipRequest}
-              clips={clips}
-              selected={selected}
-              onToggle={toggle}
-              onGenerate={generate}
-              generating={generating}
-            />
-          )}
-        </StepShell>
-      </div>
+        </div>
+      )}
 
       {error && (
         <motion.p
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: EASE }}
-          className="mt-6 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300"
+          className="mx-auto mt-4 w-full max-w-xl rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300"
         >
           {error}
         </motion.p>
