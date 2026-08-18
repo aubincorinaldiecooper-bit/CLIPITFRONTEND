@@ -12,14 +12,28 @@ const TRANSCRIPT_LABEL: Record<Video["transcript"]["status"], string> = {
   unavailable: "Not available — search will use frames only",
 }
 
+const INDEX_LABEL: Record<Video["index"]["status"], string> = {
+  pending: "Queued",
+  queued: "Queued",
+  running: "Watching the video…",
+  ready: "Ready",
+  failed: "Failed — visual search will be slower",
+  unavailable: "Off",
+}
+
 /**
- * Preprocessing status. The transcript is reported separately because the
- * video becomes searchable before the transcript finishes, and a spoken-word
- * search waits for it.
+ * Preprocessing status. The transcript and the scene index are reported
+ * separately because the video becomes searchable before either finishes:
+ * this is where the model reads the video once, so questions afterwards
+ * answer from what it wrote down.
  */
 export function ProcessingStep({ video }: { video: Video }) {
   const transcriptDone = video.transcript.status === "ready"
   const transcriptStuck = video.transcript.status === "failed" || video.transcript.status === "unavailable"
+  // Tolerate an API that predates the index field.
+  const index = video.index ?? { status: "pending" as const, sceneCount: 0, error: null }
+  const indexDone = index.status === "ready"
+  const indexStuck = index.status === "failed" || index.status === "unavailable"
 
   return (
     <div className="space-y-5">
@@ -45,6 +59,8 @@ export function ProcessingStep({ video }: { video: Video }) {
         {video.transcript.segmentCount > 0 && (
           <Detail label="Spoken lines" value={String(video.transcript.segmentCount)} />
         )}
+        <Detail label="Understanding" value={INDEX_LABEL[index.status]} muted={indexStuck} accent={indexDone} />
+        {index.sceneCount > 0 && <Detail label="Scenes" value={String(index.sceneCount)} />}
       </dl>
 
       {video.status === "failed" && (
