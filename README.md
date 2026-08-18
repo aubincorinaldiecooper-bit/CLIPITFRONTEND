@@ -113,4 +113,34 @@ contrast and a single clear subject; busy frames turn to mush at that size.
 | Route | Purpose |
 | --- | --- |
 | `/` | Landing page |
-| `/start` | Placeholder for the ingest flow, so the CTA is not a dead link |
+| `/start` | The clipping flow |
+
+## The clipping flow
+
+`/start` is the whole product on one page. Each stage is revealed as the
+previous one completes and collapses to a summary line, so the path from
+source to finished clip stays visible:
+
+1. **Add a video** — drag/drop or pick a file, or paste a YouTube URL. Uploads
+   go straight to storage with a presigned PUT, so the bytes never pass
+   through the API; progress comes from the XHR upload events.
+2. **Processing** — ffprobe metadata and chunk count, with the transcript
+   reported separately, because a video becomes searchable before its
+   transcript finishes.
+3. **What do you want to find?** — free text, sent to the model verbatim. The
+   example chips fill the box; they are not categories.
+4. **Moments** — matches stream in while the search is still running, each with
+   its timecode, duration, confidence and whether it was found on screen, in
+   speech, or both. Select the ones you want, generate, and the clips appear
+   inline as playable MP4s with download links.
+
+### Configuration
+
+```
+NEXT_PUBLIC_API_URL=https://<your-backend>.up.railway.app
+```
+
+Without it, `/start` renders a notice instead of failing at the first request.
+
+Auth is handled for you: the client mints an anonymous session token on first
+use, keeps it in `localStorage`, and re-mints it if the backend rejects it.
