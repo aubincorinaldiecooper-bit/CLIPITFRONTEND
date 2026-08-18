@@ -17,10 +17,15 @@ const EASE = [0.23, 1, 0.32, 1] as const
  * upload through understanding, and a collapsible drawer on the right where
  * questions are asked and their evidence lands.
  */
+/** One question and everything that came back for it. The drawer keeps all of them. */
+export interface Exchange {
+  request: ClipRequest
+  clips: Clip[]
+}
+
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
-  const [clipRequest, setClipRequest] = useState<ClipRequest | null>(null)
-  const [clips, setClips] = useState<Clip[]>([])
+  const [exchanges, setExchanges] = useState<Exchange[]>([])
   const [uploadFraction, setUploadFraction] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,23 +109,35 @@ export default function StartPage() {
     }
   }, [videoId, videoSettled, uploadFraction])
 
-  const requestId = clipRequest?.id
-  const clipsPending = clips.some((clip) => clip.status === "pending" || clip.status === "generating")
-  const requestSettled =
-    (clipRequest?.status === "completed" || clipRequest?.status === "failed") && !clipsPending
+  // Any exchange can still be moving: the newest while it searches, and any
+  // older one whose clip is being cut. Poll them all until they settle.
+  const unsettledIds = exchanges
+    .filter(
+      (exchange) =>
+        exchange.request.status === "pending" ||
+        exchange.request.status === "searching" ||
+        exchange.clips.some((clip) => clip.status === "pending" || clip.status === "generating"),
+    )
+    .map((exchange) => exchange.request.id)
+  const unsettledKey = unsettledIds.join(",")
 
   useEffect(() => {
-    if (!requestId || requestSettled) return
+    if (unsettledIds.length === 0) return
 
     let cancelled = false
     const timer = setInterval(async () => {
-      try {
-        const { clipRequest: latest, clips: latestClips } = await api.getClipRequest(requestId)
-        if (cancelled) return
-        setClipRequest(latest)
-        setClips(latestClips)
-      } catch {
-        // Ignore a dropped poll; the next tick will catch up.
+      for (const id of unsettledIds) {
+        try {
+          const { clipRequest: latest, clips: latestClips } = await api.getClipRequest(id)
+          if (cancelled) return
+          setExchanges((previous) =>
+            previous.map((exchange) =>
+              exchange.request.id === latest.id ? { request: latest, clips: latestClips } : exchange,
+            ),
+          )
+        } catch {
+          // Ignore a dropped poll; the next tick will catch up.
+        }
       }
     }, POLL_MS)
 
@@ -128,7 +145,8 @@ export default function StartPage() {
       cancelled = true
       clearInterval(timer)
     }
-  }, [requestId, requestSettled])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unsettledKey])
 
   // --- actions ------------------------------------------------------------
 
@@ -139,8 +157,8 @@ export default function StartPage() {
       setBusy(true)
       try {
         const { clipRequest: created } = await api.createClipRequest(video.id, instruction)
-        setClipRequest(created)
-        setClips([])
+        // Append, never replace: the drawer keeps the whole conversation.
+        setExchanges((previous) => [...previous, { request: created, clips: [] }])
       } catch (cause) {
         fail(cause)
       } finally {
@@ -151,21 +169,23 @@ export default function StartPage() {
   )
 
   const clipMatch = useCallback(
-    async (matchId: string) => {
-      if (!clipRequest) return
+    async (exchangeRequestId: string, matchId: string) => {
       setError(null)
       try {
-        const { clips: created } = await api.generateClips(clipRequest.id, [matchId])
-        setClips((current) => {
-          const merged = new Map(current.map((clip) => [clip.id, clip]))
-          for (const clip of created) merged.set(clip.id, clip)
-          return Array.from(merged.values())
-        })
+        const { clips: created } = await api.generateClips(exchangeRequestId, [matchId])
+        setExchanges((previous) =>
+          previous.map((exchange) => {
+            if (exchange.request.id !== exchangeRequestId) return exchange
+            const merged = new Map(exchange.clips.map((clip) => [clip.id, clip]))
+            for (const clip of created) merged.set(clip.id, clip)
+            return { ...exchange, clips: Array.from(merged.values()) }
+          }),
+        )
       } catch (cause) {
         fail(cause)
       }
     },
-    [clipRequest, fail],
+    [fail],
   )
 
   const seekTo = useCallback((seconds: number) => {
@@ -174,8 +194,7 @@ export default function StartPage() {
 
   const reset = useCallback(() => {
     setVideo(null)
-    setClipRequest(null)
-    setClips([])
+    setExchanges([])
     setError(null)
     setSeekRequest(null)
   }, [])
@@ -192,7 +211,9 @@ export default function StartPage() {
     )
   }
 
-  const matches = clipRequest?.status === "completed" ? (clipRequest.matches ?? []) : []
+  // Seek-bar ticks come from the newest completed exchange.
+  const matches =
+    [...exchanges].reverse().find((exchange) => exchange.request.status === "completed")?.request.matches ?? []
 
   return (
     <main className="flex min-h-dvh w-full flex-col px-6 py-8">
@@ -238,8 +259,7 @@ export default function StartPage() {
 
           <QueryDrawer
             video={video}
-            clipRequest={clipRequest}
-            clips={clips}
+            exchanges={exchanges}
             busy={busy}
             onSearch={startSearch}
             onSeek={seekTo}

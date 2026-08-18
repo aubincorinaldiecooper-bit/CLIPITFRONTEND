@@ -44,34 +44,37 @@ function answerLine(request: ClipRequest): string {
     : `Found ${count} moments. Click one to jump there — or cut them as clips.`
 }
 
+export interface DrawerExchange {
+  request: ClipRequest
+  clips: Clip[]
+}
+
 /**
  * The question drawer: seated right of the stage, collapsible to a "?" disc.
- * Ask in natural language; the answer streams in; each match lands below as
- * evidence — click to jump the main player, or cut and play the clip inline.
+ * A running conversation — every question stays on screen with its streamed
+ * answer and its evidence below it; click evidence to jump the main player,
+ * or cut and play the clip inline.
  */
 export function QueryDrawer({
   video,
-  clipRequest,
-  clips,
+  exchanges,
   busy,
   onSearch,
   onSeek,
   onClip,
 }: {
   video: Video
-  clipRequest: ClipRequest | null
-  clips: Clip[]
+  exchanges: DrawerExchange[]
   busy: boolean
   onSearch: (instruction: string) => void
   onSeek: (seconds: number) => void
-  onClip: (matchId: string) => void
+  onClip: (requestId: string, matchId: string) => void
 }) {
   const [open, setOpen] = useState(true)
   const [draft, setDraft] = useState("")
 
-  const searching = clipRequest?.status === "pending" || clipRequest?.status === "searching"
-  const matches = clipRequest?.status === "completed" ? (clipRequest.matches ?? []) : []
-  const clipByMatch = useMemo(() => new Map(clips.map((clip) => [clip.clipMatchId, clip])), [clips])
+  const current = exchanges.at(-1) ?? null
+  const searching = current?.request.status === "pending" || current?.request.status === "searching"
 
   const understanding =
     video.index?.status === "pending" || video.index?.status === "queued" || video.index?.status === "running"
@@ -79,6 +82,7 @@ export function QueryDrawer({
   const submit = () => {
     const instruction = draft.trim()
     if (!instruction || busy || searching) return
+    setDraft("")
     onSearch(instruction)
   }
 
@@ -164,14 +168,14 @@ export function QueryDrawer({
             {!video.readyForSearch && (
               <p className="mt-2.5 text-xs text-foreground/40">Available once processing finishes.</p>
             )}
-            {video.readyForSearch && understanding && !clipRequest && (
+            {video.readyForSearch && understanding && exchanges.length === 0 && (
               <p className="mt-2.5 text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
                 Still watching the video — you can ask now, the search will wait for it.
               </p>
             )}
 
             {/* Idle suggestions, reference-style follow-ups. */}
-            {video.readyForSearch && !clipRequest && (
+            {video.readyForSearch && exchanges.length === 0 && (
               <div className="mt-4">
                 <p className="text-xs font-medium text-foreground/50">Try</p>
                 <div className="mt-1 flex flex-col">
@@ -194,44 +198,63 @@ export function QueryDrawer({
               </div>
             )}
 
-            {/* The exchange: question, streamed answer, evidence. */}
-            {clipRequest && (
-              <div className="mt-4 space-y-3">
-                <p className="text-[13px] text-foreground/50">“{clipRequest.instruction}”</p>
-
-                {searching ? (
-                  <p className="text-sm text-foreground/70" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
-                    Searching what I know about this video…
-                  </p>
-                ) : (
-                  <StreamedLine
-                    key={clipRequest.id + clipRequest.status}
-                    text={answerLine(clipRequest)}
-                    className={`text-sm leading-relaxed ${clipRequest.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
-                  />
-                )}
-
-                {matches.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    <p className="text-[11px] uppercase tracking-wide text-foreground/35">Evidence</p>
-                    {matches.map((match, i) => (
-                      <EvidenceCard
-                        key={match.id}
-                        match={match}
-                        clip={clipByMatch.get(match.id) ?? null}
-                        delayMs={200 + i * 110}
-                        onSeek={onSeek}
-                        onClip={onClip}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* The conversation: every exchange stays, oldest first. */}
+            {exchanges.map((exchange) => (
+              <ExchangeBlock key={exchange.request.id} exchange={exchange} onSeek={onSeek} onClip={onClip} />
+            ))}
           </motion.aside>
         )}
       </AnimatePresence>
     </>
+  )
+}
+
+function ExchangeBlock({
+  exchange,
+  onSeek,
+  onClip,
+}: {
+  exchange: DrawerExchange
+  onSeek: (seconds: number) => void
+  onClip: (requestId: string, matchId: string) => void
+}) {
+  const { request, clips } = exchange
+  const searching = request.status === "pending" || request.status === "searching"
+  const matches = request.status === "completed" ? (request.matches ?? []) : []
+  const clipByMatch = useMemo(() => new Map(clips.map((clip) => [clip.clipMatchId, clip])), [clips])
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-white/5 pt-4 first:border-t-0">
+      <p className="text-[13px] text-foreground/50">“{request.instruction}”</p>
+
+      {searching ? (
+        <p className="text-sm text-foreground/70" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
+          Searching what I know about this video…
+        </p>
+      ) : (
+        <StreamedLine
+          key={request.id + request.status}
+          text={answerLine(request)}
+          className={`text-sm leading-relaxed ${request.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
+        />
+      )}
+
+      {matches.length > 0 && (
+        <div className="space-y-2 pt-1">
+          <p className="text-[11px] uppercase tracking-wide text-foreground/35">Evidence</p>
+          {matches.map((match, i) => (
+            <EvidenceCard
+              key={match.id}
+              match={match}
+              clip={clipByMatch.get(match.id) ?? null}
+              delayMs={200 + i * 110}
+              onSeek={onSeek}
+              onClip={(matchId) => onClip(request.id, matchId)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -128,7 +128,27 @@ export function VideoStage({
   const [hover, setHover] = useState(false)
 
   const status = overallProgress(video, uploadFraction)
-  const playbackUrl = video?.playback?.url ?? null
+
+  // Every poll returns a FRESHLY signed URL — a different string for the same
+  // bytes. Binding src to it directly reloaded the element every 2s while the
+  // understanding phase polled, killing playback the moment it started. Pin
+  // the first URL; swap only if the pinned one actually fails (expiry).
+  const latestUrl = video?.playback?.url ?? null
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
+  const videoId = video?.id ?? null
+
+  useEffect(() => {
+    setPlaybackUrl(null)
+  }, [videoId])
+
+  useEffect(() => {
+    if (latestUrl) setPlaybackUrl((current) => current ?? latestUrl)
+  }, [latestUrl])
+
+  const onPlaybackError = useCallback(() => {
+    // The pinned signature has likely expired; move to the newest one.
+    setPlaybackUrl((current) => (latestUrl && latestUrl !== current ? latestUrl : current))
+  }, [latestUrl])
 
   const togglePlay = useCallback(() => {
     const element = videoRef.current
@@ -192,6 +212,7 @@ export function VideoStage({
             onLoadedMetadata={onTimeUpdate}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
+            onError={onPlaybackError}
             playsInline
           />
         ) : (
