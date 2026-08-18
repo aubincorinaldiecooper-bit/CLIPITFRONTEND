@@ -45,6 +45,12 @@ export interface Video {
     segmentCount: number
     error: string | null
   }
+  /** Ingest-time visual understanding: the model reads the video once here. */
+  index: {
+    status: TranscriptStatus
+    sceneCount: number
+    error: string | null
+  }
 }
 
 export interface UploadTarget {
