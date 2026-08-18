@@ -51,6 +51,8 @@ export interface Video {
     sceneCount: number
     error: string | null
   }
+  /** Signed source playback URL; present on the detail endpoint once bytes are in storage. */
+  playback?: { url: string; expiresAt: string } | null
 }
 
 export interface UploadTarget {
