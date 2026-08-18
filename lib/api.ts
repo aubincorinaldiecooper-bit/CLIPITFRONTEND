@@ -130,7 +130,19 @@ export const api = {
         if (xhr.status >= 200 && xhr.status < 300) resolve()
         else reject(new ApiError(xhr.status, "upload_failed", `Upload failed (${xhr.status})`))
       })
-      xhr.addEventListener("error", () => reject(new ApiError(0, "upload_failed", "Upload failed")))
+      // Status 0 means the browser refused to send it, so there is no response
+      // to report. Cross-origin PUTs to storage fail this way when the bucket
+      // has no CORS rule for this site — indistinguishable here from being
+      // offline, but the console entry names which one it was.
+      xhr.addEventListener("error", () =>
+        reject(
+          new ApiError(
+            0,
+            "upload_failed",
+            "The upload was blocked before it left the browser. This usually means the storage bucket is missing a CORS rule for this site; check your connection and the browser console for the exact reason.",
+          ),
+        ),
+      )
       xhr.addEventListener("abort", () => reject(new ApiError(0, "upload_aborted", "Upload cancelled")))
 
       xhr.send(file)
