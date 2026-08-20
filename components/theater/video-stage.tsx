@@ -38,13 +38,29 @@ export function stageActivity(video: Video | null, uploadFraction: number | null
     return { label: video.error ?? "Processing failed", percent: null, done: false, failed: true }
   }
 
+  // No bytes have reached the server: either the upload has not begun, or it
+  // failed and `fail()` cleared the fraction while leaving the row here.
+  // Saying anything would be claiming work that is not happening — and in the
+  // failure case it would contradict the error printed under the stage.
+  if (video.status === "pending_upload") {
+    return { label: "", percent: null, done: false, failed: false }
+  }
+
   if (video.status === "queued" || video.status === "ingesting") {
     return { label: "Fetching the video", percent: null, done: false, failed: false }
   }
 
   // Making the small copy the model watches, and cutting it into segments.
-  if (video.status !== "ready") {
+  if (video.status === "preprocessing") {
     return { label: "Taking notes on the video", percent: null, done: false, failed: false }
+  }
+
+  // Named rather than caught by an else: a status this file has not been
+  // taught about should say nothing, not inherit whatever the last branch
+  // happened to be. That inheritance is exactly how a failed upload came to
+  // announce itself as preprocessing.
+  if (video.status !== "ready") {
+    return { label: "", percent: null, done: false, failed: false }
   }
 
   const index = video.index ?? { status: "unavailable" as const, sceneCount: 0, error: null }
@@ -389,6 +405,10 @@ function StageWaiting({ activity }: { activity: StageActivity }) {
       </div>
     )
   }
+
+  // Nothing to report. An empty frame is the honest answer — a spinner with no
+  // words next to it still claims something is running.
+  if (activity.percent === null && !activity.label) return null
 
   if (activity.percent === null) {
     return (
