@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { Clip, ClipRequest, Video } from "@/lib/types"
+import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
 import { SourceStep } from "@/components/flow/source-step"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
@@ -188,6 +188,44 @@ export default function StartPage() {
     [fail],
   )
 
+  /**
+   * Applies a verdict everywhere that match appears, without waiting for the
+   * server. A thumbs-down takes the moment off the screen, and a removal that
+   * lags behind the tap reads as the tap not having registered — so the state
+   * moves first and is put back if the request fails.
+   */
+  const rateMatch = useCallback(
+    async (exchangeRequestId: string, matchId: string, verdict: MatchFeedback | null) => {
+      setError(null)
+
+      const applyFeedback = (value: MatchFeedback | null) =>
+        setExchanges((previous) =>
+          previous.map((exchange) => {
+            if (exchange.request.id !== exchangeRequestId) return exchange
+            const matches = exchange.request.matches?.map((match) =>
+              match.id === matchId ? { ...match, feedback: value } : match,
+            )
+            return matches ? { ...exchange, request: { ...exchange.request, matches } } : exchange
+          }),
+        )
+
+      const previousVerdict =
+        exchanges
+          .find((exchange) => exchange.request.id === exchangeRequestId)
+          ?.request.matches?.find((match) => match.id === matchId)?.feedback ?? null
+
+      applyFeedback(verdict)
+
+      try {
+        await api.rateMatch(exchangeRequestId, matchId, verdict)
+      } catch (cause) {
+        applyFeedback(previousVerdict)
+        fail(cause)
+      }
+    },
+    [exchanges, fail],
+  )
+
   const seekTo = useCallback((seconds: number) => {
     setSeekRequest((current) => ({ seconds, token: (current?.token ?? 0) + 1 }))
   }, [])
@@ -264,6 +302,7 @@ export default function StartPage() {
             onSearch={startSearch}
             onSeek={seekTo}
             onClip={clipMatch}
+            onRate={rateMatch}
           />
         </div>
       )}

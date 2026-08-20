@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
-import type { Clip, ClipMatch, ClipRequest, Video } from "@/lib/types"
+import type { Clip, ClipMatch, ClipRequest, MatchFeedback, Video } from "@/lib/types"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 
@@ -150,6 +150,7 @@ export function QueryDrawer({
   onSearch,
   onSeek,
   onClip,
+  onRate,
 }: {
   video: Video
   exchanges: DrawerExchange[]
@@ -157,6 +158,7 @@ export function QueryDrawer({
   onSearch: (instruction: string) => void
   onSeek: (seconds: number) => void
   onClip: (requestId: string, matchId: string) => void
+  onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null) => void
 }) {
   const [open, setOpen] = useState(true)
   const [draft, setDraft] = useState("")
@@ -278,7 +280,13 @@ export function QueryDrawer({
 
               {/* The conversation: every exchange stays, oldest first. */}
               {exchanges.map((exchange) => (
-                <ExchangeBlock key={exchange.request.id} exchange={exchange} onSeek={onSeek} onClip={onClip} />
+                <ExchangeBlock
+                  key={exchange.request.id}
+                  exchange={exchange}
+                  onSeek={onSeek}
+                  onClip={onClip}
+                  onRate={onRate}
+                />
               ))}
             </div>
 
@@ -341,10 +349,12 @@ function ExchangeBlock({
   exchange,
   onSeek,
   onClip,
+  onRate,
 }: {
   exchange: DrawerExchange
   onSeek: (seconds: number) => void
   onClip: (requestId: string, matchId: string) => void
+  onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null) => void
 }) {
   const { request, clips } = exchange
   const searching = request.status === "pending" || request.status === "searching"
@@ -384,6 +394,7 @@ function ExchangeBlock({
           clipByMatch={clipByMatch}
           onSeek={onSeek}
           onClip={(matchId) => onClip(request.id, matchId)}
+          onRate={(matchId, verdict) => onRate(request.id, matchId, verdict)}
         />
       )}
     </div>
@@ -493,26 +504,44 @@ function EvidencePicker({
   clipByMatch,
   onSeek,
   onClip,
+  onRate,
 }: {
   matches: ClipMatch[]
   clipByMatch: Map<string, Clip>
   onSeek: (seconds: number) => void
   onClip: (matchId: string) => void
+  onRate: (matchId: string, verdict: MatchFeedback | null) => void
 }) {
   // Best first, so the promoted one is the model's strongest answer rather
-  // than whichever chunk happened to finish first.
+  // than whichever chunk happened to finish first. Rejected moments drop out
+  // entirely: a thumbs-down means "this is not what I asked for", and leaving
+  // it in the list would be arguing with the person who said so.
   const ranked = useMemo(
-    () => [...matches].sort((a, b) => b.confidence - a.confidence),
+    () => matches.filter((match) => match.feedback !== "rejected").sort((a, b) => b.confidence - a.confidence),
     [matches],
   )
+  // The moment most recently waved off, kept only so it can be put back. A
+  // thumbs-down is one tap and removes something from view, which is exactly
+  // the shape of action that needs an undo next to it.
+  const [undoable, setUndoable] = useState<ClipMatch | null>(null)
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
+  const rate = (match: ClipMatch, verdict: MatchFeedback | null) => {
+    setUndoable(verdict === "rejected" ? match : null)
+    onRate(match.id, verdict)
+  }
+
   // Fall back rather than pin an index: polling replaces the match list, and
   // a stale index would silently promote a different moment.
   const active = ranked.find((match) => match.id === selectedId) ?? ranked[0]
-  if (!active) return null
+
+  // Everything has been waved off. The undo has to outlive the card it came
+  // from, or rejecting the last moment would take its own undo with it.
+  if (!active) {
+    return undoable ? <UndoRejection match={undoable} onUndo={() => rate(undoable, null)} /> : null
+  }
 
   const others = ranked.filter((match) => match.id !== active.id)
   const activeThumbnail = thumbnails[active.id] ?? null
@@ -639,6 +668,7 @@ function EvidencePicker({
         <span className="flex items-center gap-2">
           <Meter confidence={active.confidence} />
           <span className="text-[12px] font-medium text-foreground/60">{confidenceLabel(active.confidence)}</span>
+          <Verdict match={active} onRate={(verdict) => rate(active, verdict)} />
         </span>
 
         <span className="flex items-center gap-2">
@@ -690,6 +720,89 @@ function EvidencePicker({
           )}
         </span>
       </div>
+
+      {undoable && <UndoRejection match={undoable} onUndo={() => rate(undoable, null)} />}
+    </div>
+  )
+}
+
+/**
+ * Thumbs up and down on the promoted moment.
+ *
+ * Only on the promoted one: rating every alternative row in place would put
+ * two more targets in a line that is already a timecode, a description and a
+ * confidence, and choosing an alternative promotes it anyway. So the moment
+ * you are looking at is the moment you can judge.
+ *
+ * Approving replaces both icons with the verdict itself. The rating gesture is
+ * finished, and leaving a live thumbs-up next to an approved clip invites the
+ * question of whether the first tap registered — but the mark stays clickable,
+ * because the only thing worse than no undo is an undo you cannot find.
+ */
+function Verdict({ match, onRate }: { match: ClipMatch; onRate: (verdict: MatchFeedback | null) => void }) {
+  if (match.feedback === "approved") {
+    return (
+      <button
+        type="button"
+        onClick={() => onRate(null)}
+        title="Approved — click to undo"
+        className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-medium text-emerald-300/80 transition-colors hover:bg-white/5"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M4 12.5l5 5L20 6.5" />
+        </svg>
+        Approved
+      </button>
+    )
+  }
+
+  return (
+    <span className="flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={() => onRate("approved")}
+        aria-label="This clip is right"
+        title="This clip is right"
+        className="rounded-lg p-1.5 text-foreground/35 transition-colors hover:bg-white/5 hover:text-emerald-300"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M7 22V10l5-8a2.5 2.5 0 0 1 2.4 3.2L13.5 9H19a2 2 0 0 1 2 2.4l-1.6 8A2 2 0 0 1 17.4 21H7Z" />
+          <path d="M7 10H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={() => onRate("rejected")}
+        aria-label="This clip is wrong — remove it"
+        title="This clip is wrong — remove it"
+        className="rounded-lg p-1.5 text-foreground/35 transition-colors hover:bg-white/5 hover:text-red-300"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M17 2v12l-5 8a2.5 2.5 0 0 1-2.4-3.2L10.5 15H5a2 2 0 0 1-2-2.4l1.6-8A2 2 0 0 1 6.6 3H17Z" />
+          <path d="M17 14h3a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1h-3" />
+        </svg>
+      </button>
+    </span>
+  )
+}
+
+/** What a thumbs-down leaves behind: which moment went, and a way back. */
+function UndoRejection({ match, onUndo }: { match: ClipMatch; onUndo: () => void }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-3 border-t border-white/10 bg-black/30 px-2.5 py-1.5"
+      style={{ animation: "fade-up 240ms cubic-bezier(0.23,1,0.32,1) both" }}
+    >
+      <span className="min-w-0 truncate text-[11.5px] text-foreground/45">
+        Removed <span className="font-mono tabular-nums">{match.startTimecode}</span>
+      </span>
+      <button
+        type="button"
+        onClick={onUndo}
+        className="shrink-0 rounded-lg px-2 py-1 text-[11.5px] font-medium text-foreground/70 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-foreground"
+      >
+        Undo
+      </button>
     </div>
   )
 }
