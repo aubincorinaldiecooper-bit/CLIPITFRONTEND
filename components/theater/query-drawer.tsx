@@ -38,10 +38,63 @@ function StreamedLine({ text, className }: { text: string; className?: string })
 function answerLine(request: ClipRequest): string {
   const count = request.matches?.length ?? 0
   if (request.status === "failed") return request.error ?? "The search failed."
-  if (count === 0) return "Nothing in the video matches that. Try describing the moment differently."
+  if (count === 0) {
+    // Telling someone to rephrase is wrong when part of the video was never
+    // read. The gap itself is shown separately; this only stops the copy from
+    // asserting an absence it cannot vouch for.
+    return request.coverage?.complete === false
+      ? "Nothing in the parts of the video I could examine matches that."
+      : "Nothing in the video matches that. Try describing the moment differently."
+  }
   return count === 1
     ? "Found one moment. Click it to jump there — or cut it as a clip."
     : `Found ${count} moments. Click one to jump there — or cut them as clips.`
+}
+
+/** Whole minutes and seconds, for a duration rather than a position. */
+function describeDuration(seconds: number): string {
+  const total = Math.round(seconds)
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  if (minutes === 0) return `${rest}s`
+  return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`
+}
+
+/**
+ * States plainly that part of the video was never looked at.
+ *
+ * The API has always carried `failedChunks`, and this drawer never read it —
+ * so a chunk a provider refused was invisible, and a user whose moment fell
+ * inside it was told the video did not contain it. That is the same false
+ * negative as a real miss, except nothing the user does can fix it.
+ */
+function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (seconds: number) => void }) {
+  const coverage = request.coverage
+  if (!coverage || coverage.complete || coverage.gaps.length === 0) return null
+
+  return (
+    <div
+      className="rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-400/25"
+      style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
+    >
+      <p className="text-[13px] leading-snug text-amber-200/90">
+        {describeDuration(coverage.unsearchedSeconds)} of this video could not be examined, so anything in{" "}
+        {coverage.gaps.length === 1 ? "that stretch" : "those stretches"} would have been missed.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {coverage.gaps.map((gap) => (
+          <button
+            key={`${gap.startSeconds}-${gap.endSeconds}`}
+            type="button"
+            onClick={() => onSeek(gap.startSeconds)}
+            className="rounded-lg bg-amber-400/10 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-200/80 transition-colors hover:bg-amber-400/20"
+          >
+            {gap.startTimecode} – {gap.endTimecode}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export interface DrawerExchange {
@@ -289,6 +342,8 @@ function ExchangeBlock({
           className={`text-sm leading-relaxed ${request.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
         />
       )}
+
+      {!searching && <CoverageGap request={request} onSeek={onSeek} />}
 
       {matches.length > 0 && (
         <div className="space-y-2">

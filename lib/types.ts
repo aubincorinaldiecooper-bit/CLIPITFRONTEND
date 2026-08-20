@@ -94,6 +94,23 @@ export interface ClipRequest {
     message: string
   }
   failedChunks: Array<{ chunkIndex: number; message: string }>
+  /**
+   * Which seconds of the video were never examined. A provider can refuse a
+   * chunk on content-policy grounds, and the search still completes with the
+   * other chunks' results — so without this, "nothing matches" is
+   * indistinguishable from the moment genuinely not being there.
+   */
+  coverage: {
+    complete: boolean
+    unsearchedSeconds: number
+    gaps: Array<{
+      startSeconds: number
+      endSeconds: number
+      startTimecode: string
+      endTimecode: string
+      reason: string
+    }>
+  }
   matches?: ClipMatch[]
 }
 
