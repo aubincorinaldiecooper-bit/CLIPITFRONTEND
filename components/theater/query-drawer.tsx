@@ -451,7 +451,14 @@ function EvidencePicker({
   const others = ranked.filter((match) => match.id !== active.id)
   const clip = clipByMatch.get(active.id) ?? null
   const busy = clip?.status === "pending" || clip?.status === "generating"
-  const ready = clip?.status === "ready" && clip.downloadUrl
+  // Three separate facts, because one flag conflated them. A cut clip is
+  // playable as soon as it has a url; it is downloadable only once the backend
+  // also signs an attachment url. Gating playback on the download url hid the
+  // player for a clip that existed AND offered to cut it again — an action
+  // that cannot progress, since polling stops once a clip reports ready.
+  const cut = clip?.status === "ready"
+  const playable = cut && clip?.url
+  const downloadable = cut && clip?.downloadUrl
 
   return (
     <div
@@ -474,7 +481,7 @@ function EvidencePicker({
           {active.quote && <p className="mt-1 text-xs italic text-foreground/45">“{active.quote}”</p>}
         </button>
 
-        {ready && clip?.url && (
+        {playable && clip?.url && (
           <video
             src={clip.url}
             controls
@@ -541,7 +548,7 @@ function EvidencePicker({
             </button>
           )}
 
-          {ready ? (
+          {downloadable ? (
             /* A plain link, not a fetch: the URL is signed with an attachment
                disposition, so the browser saves it without the page touching
                the bytes. `download` alone would not work cross-origin. */
@@ -555,6 +562,11 @@ function EvidencePicker({
               </svg>
               Download
             </a>
+          ) : cut ? (
+            /* Cut, but this deployment has no attachment url yet. The player
+               above is the affordance; offering to cut it again would be a
+               button that cannot do anything. */
+            null
           ) : (
             <button
               type="button"
