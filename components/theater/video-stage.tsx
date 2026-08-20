@@ -6,40 +6,78 @@ import type { ClipMatch, Video } from "@/lib/types"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 
+/** What the pipeline is doing right now, and how sure we are of the number. */
+export interface StageActivity {
+  label: string
+  /**
+   * Only ever a measured number. Bytes leaving the browser is the one thing
+   * this screen can actually count; everything after it is server-side work
+   * whose progress we are not told, so it reports null rather than a guess.
+   */
+  percent: number | null
+  done: boolean
+  failed: boolean
+}
+
 /**
- * One number from source bytes to a searchable, understood video:
- * upload 0–35, ingest/preprocess 35–75, understanding 75–100. The
- * understanding phase reports no granular percent, so it holds and pulses
- * rather than inventing one.
+ * Says what is happening, and shows a number only when there is one.
+ *
+ * This used to map each stage to a hardcoded percentage — 60 for
+ * preprocessing, rescaled to 59 on screen — so the bar jumped to 59%, sat
+ * there for the whole job however long the video was, then jumped to 85%.
+ * Nothing about it moved because nothing about it was measured. A bar that
+ * does not move is worse than no bar: it reads as stuck rather than as busy.
  */
-export function overallProgress(
-  video: Video | null,
-  uploadFraction: number | null,
-): { percent: number; label: string; pulsing: boolean; done: boolean } {
+export function stageActivity(video: Video | null, uploadFraction: number | null): StageActivity {
   if (uploadFraction !== null) {
-    return { percent: Math.round(uploadFraction * 35), label: "Uploading…", pulsing: false, done: false }
+    return { label: "Uploading", percent: Math.round(uploadFraction * 100), done: false, failed: false }
   }
-  if (!video) return { percent: 0, label: "", pulsing: false, done: false }
+  if (!video) return { label: "", percent: null, done: false, failed: false }
 
   if (video.status === "failed") {
-    return { percent: 0, label: video.error ?? "Processing failed", pulsing: false, done: false }
+    return { label: video.error ?? "Processing failed", percent: null, done: false, failed: true }
   }
 
+  if (video.status === "queued" || video.status === "ingesting") {
+    return { label: "Fetching the video", percent: null, done: false, failed: false }
+  }
+
+  // Making the small copy the model watches, and cutting it into segments.
   if (video.status !== "ready") {
-    return {
-      percent: 35 + Math.round((video.progress.percent / 100) * 40),
-      label: video.progress.message,
-      pulsing: false,
-      done: false,
-    }
+    return { label: "Taking notes on the video", percent: null, done: false, failed: false }
   }
 
   const index = video.index ?? { status: "unavailable" as const, sceneCount: 0, error: null }
   if (index.status === "pending" || index.status === "queued" || index.status === "running") {
-    return { percent: 85, label: "Watching the video…", pulsing: true, done: false }
+    return { label: "Remembering the video", percent: null, done: false, failed: false }
   }
 
-  return { percent: 100, label: "Ready", pulsing: false, done: true }
+  return { label: "", percent: null, done: true, failed: false }
+}
+
+/**
+ * A spinner and a few words. Deliberately the whole vocabulary for work whose
+ * progress cannot be measured — it says "busy" without implying "this far
+ * along", which is the claim the old percentage was making without evidence.
+ */
+function Working({ label, size = 13, className = "" }: { label: string; size?: number; className?: string }) {
+  return (
+    <span className={`flex items-center gap-2 text-[11.5px] text-white/70 ${className}`}>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        className="shrink-0"
+        style={{ animation: "spin 900ms linear infinite" }}
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" />
+        <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+      {label}
+    </span>
+  )
 }
 
 const formatTime = (seconds: number) => {
@@ -102,9 +140,11 @@ const PauseIcon = ({ size = 20 }: { size?: number }) => (
 )
 
 /**
- * The video, seated centre stage. Before playback exists it is a progress
- * dial; the moment the source is playable the player takes over, with the
- * remaining pipeline progress reduced to a hairline strip at the top.
+ * The video, seated centre stage. Before playback exists the frame carries the
+ * upload ring or, once the bytes have landed, a spinner saying what the server
+ * is doing. The moment the source is playable the player takes over and that
+ * status retreats to a corner — the work continues, but it is no longer the
+ * thing being watched.
  */
 export function VideoStage({
   video,
@@ -127,7 +167,7 @@ export function VideoStage({
   const [speed, setSpeedState] = useState(1)
   const [hover, setHover] = useState(false)
 
-  const status = overallProgress(video, uploadFraction)
+  const status = stageActivity(video, uploadFraction)
 
   // Every poll returns a FRESHLY signed URL — a different string for the same
   // bytes. Binding src to it directly reloaded the element every 2s while the
@@ -216,7 +256,7 @@ export function VideoStage({
             playsInline
           />
         ) : (
-          <ProgressDial percent={status.percent} label={status.label} pulsing={status.pulsing} failed={video?.status === "failed"} />
+          <StageWaiting activity={status} />
         )}
 
         {/* Big centre play affordance while paused. */}
@@ -242,23 +282,27 @@ export function VideoStage({
           )}
         </AnimatePresence>
 
-        {/* Remaining pipeline progress once the player has taken the stage. */}
-        {playbackUrl && !status.done && (
-          <div className="pointer-events-none absolute inset-x-0 top-0">
-            <div className="h-0.5 w-full bg-white/10">
-              <div
-                className="h-full bg-amber-300/80 transition-[width] duration-700"
-                style={{ width: `${status.percent}%` }}
-              />
-            </div>
-            <span
-              className="absolute left-3 top-2 rounded-full bg-black/55 px-2.5 py-1 text-[11px] text-white/85 backdrop-blur"
-              style={status.pulsing ? { animation: "pulse-soft 2.2s ease-in-out infinite" } : undefined}
+        {/* Still working, but the video is already watchable — so this stays
+            out of the way: a corner, a spinner, and what it is doing. The bar
+            that used to sit across the top was measuring nothing. */}
+        <AnimatePresence>
+          {playbackUrl && !status.done && status.label && (
+            <motion.div
+              key="activity"
+              className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1.5 backdrop-blur"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.3, ease: EASE }}
             >
-              {status.label} · {status.percent}%
-            </span>
-          </div>
-        )}
+              {status.failed ? (
+                <span className="text-[11.5px] text-red-300">{status.label}</span>
+              ) : (
+                <Working label={status.label} />
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Controls, reference-style: blur in from the bottom on hover. */}
         <AnimatePresence>
@@ -326,23 +370,37 @@ export function VideoStage({
   )
 }
 
-function ProgressDial({
-  percent,
-  label,
-  pulsing,
-  failed,
-}: {
-  percent: number
-  label: string
-  pulsing: boolean
-  failed?: boolean
-}) {
+/**
+ * The stage before there is anything to play.
+ *
+ * The ring is drawn only while uploading, because that is the only phase with
+ * a real fraction behind it. Once the file has landed, the same space says
+ * what the server is doing and spins — no ring creeping toward a number it
+ * cannot justify.
+ */
+function StageWaiting({ activity }: { activity: StageActivity }) {
   const radius = 54
   const circumference = 2 * Math.PI * radius
 
+  if (activity.failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center px-6">
+        <p className="max-w-sm text-center text-sm text-red-300">{activity.label}</p>
+      </div>
+    )
+  }
+
+  if (activity.percent === null) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Working label={activity.label} size={16} className="text-[13px] text-white/55" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-5">
-      <div className="relative h-36 w-36" style={pulsing ? { animation: "pulse-soft 2.2s ease-in-out infinite" } : undefined}>
+      <div className="relative h-36 w-36">
         <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="5" />
           <circle
@@ -350,19 +408,19 @@ function ProgressDial({
             cy="60"
             r={radius}
             fill="none"
-            stroke={failed ? "rgba(248,113,113,0.9)" : "rgba(255,255,255,0.9)"}
+            stroke="rgba(255,255,255,0.9)"
             strokeWidth="5"
             strokeLinecap="round"
             strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - percent / 100)}
+            strokeDashoffset={circumference * (1 - activity.percent / 100)}
             style={{ transition: "stroke-dashoffset 600ms cubic-bezier(0.23,1,0.32,1)" }}
           />
         </svg>
         <span className="absolute inset-0 flex items-center justify-center text-2xl font-medium tabular-nums">
-          {percent}%
+          {activity.percent}%
         </span>
       </div>
-      <p className={`max-w-sm px-6 text-center text-sm ${failed ? "text-red-300" : "text-foreground/60"}`}>{label}</p>
+      <p className="max-w-sm px-6 text-center text-sm text-foreground/60">{activity.label}</p>
     </div>
   )
 }
