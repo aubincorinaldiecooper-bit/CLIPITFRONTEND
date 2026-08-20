@@ -523,13 +523,19 @@ function EvidencePicker({
   // The moment most recently waved off, kept only so it can be put back. A
   // thumbs-down is one tap and removes something from view, which is exactly
   // the shape of action that needs an undo next to it.
-  const [undoable, setUndoable] = useState<ClipMatch | null>(null)
+  const [undoableId, setUndoableId] = useState<string | null>(null)
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
+  // Looked up rather than stored, so the strip cannot outlive the rejection it
+  // describes. A failed thumbs-down is rolled back upstream and the moment
+  // reappears in the list — a remembered copy would leave the card showing
+  // both the moment and an offer to undo removing it.
+  const undoable = matches.find((match) => match.id === undoableId && match.feedback === "rejected") ?? null
+
   const rate = (match: ClipMatch, verdict: MatchFeedback | null) => {
-    setUndoable(verdict === "rejected" ? match : null)
+    setUndoableId(verdict === "rejected" ? match.id : null)
     onRate(match.id, verdict)
   }
 
