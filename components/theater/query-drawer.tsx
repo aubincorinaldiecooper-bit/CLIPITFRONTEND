@@ -379,90 +379,199 @@ function ExchangeBlock({
       {!searching && <CoverageGap request={request} onSeek={onSeek} />}
 
       {matches.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-wide text-foreground/35">Evidence</p>
-          {matches.map((match, i) => (
-            <EvidenceCard
-              key={match.id}
-              match={match}
-              clip={clipByMatch.get(match.id) ?? null}
-              delayMs={200 + i * 110}
-              onSeek={onSeek}
-              onClip={(matchId) => onClip(request.id, matchId)}
-            />
-          ))}
-        </div>
+        <EvidencePicker
+          matches={matches}
+          clipByMatch={clipByMatch}
+          onSeek={onSeek}
+          onClip={(matchId) => onClip(request.id, matchId)}
+        />
       )}
     </div>
   )
 }
 
-function EvidenceCard({
-  match,
-  clip,
-  delayMs,
+/** Three bars: how sure the model was, at a glance rather than as a number. */
+function Meter({ confidence }: { confidence: number }) {
+  const filled = confidence >= 0.8 ? 3 : confidence >= 0.5 ? 2 : 1
+  const tone = filled === 3 ? "#4ade80" : filled === 2 ? "#fbbf24" : "#f87171"
+
+  return (
+    <span className="flex items-end gap-0.5" aria-hidden>
+      {[0, 1, 2].map((bar) => (
+        <span
+          key={bar}
+          className="w-1 rounded-full transition-colors duration-300"
+          style={{ height: 10, background: bar < filled ? tone : "rgba(255,255,255,0.15)" }}
+        />
+      ))}
+    </span>
+  )
+}
+
+function confidenceLabel(confidence: number): string {
+  if (confidence >= 0.8) return "High confidence"
+  if (confidence >= 0.5) return "Likely"
+  return "Worth checking"
+}
+
+/**
+ * The matches, as one recommendation with the rest a tap away.
+ *
+ * Stacking every match as its own card made four equal-weight answers to a
+ * question that has one: people come to find THE moment, not to browse
+ * moments. The strongest is promoted, the others live behind "Alternatives",
+ * and picking one swaps it in — the card keeps its shape throughout so the
+ * primary action never moves under the cursor.
+ */
+function EvidencePicker({
+  matches,
+  clipByMatch,
   onSeek,
   onClip,
 }: {
-  match: ClipMatch
-  clip: Clip | null
-  delayMs: number
+  matches: ClipMatch[]
+  clipByMatch: Map<string, Clip>
   onSeek: (seconds: number) => void
   onClip: (matchId: string) => void
 }) {
-  const clipBusy = clip?.status === "pending" || clip?.status === "generating"
-  const clipReady = clip?.status === "ready" && clip.url
+  // Best first, so the promoted one is the model's strongest answer rather
+  // than whichever chunk happened to finish first.
+  const ranked = useMemo(
+    () => [...matches].sort((a, b) => b.confidence - a.confidence),
+    [matches],
+  )
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+
+  // Fall back rather than pin an index: polling replaces the match list, and
+  // a stale index would silently promote a different moment.
+  const active = ranked.find((match) => match.id === selectedId) ?? ranked[0]
+  if (!active) return null
+
+  const others = ranked.filter((match) => match.id !== active.id)
+  const clip = clipByMatch.get(active.id) ?? null
+  const busy = clip?.status === "pending" || clip?.status === "generating"
+  const ready = clip?.status === "ready" && clip.downloadUrl
 
   return (
     <div
-      className="rounded-xl bg-black/35 p-3 ring-1 ring-white/10"
-      style={{ animation: `fade-up 380ms cubic-bezier(0.23,1,0.32,1) ${delayMs}ms both` }}
+      className="overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10"
+      style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) 200ms both" }}
     >
-      <button type="button" onClick={() => onSeek(match.startSeconds)} className="group block w-full text-left">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-mono tabular-nums text-amber-300/90 underline-offset-4 group-hover:underline">
-            {match.startTimecode} – {match.endTimecode}
-          </span>
-          <span className="text-foreground/35">{SOURCE_LABEL[match.source]}</span>
-          <span className="ml-auto text-foreground/35">{Math.round(match.confidence * 100)}%</span>
-        </div>
-        {match.description && <p className="mt-1.5 text-[13px] leading-snug text-foreground/80">{match.description}</p>}
-        {match.quote && <p className="mt-1 text-xs italic text-foreground/45">“{match.quote}”</p>}
-      </button>
+      <div className="p-3">
+        <button type="button" onClick={() => onSeek(active.startSeconds)} className="group block w-full text-left">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-mono tabular-nums text-amber-300/90 underline-offset-4 group-hover:underline">
+              {active.startTimecode} – {active.endTimecode}
+            </span>
+            <span className="text-foreground/35">{SOURCE_LABEL[active.source]}</span>
+          </div>
+          {/* Fixed min-height: swapping between alternatives must not make the
+              card jump, or the buttons below move as you read. */}
+          <p className="mt-1.5 min-h-[2.5rem] text-[13px] leading-snug text-foreground/85">
+            {active.description || "A moment matching your search."}
+          </p>
+          {active.quote && <p className="mt-1 text-xs italic text-foreground/45">“{active.quote}”</p>}
+        </button>
 
-      <div className="mt-2.5">
-        {clipReady ? (
+        {ready && clip?.url && (
           <video
-            src={clip!.url!}
+            src={clip.url}
             controls
             preload="metadata"
             playsInline
-            className="w-full rounded-lg bg-black/60"
+            className="mt-2.5 w-full rounded-lg bg-black/60"
             style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
           />
-        ) : (
-          <button
-            type="button"
-            onClick={() => onClip(match.id)}
-            disabled={clipBusy}
-            className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-foreground/90 transition-colors hover:bg-white/15 disabled:opacity-50"
-          >
-            {clipBusy ? (
-              <span style={{ animation: "pulse-soft 1.6s ease-in-out infinite" }}>Cutting…</span>
-            ) : clip?.status === "failed" ? (
-              <span className="text-red-300">Failed — try again</span>
-            ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <circle cx="6" cy="6" r="3" />
-                  <circle cx="6" cy="18" r="3" />
-                  <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12" />
-                </svg>
-                Cut this clip
-              </>
-            )}
-          </button>
         )}
+      </div>
+
+      {/* Alternatives, as their own section of the card rather than a popover. */}
+      <div
+        className="grid transition-[grid-template-rows,opacity] duration-300"
+        style={{
+          gridTemplateRows: open ? "1fr" : "0fr",
+          opacity: open ? 1 : 0,
+          transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+        }}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-white/10 bg-black/20 p-1.5">
+            <p className="px-1.5 pb-1 text-[11px] font-medium text-foreground/40">Other moments</p>
+            {others.map((match) => (
+              <button
+                key={match.id}
+                type="button"
+                onClick={() => {
+                  setSelectedId(match.id)
+                  // Seek too: switching the answer should move the player to it,
+                  // otherwise the card and the video disagree about the subject.
+                  onSeek(match.startSeconds)
+                }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors duration-100 hover:bg-white/5"
+              >
+                <Meter confidence={match.confidence} />
+                <span className="shrink-0 font-mono text-[11px] tabular-nums text-amber-300/70">
+                  {match.startTimecode}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground/80">
+                  {match.description || SOURCE_LABEL[match.source]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-black/20 px-2.5 py-2">
+        <span className="flex items-center gap-2">
+          <Meter confidence={active.confidence} />
+          <span className="text-[12px] font-medium text-foreground/60">{confidenceLabel(active.confidence)}</span>
+        </span>
+
+        <span className="flex items-center gap-2">
+          {others.length > 0 && (
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpen((current) => !current)}
+              className="rounded-lg px-2.5 py-1.5 text-[12px] text-foreground/70 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-foreground"
+            >
+              {others.length} other{others.length === 1 ? "" : "s"}
+            </button>
+          )}
+
+          {ready ? (
+            /* A plain link, not a fetch: the URL is signed with an attachment
+               disposition, so the browser saves it without the page touching
+               the bytes. `download` alone would not work cross-origin. */
+            <a
+              href={clip!.downloadUrl!}
+              download
+              className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-black transition-transform active:scale-[0.97]"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
+              </svg>
+              Download
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onClip(active.id)}
+              disabled={busy}
+              className="rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
+            >
+              {busy ? (
+                <span style={{ animation: "pulse-soft 1.6s ease-in-out infinite" }}>Cutting…</span>
+              ) : clip?.status === "failed" ? (
+                "Retry"
+              ) : (
+                "Cut this clip"
+              )}
+            </button>
+          )}
+        </span>
       </div>
     </div>
   )

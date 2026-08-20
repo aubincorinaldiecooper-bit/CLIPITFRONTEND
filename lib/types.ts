@@ -141,6 +141,8 @@ export interface Clip {
   durationSeconds: number | null
   sizeBytes: number | null
   url: string | null
+  /** Signed with an attachment disposition so the browser saves rather than plays. */
+  downloadUrl: string | null
   urlExpiresAt: string | null
 }
 
