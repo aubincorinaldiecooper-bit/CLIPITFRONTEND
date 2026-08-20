@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import type { Clip, ClipMatch, ClipRequest, Video } from "@/lib/types"
 
@@ -437,6 +437,57 @@ function shortConfidence(confidence: number): string {
  * and picking one swaps it in — the card keeps its shape throughout so the
  * primary action never moves under the cursor.
  */
+/**
+ * Holds each match's thumbnail at the first URL it arrived with.
+ *
+ * The backend signs thumbnail URLs per request, so the same still comes back
+ * under a different string on every poll — and a clip being cut polls every
+ * two seconds. Binding `src` straight to the newest one refetches every
+ * visible image on every poll; `loading="lazy"` does not help, because a
+ * changed src is a new resource to the browser, not a cached one. Same fix as
+ * the source player in video-stage.tsx: pin the first signature and move to
+ * the newest only when the pinned one actually fails.
+ */
+function usePinnedThumbnails(matches: ClipMatch[]) {
+  const latest = useMemo(() => {
+    const urls: Record<string, string> = {}
+    for (const match of matches) if (match.thumbnailUrl) urls[match.id] = match.thumbnailUrl
+    return urls
+  }, [matches])
+
+  const [pinned, setPinned] = useState<Record<string, string>>(latest)
+
+  useEffect(() => {
+    setPinned((current) => {
+      const ids = Object.keys(latest)
+      // Rebuilt rather than merged, so a match that disappears — a re-run
+      // replaces the whole list — does not keep its URL alive forever.
+      let changed = ids.length !== Object.keys(current).length
+      const next: Record<string, string> = {}
+      for (const id of ids) {
+        next[id] = current[id] ?? latest[id]
+        if (next[id] !== current[id]) changed = true
+      }
+      // Returning the same object is what stops this from looping: after the
+      // first poll pins everything, later polls settle without a re-render.
+      return changed ? next : current
+    })
+  }, [latest])
+
+  const refresh = useCallback(
+    (matchId: string) =>
+      setPinned((current) => {
+        // The pinned signature has expired; the newest one is the only thing
+        // worth retrying, and only if it is actually a different URL.
+        const fresh = latest[matchId]
+        return fresh && fresh !== current[matchId] ? { ...current, [matchId]: fresh } : current
+      }),
+    [latest],
+  )
+
+  return [pinned, refresh] as const
+}
+
 function EvidencePicker({
   matches,
   clipByMatch,
@@ -454,6 +505,7 @@ function EvidencePicker({
     () => [...matches].sort((a, b) => b.confidence - a.confidence),
     [matches],
   )
+  const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
@@ -463,6 +515,7 @@ function EvidencePicker({
   if (!active) return null
 
   const others = ranked.filter((match) => match.id !== active.id)
+  const activeThumbnail = thumbnails[active.id] ?? null
   const clip = clipByMatch.get(active.id) ?? null
   const busy = clip?.status === "pending" || clip?.status === "generating"
   // Three separate facts, because one flag conflated them. A cut clip is
@@ -494,6 +547,27 @@ function EvidencePicker({
           </p>
           {active.quote && <p className="mt-1 text-xs italic text-foreground/45">“{active.quote}”</p>}
         </button>
+
+        {/* Before the clip is cut there is nothing to play, so the still
+            stands in — the promoted match should never be the only one you
+            cannot see. */}
+        {!playable && activeThumbnail && (
+          <button
+            type="button"
+            onClick={() => onSeek(active.startSeconds)}
+            className="mt-2.5 block w-full overflow-hidden rounded-lg ring-1 ring-white/10"
+            aria-label={`Jump to ${active.startTimecode}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={activeThumbnail}
+              alt=""
+              onError={() => refreshThumbnail(active.id)}
+              className="aspect-video w-full bg-black/50 object-cover"
+              style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+            />
+          </button>
+        )}
 
         {playable && clip?.url && (
           <video
@@ -532,6 +606,20 @@ function EvidencePicker({
                 className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors duration-100 hover:bg-white/5"
               >
                 <Meter confidence={match.confidence} />
+                {/* 16:9 whether or not the image loads, so a row without a
+                    still keeps the same shape as the ones around it. */}
+                <span className="relative h-9 w-16 shrink-0 overflow-hidden rounded bg-black/50 ring-1 ring-white/10">
+                  {thumbnails[match.id] && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={thumbnails[match.id]}
+                      alt=""
+                      loading="lazy"
+                      onError={() => refreshThumbnail(match.id)}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                </span>
                 <span className="shrink-0 font-mono text-[11px] tabular-nums text-amber-300/70">
                   {match.startTimecode}
                 </span>
