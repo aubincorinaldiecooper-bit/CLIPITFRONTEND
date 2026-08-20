@@ -74,6 +74,8 @@ export interface ClipMatch {
   confidence: number
   source: MatchSource
   quote: string | null
+  /** A still from this moment, so the list can be looked at rather than read. */
+  thumbnailUrl: string | null
   clip: { id: string; status: ClipStatus } | null
 }
 

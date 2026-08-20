@@ -495,6 +495,26 @@ function EvidencePicker({
           {active.quote && <p className="mt-1 text-xs italic text-foreground/45">“{active.quote}”</p>}
         </button>
 
+        {/* Before the clip is cut there is nothing to play, so the still
+            stands in — the promoted match should never be the only one you
+            cannot see. */}
+        {!playable && active.thumbnailUrl && (
+          <button
+            type="button"
+            onClick={() => onSeek(active.startSeconds)}
+            className="mt-2.5 block w-full overflow-hidden rounded-lg ring-1 ring-white/10"
+            aria-label={`Jump to ${active.startTimecode}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={active.thumbnailUrl}
+              alt=""
+              className="aspect-video w-full bg-black/50 object-cover"
+              style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+            />
+          </button>
+        )}
+
         {playable && clip?.url && (
           <video
             src={clip.url}
@@ -532,6 +552,19 @@ function EvidencePicker({
                 className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors duration-100 hover:bg-white/5"
               >
                 <Meter confidence={match.confidence} />
+                {/* 16:9 whether or not the image loads, so a row without a
+                    still keeps the same shape as the ones around it. */}
+                <span className="relative h-9 w-16 shrink-0 overflow-hidden rounded bg-black/50 ring-1 ring-white/10">
+                  {match.thumbnailUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={match.thumbnailUrl}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                </span>
                 <span className="shrink-0 font-mono text-[11px] tabular-nums text-amber-300/70">
                   {match.startTimecode}
                 </span>
