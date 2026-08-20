@@ -415,6 +415,20 @@ function confidenceLabel(confidence: number): string {
 }
 
 /**
+ * The same judgement in one word, for the alternative rows.
+ *
+ * The meter alone is three coloured bars — comparing options by decoding bar
+ * counts is work. The word is what actually gets read; the meter is what makes
+ * it scannable. The full label does not fit beside a timecode and a
+ * description in a 350px drawer, so it is shortened rather than dropped.
+ */
+function shortConfidence(confidence: number): string {
+  if (confidence >= 0.8) return "High"
+  if (confidence >= 0.5) return "Likely"
+  return "Unsure"
+}
+
+/**
  * The matches, as one recommendation with the rest a tap away.
  *
  * Stacking every match as its own card made four equal-weight answers to a
@@ -524,6 +538,9 @@ function EvidencePicker({
                 <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground/80">
                   {match.description || SOURCE_LABEL[match.source]}
                 </span>
+                <span className="shrink-0 text-[11px] text-foreground/40">
+                  {shortConfidence(match.confidence)}
+                </span>
               </button>
             ))}
           </div>
@@ -544,7 +561,7 @@ function EvidencePicker({
               onClick={() => setOpen((current) => !current)}
               className="rounded-lg px-2.5 py-1.5 text-[12px] text-foreground/70 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-foreground"
             >
-              {others.length} other{others.length === 1 ? "" : "s"}
+              Alternatives
             </button>
           )}
 
