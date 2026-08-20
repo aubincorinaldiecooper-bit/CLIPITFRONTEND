@@ -67,3 +67,10 @@ body {
     opacity: 1;
   }
 }
+
+/* The only honest thing to show when there is nothing to measure. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
