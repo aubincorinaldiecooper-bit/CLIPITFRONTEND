@@ -70,29 +70,62 @@ function describeDuration(seconds: number): string {
  */
 function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (seconds: number) => void }) {
   const coverage = request.coverage
-  if (!coverage || coverage.complete || coverage.gaps.length === 0) return null
+  if (!coverage || coverage.complete) return null
+
+  const gaps = coverage.gaps ?? []
+  const degraded = coverage.degraded ?? []
+
+  // Two different caveats. A gap was never looked at; a degraded window was
+  // looked at without its speech. Saying "missed" about the second would be
+  // wrong — its matches are real.
+  const gapLine =
+    gaps.length > 0
+      ? `${describeDuration(coverage.unsearchedSeconds)} of this video could not be examined, so anything in ${gaps.length === 1 ? "that stretch" : "those stretches"} would have been missed.`
+      : coverage.locatable === false
+        ? "Part of this video could not be examined, so something there may have been missed."
+        : null
 
   return (
     <div
       className="rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-400/25"
       style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
     >
-      <p className="text-[13px] leading-snug text-amber-200/90">
-        {describeDuration(coverage.unsearchedSeconds)} of this video could not be examined, so anything in{" "}
-        {coverage.gaps.length === 1 ? "that stretch" : "those stretches"} would have been missed.
-      </p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {coverage.gaps.map((gap) => (
-          <button
-            key={`${gap.startSeconds}-${gap.endSeconds}`}
-            type="button"
-            onClick={() => onSeek(gap.startSeconds)}
-            className="rounded-lg bg-amber-400/10 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-200/80 transition-colors hover:bg-amber-400/20"
-          >
-            {gap.startTimecode} – {gap.endTimecode}
-          </button>
-        ))}
-      </div>
+      {gapLine && <p className="text-[13px] leading-snug text-amber-200/90">{gapLine}</p>}
+      {gaps.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {gaps.map((gap) => (
+            <button
+              key={`gap-${gap.startSeconds}-${gap.endSeconds}`}
+              type="button"
+              onClick={() => onSeek(gap.startSeconds)}
+              className="rounded-lg bg-amber-400/10 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-200/80 transition-colors hover:bg-amber-400/20"
+            >
+              {gap.startTimecode} – {gap.endTimecode}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {degraded.length > 0 && (
+        <div className={gapLine ? "mt-3 border-t border-amber-400/15 pt-2.5" : ""}>
+          <p className="text-[13px] leading-snug text-amber-200/90">
+            {degraded.length === 1 ? "One stretch was" : `${degraded.length} stretches were`} searched without
+            speech, so anything only said out loud there could not be matched.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {degraded.map((window) => (
+              <button
+                key={`degraded-${window.startSeconds}-${window.endSeconds}`}
+                type="button"
+                onClick={() => onSeek(window.startSeconds)}
+                className="rounded-lg bg-amber-400/10 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-200/80 transition-colors hover:bg-amber-400/20"
+              >
+                {window.startTimecode} – {window.endTimecode}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -102,8 +102,22 @@ export interface ClipRequest {
    */
   coverage: {
     complete: boolean
+    /** False when something is known to be missing but cannot be located. */
+    locatable: boolean
     unsearchedSeconds: number
     gaps: Array<{
+      startSeconds: number
+      endSeconds: number
+      startTimecode: string
+      endTimecode: string
+      reason: string
+    }>
+    /**
+     * Windows that WERE searched, but without their transcript, after a
+     * provider refused the text. Their matches are real; what is missing is
+     * that a spoken condition could not be checked there.
+     */
+    degraded: Array<{
       startSeconds: number
       endSeconds: number
       startTimecode: string
