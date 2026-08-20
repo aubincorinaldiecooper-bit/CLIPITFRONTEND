@@ -63,6 +63,8 @@ export interface UploadTarget {
   expiresInSeconds: number
 }
 
+export type MatchFeedback = "approved" | "rejected"
+
 export interface ClipMatch {
   id: string
   startSeconds: number
@@ -76,6 +78,11 @@ export interface ClipMatch {
   quote: string | null
   /** A still from this moment, so the list can be looked at rather than read. */
   thumbnailUrl: string | null
+  /**
+   * What a person thought of it. `confidence` is the model's opinion of its
+   * own answer; this is the only thing on a match that disagrees with it.
+   */
+  feedback: MatchFeedback | null
   clip: { id: string; status: ClipStatus } | null
 }
 

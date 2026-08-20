@@ -1,4 +1,4 @@
-import type { ApiErrorBody, Clip, ClipRequest, UploadTarget, Video } from "./types"
+import type { ApiErrorBody, Clip, ClipMatch, ClipRequest, MatchFeedback, UploadTarget, Video } from "./types"
 
 /**
  * Client for the CLIPIT backend.
@@ -166,6 +166,21 @@ export const api = {
 
   async getClipRequest(requestId: string): Promise<{ clipRequest: ClipRequest; clips: Clip[] }> {
     return request(`/api/clip-requests/${requestId}`)
+  },
+
+  /**
+   * Records a verdict on one match, or clears it with `null`. Returns the
+   * updated match so the caller can reconcile rather than assume.
+   */
+  async rateMatch(
+    requestId: string,
+    matchId: string,
+    verdict: MatchFeedback | null,
+  ): Promise<{ match: ClipMatch }> {
+    return request(`/api/clip-requests/${requestId}/matches/${matchId}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ verdict }),
+    })
   },
 
   async generateClips(requestId: string, matchIds?: string[]): Promise<{ clips: Clip[] }> {

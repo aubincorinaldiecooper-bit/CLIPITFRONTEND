@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { Clip, ClipRequest, Video } from "@/lib/types"
+import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
 import { SourceStep } from "@/components/flow/source-step"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
@@ -30,6 +30,10 @@ export default function StartPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [seekRequest, setSeekRequest] = useState<{ seconds: number; token: number } | null>(null)
+  /** Verdicts the server has not confirmed yet. See `reconcileVerdicts`. */
+  const pendingVerdicts = useRef(new Map<string, MatchFeedback | null>())
+  /** Per match, which rating attempt is the live one. See `rateMatch`. */
+  const verdictAttempts = useRef(new Map<string, number>())
 
   const configured = api.isConfigured()
 
@@ -109,6 +113,33 @@ export default function StartPage() {
     }
   }, [videoId, videoSettled, uploadFraction])
 
+  /**
+   * Re-applies verdicts the server has not confirmed yet.
+   *
+   * A poll replaces a whole exchange, so one that left before a rating landed
+   * arrives after it carrying the old answer — and if that same poll reports a
+   * clip ready, polling stops and the verdict stays wrong for the session.
+   * Holding the verdict here and laying it back over polled data keeps the two
+   * from racing. Each entry drops itself the moment the server says the same
+   * thing, so this never becomes a second source of truth.
+   */
+  const reconcileVerdicts = useCallback((request: ClipRequest): ClipRequest => {
+    const pending = pendingVerdicts.current
+    if (pending.size === 0 || !request.matches?.length) return request
+
+    const matches = request.matches.map((match) => {
+      if (!pending.has(match.id)) return match
+      const verdict = pending.get(match.id) ?? null
+      if (match.feedback === verdict) {
+        pending.delete(match.id)
+        return match
+      }
+      return { ...match, feedback: verdict }
+    })
+
+    return { ...request, matches }
+  }, [])
+
   // Any exchange can still be moving: the newest while it searches, and any
   // older one whose clip is being cut. Poll them all until they settle.
   const unsettledIds = exchanges
@@ -130,9 +161,10 @@ export default function StartPage() {
         try {
           const { clipRequest: latest, clips: latestClips } = await api.getClipRequest(id)
           if (cancelled) return
+          const reconciled = reconcileVerdicts(latest)
           setExchanges((previous) =>
             previous.map((exchange) =>
-              exchange.request.id === latest.id ? { request: latest, clips: latestClips } : exchange,
+              exchange.request.id === reconciled.id ? { request: reconciled, clips: latestClips } : exchange,
             ),
           )
         } catch {
@@ -146,7 +178,7 @@ export default function StartPage() {
       clearInterval(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unsettledKey])
+  }, [unsettledKey, reconcileVerdicts])
 
   // --- actions ------------------------------------------------------------
 
@@ -186,6 +218,62 @@ export default function StartPage() {
       }
     },
     [fail],
+  )
+
+  const showVerdict = useCallback(
+    (exchangeRequestId: string, matchId: string, verdict: MatchFeedback | null) =>
+      setExchanges((previous) =>
+        previous.map((exchange) => {
+          if (exchange.request.id !== exchangeRequestId) return exchange
+          const matches = exchange.request.matches?.map((match) =>
+            match.id === matchId ? { ...match, feedback: verdict } : match,
+          )
+          return matches ? { ...exchange, request: { ...exchange.request, matches } } : exchange
+        }),
+      ),
+    [],
+  )
+
+  /**
+   * Records what someone thought of a match, without waiting for the server.
+   *
+   * A thumbs-down takes the moment off the screen, and a removal that lags
+   * behind the tap reads as the tap not having registered — so the state moves
+   * first and is put back if the request fails. Each attempt carries a
+   * sequence number for that match: a slow failure must not undo a verdict the
+   * user has since replaced, which would resurrect a moment they removed twice.
+   */
+  const rateMatch = useCallback(
+    async (exchangeRequestId: string, matchId: string, verdict: MatchFeedback | null) => {
+      setError(null)
+
+      const previousVerdict =
+        exchanges
+          .find((exchange) => exchange.request.id === exchangeRequestId)
+          ?.request.matches?.find((match) => match.id === matchId)?.feedback ?? null
+
+      const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
+      verdictAttempts.current.set(matchId, attempt)
+      const isCurrent = () => verdictAttempts.current.get(matchId) === attempt
+
+      pendingVerdicts.current.set(matchId, verdict)
+      showVerdict(exchangeRequestId, matchId, verdict)
+
+      try {
+        const { match } = await api.rateMatch(exchangeRequestId, matchId, verdict)
+        if (!isCurrent()) return
+        // Trust the row the server returned rather than what was sent, and keep
+        // holding it until a poll comes back agreeing.
+        pendingVerdicts.current.set(matchId, match.feedback ?? null)
+        showVerdict(exchangeRequestId, matchId, match.feedback ?? null)
+      } catch (cause) {
+        if (!isCurrent()) return
+        pendingVerdicts.current.delete(matchId)
+        showVerdict(exchangeRequestId, matchId, previousVerdict)
+        fail(cause)
+      }
+    },
+    [exchanges, fail, showVerdict],
   )
 
   const seekTo = useCallback((seconds: number) => {
@@ -264,6 +352,7 @@ export default function StartPage() {
             onSearch={startSearch}
             onSeek={seekTo}
             onClip={clipMatch}
+            onRate={rateMatch}
           />
         </div>
       )}
