@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import type { Clip, ClipMatch, ClipRequest, Video } from "@/lib/types"
 
@@ -51,9 +51,11 @@ export interface DrawerExchange {
 
 /**
  * The question drawer: seated right of the stage, collapsible to a "?" disc.
- * A running conversation — every question stays on screen with its streamed
- * answer and its evidence below it; click evidence to jump the main player,
- * or cut and play the clip inline.
+ *
+ * Shaped like a chat client, because that is what it is — the composer is
+ * pinned to the bottom and the conversation scrolls above it, so the place you
+ * type never moves as the thread grows. The shell itself never scrolls; only
+ * the transcript region does, which is what keeps the composer seated.
  */
 export function QueryDrawer({
   video,
@@ -72,12 +74,29 @@ export function QueryDrawer({
 }) {
   const [open, setOpen] = useState(true)
   const [draft, setDraft] = useState("")
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const current = exchanges.at(-1) ?? null
   const searching = current?.request.status === "pending" || current?.request.status === "searching"
 
   const understanding =
     video.index?.status === "pending" || video.index?.status === "queued" || video.index?.status === "running"
+
+  const canSend = draft.trim().length > 0 && video.readyForSearch && !busy && !searching
+
+  /**
+   * Follow the newest exchange. With the composer at the bottom, an answer that
+   * arrives off-screen reads as nothing having happened — so track the last
+   * status too, not just the count, or the reply that replaces "Searching…"
+   * lands unseen.
+   */
+  const lastStatus = current?.request.status
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    node.scrollTo({ top: node.scrollHeight, behavior: "smooth" })
+  }, [exchanges.length, lastStatus, current?.clips.length])
 
   const submit = () => {
     const instruction = draft.trim()
@@ -115,9 +134,14 @@ export function QueryDrawer({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 32 }}
             transition={{ duration: 0.45, ease: EASE }}
-            className="z-30 mt-6 w-full rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/10 backdrop-blur-md lg:fixed lg:right-6 lg:top-24 lg:bottom-8 lg:mt-0 lg:flex lg:w-[350px] lg:flex-col lg:overflow-y-auto"
+            /* Fixed shape, hidden overflow: the shell holds still while the
+               transcript inside it scrolls. On small screens it takes a bounded
+               height for the same reason — without one, flex-1 has nothing to
+               divide and the composer stops being pinned. */
+            className="z-30 mt-6 flex h-[70vh] w-full flex-col overflow-hidden rounded-2xl bg-white/[0.04] ring-1 ring-white/10 backdrop-blur-md lg:fixed lg:right-6 lg:top-24 lg:bottom-8 lg:mt-0 lg:h-auto lg:w-[350px]"
           >
-            <div className="mb-3 flex items-center justify-between">
+            {/* header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
               <h2 className="font-serif text-lg">Ask the video</h2>
               <button
                 type="button"
@@ -131,77 +155,95 @@ export function QueryDrawer({
               </button>
             </div>
 
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                submit()
-              }}
-            >
-              <div className="flex items-end gap-2 rounded-xl bg-black/40 p-2 ring-1 ring-white/10 focus-within:ring-white/25">
-                <textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault()
-                      submit()
-                    }
-                  }}
-                  rows={2}
-                  placeholder='e.g. "find the part where they see a cybertruck"'
-                  className="max-h-32 min-h-[3rem] w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-foreground/30"
-                  disabled={!video.readyForSearch}
-                />
-                <button
-                  type="submit"
-                  aria-label="Search"
-                  disabled={!video.readyForSearch || busy || searching || draft.trim().length === 0}
-                  className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-black transition-opacity disabled:opacity-30"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M5 12h14M13 6l6 6-6 6" />
-                  </svg>
-                </button>
-              </div>
-            </form>
+            {/* transcript — the only scrolling region */}
+            <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+              {video.readyForSearch && understanding && exchanges.length === 0 && (
+                <p className="text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
+                  Still watching the video — you can ask now, the search will wait for it.
+                </p>
+              )}
 
-            {!video.readyForSearch && (
-              <p className="mt-2.5 text-xs text-foreground/40">Available once processing finishes.</p>
-            )}
-            {video.readyForSearch && understanding && exchanges.length === 0 && (
-              <p className="mt-2.5 text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
-                Still watching the video — you can ask now, the search will wait for it.
-              </p>
-            )}
-
-            {/* Idle suggestions, reference-style follow-ups. */}
-            {video.readyForSearch && exchanges.length === 0 && (
-              <div className="mt-4">
-                <p className="text-xs font-medium text-foreground/50">Try</p>
-                <div className="mt-1 flex flex-col">
-                  {SUGGESTIONS.map((text, i) => (
-                    <button
-                      key={text}
-                      type="button"
-                      onClick={() => setDraft(text)}
-                      className="-mx-1.5 flex items-center gap-2 rounded-lg border-b border-white/5 px-1.5 py-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-white/5"
-                      style={{ animation: `fade-up 350ms cubic-bezier(0.23,1,0.32,1) ${i * 90}ms both` }}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/30" aria-hidden>
-                        <path d="M9 10l-5 5 5 5" />
-                        <path d="M20 4v7a4 4 0 0 1-4 4H4" />
-                      </svg>
-                      {text}
-                    </button>
-                  ))}
+              {/* Idle suggestions, reference-style follow-ups. */}
+              {video.readyForSearch && exchanges.length === 0 && (
+                <div>
+                  <p className="text-xs font-medium text-foreground/50">Try</p>
+                  <div className="mt-1 flex flex-col">
+                    {SUGGESTIONS.map((text, i) => (
+                      <button
+                        key={text}
+                        type="button"
+                        onClick={() => {
+                          setDraft(text)
+                          inputRef.current?.focus()
+                        }}
+                        className="-mx-1.5 flex items-center gap-2 rounded-lg border-b border-white/5 px-1.5 py-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-white/5"
+                        style={{ animation: `fade-up 350ms cubic-bezier(0.23,1,0.32,1) ${i * 90}ms both` }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/30" aria-hidden>
+                          <path d="M9 10l-5 5 5 5" />
+                          <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+                        </svg>
+                        {text}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* The conversation: every exchange stays, oldest first. */}
-            {exchanges.map((exchange) => (
-              <ExchangeBlock key={exchange.request.id} exchange={exchange} onSeek={onSeek} onClip={onClip} />
-            ))}
+              {/* The conversation: every exchange stays, oldest first. */}
+              {exchanges.map((exchange) => (
+                <ExchangeBlock key={exchange.request.id} exchange={exchange} onSeek={onSeek} onClip={onClip} />
+              ))}
+            </div>
+
+            {/* composer — pinned, so the place you type never moves */}
+            <div className="mt-auto shrink-0 border-t border-white/10 p-2">
+              {!video.readyForSearch && (
+                <p className="px-1 pb-2 text-xs text-foreground/40">Available once processing finishes.</p>
+              )}
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  submit()
+                }}
+              >
+                <div
+                  role="presentation"
+                  onClick={() => inputRef.current?.focus()}
+                  className="flex cursor-text items-end gap-2 rounded-xl bg-black/40 p-2 ring-1 ring-white/10 transition-[box-shadow] duration-150 focus-within:ring-white/25"
+                >
+                  <textarea
+                    ref={inputRef}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault()
+                        submit()
+                      }
+                    }}
+                    rows={2}
+                    placeholder='e.g. "find the part where they see a cybertruck"'
+                    className="max-h-32 min-h-[3rem] w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-foreground/30"
+                    disabled={!video.readyForSearch}
+                  />
+                  <button
+                    type="submit"
+                    aria-label="Search"
+                    disabled={!canSend}
+                    /* Filled only when there is something to send, so the
+                       button reads as available rather than merely present. */
+                    className={`mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] ${
+                      canSend ? "bg-white text-black" : "bg-white/10 text-foreground/40"
+                    }`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M12 19V5M5 12l7-7 7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
           </motion.aside>
         )}
       </AnimatePresence>
@@ -224,8 +266,17 @@ function ExchangeBlock({
   const clipByMatch = useMemo(() => new Map(clips.map((clip) => [clip.clipMatchId, clip])), [clips])
 
   return (
-    <div className="mt-4 space-y-3 border-t border-white/5 pt-4 first:border-t-0">
-      <p className="text-[13px] text-foreground/50">“{request.instruction}”</p>
+    <div className="flex flex-col gap-3">
+      {/* The question, as the person asked it — right-aligned, so the thread
+          reads as a conversation rather than a list of results. */}
+      <div className="flex justify-end pl-10">
+        <div
+          className="rounded-2xl bg-white/10 px-3 py-1.5 text-[13px] leading-[1.4] text-foreground"
+          style={{ animation: "fade-up 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+        >
+          {request.instruction}
+        </div>
+      </div>
 
       {searching ? (
         <p className="text-sm text-foreground/70" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
@@ -240,7 +291,7 @@ function ExchangeBlock({
       )}
 
       {matches.length > 0 && (
-        <div className="space-y-2 pt-1">
+        <div className="space-y-2">
           <p className="text-[11px] uppercase tracking-wide text-foreground/35">Evidence</p>
           {matches.map((match, i) => (
             <EvidenceCard
