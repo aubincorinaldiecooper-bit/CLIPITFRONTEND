@@ -318,7 +318,9 @@ export function QueryDrawer({
             <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
               {video.readyForSearch && understanding && exchanges.length === 0 && (
                 <p className="text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
-                  Still watching this video. Ask anything now — your question waits until I've finished.
+                  {video.index?.readThroughTimecode && video.durationTimecode
+                    ? `Still watching — I'm ${video.index.readThroughTimecode} into ${video.durationTimecode} so far. Ask anything now; I'll answer from what I've seen, and keep watching the rest.`
+                    : "Still watching this video. Ask anything now — I'll answer as soon as I've seen enough."}
                 </p>
               )}
 
@@ -358,6 +360,7 @@ export function QueryDrawer({
                   onClip={onClip}
                   onRate={onRate}
                   onSearch={onSearch}
+                  stillWatching={understanding}
                   // "Look again" means the last thing asked, because that is
                   // what it means to the backend and to a person. Offering it
                   // on an older answer would quietly re-run a different
@@ -431,6 +434,7 @@ function ExchangeBlock({
   onSearch,
   isLatest,
   canAsk,
+  stillWatching,
 }: {
   exchange: DrawerExchange
   onSeek: (seconds: number) => void
@@ -439,6 +443,8 @@ function ExchangeBlock({
   onSearch: (instruction: string) => void
   isLatest: boolean
   canAsk: boolean
+  /** The video is still being read, so a pending search is waiting on it. */
+  stillWatching: boolean
 }) {
   const { request, clips } = exchange
   const searching = request.status === "pending" || request.status === "searching"
@@ -460,7 +466,13 @@ function ExchangeBlock({
 
       {searching ? (
         <p className="text-sm text-foreground/70" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
-          Searching what I know about this video…
+          {/* While a video is still being watched, a search that has not come
+              back yet is usually waiting for the next part to be read. Saying
+              "searching" there is true but unhelpful — it looks stuck, which
+              is the complaint this whole change came from. */}
+          {stillWatching
+            ? "Still taking notes on this video — I'll answer the moment I've seen enough."
+            : "Looking through what I know about this video…"}
         </p>
       ) : (
         <div className="flex flex-col gap-1">

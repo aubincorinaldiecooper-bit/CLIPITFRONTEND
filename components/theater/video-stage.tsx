@@ -65,7 +65,18 @@ export function stageActivity(video: Video | null, uploadFraction: number | null
 
   const index = video.index ?? { status: "unavailable" as const, sceneCount: 0, error: null }
   if (index.status === "pending" || index.status === "queued" || index.status === "running") {
-    return { label: "Remembering the video", percent: null, done: false, failed: false }
+    // Say how far it has got. The number is real — the backend writes notes as
+    // each part is read — so this moves, which is the difference between busy
+    // and stuck. "Remembering the video" on its own sat there for two minutes
+    // looking like nothing was happening.
+    const read = index.readThroughTimecode
+    const whole = video.durationTimecode
+    return {
+      label: read && whole ? `Watching — ${read} of ${whole}` : "Starting to watch the video",
+      percent: null,
+      done: false,
+      failed: false,
+    }
   }
 
   return { label: "", percent: null, done: true, failed: false }

@@ -53,6 +53,13 @@ export interface Video {
   index: {
     status: TranscriptStatus
     sceneCount: number
+    /**
+     * How far into the video the notes reach, in seconds. Measured and moving
+     * — notes are written chunk by chunk as they are read — so it is the one
+     * honest thing to show while a read is running.
+     */
+    readThroughSeconds?: number
+    readThroughTimecode?: string | null
     error: string | null
   }
   /** Signed source playback URL; present on the detail endpoint once bytes are in storage. */
