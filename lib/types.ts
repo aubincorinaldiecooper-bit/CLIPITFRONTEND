@@ -141,6 +141,12 @@ export interface ClipRequest {
     /** False when something is known to be missing but cannot be located. */
     locatable: boolean
     unsearchedSeconds: number
+    /**
+     * Stretches with no answer behind them. `reason` matters: `not_read_yet`
+     * means the video had not been watched that far when the question was
+     * asked and will be shortly, which the answer says in its own words —
+     * everything else is a stretch that could not be looked at.
+     */
     gaps: Array<{
       startSeconds: number
       endSeconds: number
