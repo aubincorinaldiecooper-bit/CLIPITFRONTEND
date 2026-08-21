@@ -7,3 +7,21 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# How to explain things here
+
+Every summary, explanation, and status update is written for someone who is
+not reading the code. This is a standing rule, not a per-message request.
+
+- **Say what it means for the person using the app first.** "The bar sat at
+  59% and never moved, so it looked stuck" comes before anything about which
+  component computed it.
+- **Short sentences. Ordinary words.** A term that only makes sense to someone
+  who has read this repository — optimistic update, serializer, hydration,
+  coverage — gets replaced, or explained once in the same breath.
+- **Name the problem in the world, not in the file.**
+- **No status-report voice.** Do not list what was touched. Say what changed
+  and what it fixes.
+
+Commit messages and pull request descriptions are the place for precision.
+Chat is the place for being understood.
