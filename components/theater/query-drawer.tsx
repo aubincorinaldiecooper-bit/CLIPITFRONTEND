@@ -318,7 +318,7 @@ export function QueryDrawer({
             <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
               {video.readyForSearch && understanding && exchanges.length === 0 && (
                 <p className="text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
-                  Still watching the video — you can ask now, the search will wait for it.
+                  Still watching this video. Ask anything now — your question waits until I've finished.
                 </p>
               )}
 
@@ -395,7 +395,7 @@ export function QueryDrawer({
                       }
                     }}
                     rows={2}
-                    placeholder='e.g. "find the part where they see a cybertruck"'
+                    placeholder="Ask for a moment in this video"
                     className="max-h-32 min-h-[3rem] w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-foreground/30"
                     disabled={!video.readyForSearch}
                   />
@@ -627,6 +627,25 @@ function EvidencePicker({
   // thumbs-down is one tap and removes something from view, which is exactly
   // the shape of action that needs an undo next to it.
   const [undoableId, setUndoableId] = useState<string | null>(null)
+
+  /**
+   * The undo offer leaves on its own.
+   *
+   * It was a strip welded to the bottom of the card, which is the wrong shape
+   * for it: a permanent row in a card reads as a permanent fact, and this is
+   * news about something that just happened. Six seconds is long enough to
+   * catch a mis-tap and short enough not to become furniture.
+   */
+  useEffect(() => {
+    if (!undoableId) return
+    // Only the floating toast expires. When every moment has been waved off
+    // the undo is the only thing left in that answer — not news over a card
+    // but the record of what happened — and removing it on a timer would make
+    // the whole thread jump upward six seconds after a click.
+    if (ranked.length === 0) return
+    const timer = setTimeout(() => setUndoableId(null), 6000)
+    return () => clearTimeout(timer)
+  }, [undoableId, ranked.length])
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -649,7 +668,22 @@ function EvidencePicker({
   // Everything has been waved off. The undo has to outlive the card it came
   // from, or rejecting the last moment would take its own undo with it.
   if (!active) {
-    return undoable ? <UndoRejection match={undoable} onUndo={() => rate(undoable, null)} /> : null
+    // Nothing to float over, so this is not a toast. Inline, quiet, and it
+    // stays: it is the only trace of what was removed.
+    return undoable ? (
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/10">
+        <span className="truncate text-[12px] text-foreground/45">
+          Removed <span className="font-mono tabular-nums">{undoable.startTimecode}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => rate(undoable, null)}
+          className="shrink-0 whitespace-nowrap text-[12px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
+        >
+          Undo
+        </button>
+      </div>
+    ) : null
   }
 
   const others = ranked.filter((match) => match.id !== active.id)
@@ -667,7 +701,7 @@ function EvidencePicker({
 
   return (
     <div
-      className="overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10"
+      className="relative overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10"
       style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) 200ms both" }}
     >
       <div className="p-3">
@@ -773,22 +807,29 @@ function EvidencePicker({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-black/20 px-2.5 py-2">
-        <span className="flex items-center gap-2">
-          <Meter confidence={active.confidence} />
-          <span className="text-[12px] font-medium text-foreground/60">{confidenceLabel(active.confidence)}</span>
+      {/* Two rows, because six controls do not fit across a 380px column. The
+          previous single row squeezed "Cut this clip" until it wrapped onto
+          three lines inside its own button. */}
+      <div className="border-t border-white/10 bg-black/20 px-2.5 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <Meter confidence={active.confidence} />
+            <span className="truncate text-[12px] font-medium text-foreground/60">
+              {confidenceLabel(active.confidence)}
+            </span>
+          </span>
           <Verdict match={active} onRate={(verdict) => rate(active, verdict)} />
-        </span>
+        </div>
 
-        <span className="flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2">
           {others.length > 0 && (
             <button
               type="button"
               aria-expanded={open}
               onClick={() => setOpen((current) => !current)}
-              className="rounded-lg px-2.5 py-1.5 text-[12px] text-foreground/70 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-foreground"
+              className="flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-[12.5px] text-foreground/70 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-foreground"
             >
-              Alternatives
+              {open ? "Hide other moments" : `Other moments (${others.length})`}
             </button>
           )}
 
@@ -799,7 +840,7 @@ function EvidencePicker({
             <a
               href={clip!.downloadUrl!}
               download
-              className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-black transition-transform active:scale-[0.97]"
+              className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
@@ -816,21 +857,38 @@ function EvidencePicker({
               type="button"
               onClick={() => onClip(active.id)}
               disabled={busy}
-              className="rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
+              /* Fixed width for the label that changes: "Cutting…" and "Cut
+                 this clip" must not resize the button under the cursor. */
+              className="flex-1 whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
             >
               {busy ? (
                 <span style={{ animation: "pulse-soft 1.6s ease-in-out infinite" }}>Cutting…</span>
               ) : clip?.status === "failed" ? (
-                "Retry"
+                "Try again"
               ) : (
                 "Cut this clip"
               )}
             </button>
           )}
-        </span>
+        </div>
       </div>
 
-      {undoable && <UndoRejection match={undoable} onUndo={() => rate(undoable, null)} />}
+      {/* Floated over the card rather than added to it: removing a moment must
+          not also resize the thing you are looking at. */}
+      <AnimatePresence>
+        {undoable && (
+          <motion.div
+            key="undo"
+            className="pointer-events-none absolute right-2 top-2 flex justify-end"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.25, ease: EASE }}
+          >
+            <UndoRejection match={undoable} onUndo={() => rate(undoable, null)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -895,20 +953,24 @@ function Verdict({ match, onRate }: { match: ClipMatch; onRate: (verdict: MatchF
   )
 }
 
-/** What a thumbs-down leaves behind: which moment went, and a way back. */
+/**
+ * A toast: which moment went, and a way back, for a few seconds.
+ *
+ * Only the Undo button takes clicks. The pill floats over the card, and
+ * anything beneath the rest of it — including whichever button happens to be
+ * under there — has to stay usable rather than being blocked for six seconds
+ * by a label.
+ */
 function UndoRejection({ match, onUndo }: { match: ClipMatch; onUndo: () => void }) {
   return (
-    <div
-      className="flex items-center justify-between gap-3 border-t border-white/10 bg-black/30 px-2.5 py-1.5"
-      style={{ animation: "fade-up 240ms cubic-bezier(0.23,1,0.32,1) both" }}
-    >
-      <span className="min-w-0 truncate text-[11.5px] text-foreground/45">
+    <div className="flex items-center gap-3 rounded-full bg-black/85 px-3 py-1.5 shadow-lg ring-1 ring-white/15 backdrop-blur">
+      <span className="whitespace-nowrap text-[11.5px] text-foreground/60">
         Removed <span className="font-mono tabular-nums">{match.startTimecode}</span>
       </span>
       <button
         type="button"
         onClick={onUndo}
-        className="shrink-0 rounded-lg px-2 py-1 text-[11.5px] font-medium text-foreground/70 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-foreground"
+        className="pointer-events-auto whitespace-nowrap text-[11.5px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
       >
         Undo
       </button>

@@ -25,3 +25,21 @@ not reading the code. This is a standing rule, not a per-message request.
 
 Commit messages and pull request descriptions are the place for precision.
 Chat is the place for being understood.
+
+# Controls have to look finished
+
+Every control ships laid out properly, and nothing moves when you use it.
+
+- **Give a button its own room.** A label that wraps onto three lines because
+  four things share one row is not a button, it is a mistake with a border.
+  `whitespace-nowrap` on anything with a label, and if the row cannot hold
+  everything, split the row.
+- **Nothing reflows when actioned.** A card must not resize, jump or reorder
+  because something inside it was clicked. Reserve the space the busy state,
+  the longer label, or the confirmation will need.
+- **Transient news is transient.** A confirmation, an undo, an "it worked"
+  belongs in something that appears and leaves on its own. Permanent strips in
+  a card are for permanent facts.
+- **Check it at the width it will actually be seen at.** This drawer is a
+  fixed 380px column. Anything designed at full width and squeezed into it
+  will look squeezed into it.
