@@ -159,7 +159,8 @@ function UncertainMoments({
 }: {
   request: ClipRequest
   onSeek: (seconds: number) => void
-  onLookAgain: () => void
+  /** Null when looking again is not available — see the call site. */
+  onLookAgain: (() => void) | null
 }) {
   const uncertain = request.uncertain ?? []
   if (uncertain.length === 0) return null
@@ -187,13 +188,15 @@ function UncertainMoments({
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={onLookAgain}
-        className="mt-1.5 rounded-lg px-1.5 py-1 text-[12px] font-medium text-amber-300/80 transition-colors hover:bg-white/5 hover:text-amber-300"
-      >
-        Look again, properly
-      </button>
+      {onLookAgain && (
+        <button
+          type="button"
+          onClick={onLookAgain}
+          className="mt-1.5 rounded-lg px-1.5 py-1 text-[12px] font-medium text-amber-300/80 transition-colors hover:bg-white/5 hover:text-amber-300"
+        >
+          Look again, properly
+        </button>
+      )}
     </div>
   )
 }
@@ -347,7 +350,7 @@ export function QueryDrawer({
               )}
 
               {/* The conversation: every exchange stays, oldest first. */}
-              {exchanges.map((exchange) => (
+              {exchanges.map((exchange, index) => (
                 <ExchangeBlock
                   key={exchange.request.id}
                   exchange={exchange}
@@ -355,6 +358,12 @@ export function QueryDrawer({
                   onClip={onClip}
                   onRate={onRate}
                   onSearch={onSearch}
+                  // "Look again" means the last thing asked, because that is
+                  // what it means to the backend and to a person. Offering it
+                  // on an older answer would quietly re-run a different
+                  // question than the one being looked at.
+                  isLatest={index === exchanges.length - 1}
+                  canAsk={canSend || (!busy && !searching && video.readyForSearch)}
                 />
               ))}
             </div>
@@ -420,12 +429,16 @@ function ExchangeBlock({
   onClip,
   onRate,
   onSearch,
+  isLatest,
+  canAsk,
 }: {
   exchange: DrawerExchange
   onSeek: (seconds: number) => void
   onClip: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null) => void
   onSearch: (instruction: string) => void
+  isLatest: boolean
+  canAsk: boolean
 }) {
   const { request, clips } = exchange
   const searching = request.status === "pending" || request.status === "searching"
@@ -474,7 +487,7 @@ function ExchangeBlock({
           // The same words a person would type. "Look again" is already
           // understood as a correction, so the button is the phrase made
           // visible rather than a second way in.
-          onLookAgain={() => onSearch("look again")}
+          onLookAgain={isLatest && canAsk ? () => onSearch("look again") : null}
         />
       )}
 
