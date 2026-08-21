@@ -42,9 +42,37 @@ function StreamedLine({ text, className }: { text: string; className?: string })
  * are ours, not the reader's — they describe how we chopped their file up, and
  * nobody uploading a video thinks in them.
  */
-function answerLine(request: ClipRequest): string {
+/**
+ * How long, said the way someone would say it out loud.
+ *
+ * Nobody reads "08:12" as a length. Timecodes are for pointing at a position
+ * in the video, which is what the moment list uses them for; a sentence about
+ * how much has been watched wants "8 minutes".
+ */
+function describeMinutes(seconds: number): string {
+  if (seconds < 90) return "a minute"
+  return `${Math.round(seconds / 60)} minutes`
+}
+
+function answerLine(request: ClipRequest, readThroughSeconds?: number | null): string {
   const count = request.matches?.length ?? 0
   if (request.status === "failed") return request.error ?? "Something went wrong with that search."
+
+  /**
+   * Answered before the whole video had been watched.
+   *
+   * This belongs in the answer, not in a warning box beside it. The warning
+   * box exists for stretches we could not look at, and its words say exactly
+   * that — which would be untrue here, where we simply had not got there yet
+   * and will have in a minute. Same words, opposite meanings.
+   */
+  const partial = request.coverage?.gaps?.some((gap) => gap.reason === "not_read_yet") ?? false
+
+  if (partial && count > 0) {
+    const found = count === 1 ? "One so far" : `${count} so far`
+    const sofar = readThroughSeconds ? ` — I'm only ${describeMinutes(readThroughSeconds)} in` : ""
+    return `${found}${sofar}. Still watching the rest.`
+  }
 
   if (count === 0) {
     // Never claim the video lacks something when part of it went unread. The
@@ -83,7 +111,10 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
   const coverage = request.coverage
   if (!coverage || coverage.complete) return null
 
-  const gaps = coverage.gaps ?? []
+  // A stretch we had not watched yet when the question was asked is not a
+  // stretch we could not look at. It is said in the answer instead, in words
+  // that are true of it — this box would call it a failure.
+  const gaps = (coverage.gaps ?? []).filter((gap) => gap.reason !== "not_read_yet")
   const degraded = coverage.degraded ?? []
 
   // Two different caveats. A gap was never looked at; a degraded window was
@@ -95,6 +126,10 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
       : coverage.locatable === false
         ? "There's part of this video I couldn't look at, so I may have missed something."
         : null
+
+  // Nothing left to say once the not-yet-watched stretches are taken out —
+  // and an empty amber box is a warning about nothing.
+  if (!gapLine && degraded.length === 0) return null
 
   return (
     <div
@@ -318,7 +353,9 @@ export function QueryDrawer({
             <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
               {video.readyForSearch && understanding && exchanges.length === 0 && (
                 <p className="text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
-                  Still watching this video. Ask anything now — your question waits until I've finished.
+                  {video.index?.readThroughSeconds
+                    ? `Still watching — ${describeMinutes(video.index.readThroughSeconds)} in so far. Ask away, and I'll answer from what I've seen.`
+                    : "Still watching this video. Ask away — I'll answer as soon as I've seen enough."}
                 </p>
               )}
 
@@ -358,6 +395,8 @@ export function QueryDrawer({
                   onClip={onClip}
                   onRate={onRate}
                   onSearch={onSearch}
+                  stillWatching={understanding}
+                  readThroughSeconds={video.index?.readThroughSeconds ?? null}
                   // "Look again" means the last thing asked, because that is
                   // what it means to the backend and to a person. Offering it
                   // on an older answer would quietly re-run a different
@@ -431,6 +470,8 @@ function ExchangeBlock({
   onSearch,
   isLatest,
   canAsk,
+  stillWatching,
+  readThroughSeconds,
 }: {
   exchange: DrawerExchange
   onSeek: (seconds: number) => void
@@ -439,6 +480,10 @@ function ExchangeBlock({
   onSearch: (instruction: string) => void
   isLatest: boolean
   canAsk: boolean
+  /** The video is still being read, so a pending search is waiting on it. */
+  stillWatching: boolean
+  /** How far the watching has got, for an answer given before it finished. */
+  readThroughSeconds: number | null
 }) {
   const { request, clips } = exchange
   const searching = request.status === "pending" || request.status === "searching"
@@ -460,13 +505,19 @@ function ExchangeBlock({
 
       {searching ? (
         <p className="text-sm text-foreground/70" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
-          Searching what I know about this video…
+          {/* While a video is still being watched, a search that has not come
+              back yet is usually waiting for the next part to be read. Saying
+              "searching" there is true but unhelpful — it looks stuck, which
+              is the complaint this whole change came from. */}
+          {stillWatching
+            ? "Still taking notes on this video — I'll answer the moment I've seen enough."
+            : "Looking through what I know about this video…"}
         </p>
       ) : (
         <div className="flex flex-col gap-1">
           <StreamedLine
             key={request.id + request.status}
-            text={answerLine(request)}
+            text={answerLine(request, readThroughSeconds)}
             className={`text-sm leading-relaxed ${request.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
           />
           {/* Recalled and re-read are different acts, and the difference

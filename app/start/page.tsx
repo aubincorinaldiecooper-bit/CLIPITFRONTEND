@@ -97,19 +97,34 @@ export default function StartPage() {
   useEffect(() => {
     if (!videoId || videoSettled || uploadFraction !== null) return
 
+    /**
+     * One request at a time, scheduled after the last one lands.
+     *
+     * On an interval, a slow response can arrive after a newer one and
+     * overwrite it with older state — which shows up as the reading progress
+     * counting backwards, the exact "is it broken?" the progress was added to
+     * answer. Chaining the next poll to the end of the previous one makes the
+     * order impossible to get wrong, and stops requests stacking up on a
+     * connection too slow to keep pace with them.
+     */
     let cancelled = false
-    const timer = setInterval(async () => {
+    let timer: ReturnType<typeof setTimeout>
+
+    const poll = async () => {
       try {
         const { video: latest } = await api.getVideo(videoId)
         if (!cancelled) setVideo(latest)
       } catch {
         // A transient poll failure is not worth interrupting the flow for.
       }
-    }, POLL_MS)
+      if (!cancelled) timer = setTimeout(poll, POLL_MS)
+    }
+
+    timer = setTimeout(poll, POLL_MS)
 
     return () => {
       cancelled = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
   }, [videoId, videoSettled, uploadFraction])
 
@@ -155,9 +170,15 @@ export default function StartPage() {
   useEffect(() => {
     if (unsettledIds.length === 0) return
 
+    // Same reasoning as the video poll above: one round at a time, scheduled
+    // after the last one finishes, so a slow response cannot land after a
+    // newer one and put back state the user has already moved past.
     let cancelled = false
-    const timer = setInterval(async () => {
+    let timer: ReturnType<typeof setTimeout>
+
+    const poll = async () => {
       for (const id of unsettledIds) {
+        if (cancelled) return
         try {
           const { clipRequest: latest, clips: latestClips } = await api.getClipRequest(id)
           if (cancelled) return
@@ -168,14 +189,17 @@ export default function StartPage() {
             ),
           )
         } catch {
-          // Ignore a dropped poll; the next tick will catch up.
+          // Ignore a dropped poll; the next round will catch up.
         }
       }
-    }, POLL_MS)
+      if (!cancelled) timer = setTimeout(poll, POLL_MS)
+    }
+
+    timer = setTimeout(poll, POLL_MS)
 
     return () => {
       cancelled = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unsettledKey, reconcileVerdicts])
