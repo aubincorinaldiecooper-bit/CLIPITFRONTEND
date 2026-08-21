@@ -42,7 +42,19 @@ function StreamedLine({ text, className }: { text: string; className?: string })
  * are ours, not the reader's — they describe how we chopped their file up, and
  * nobody uploading a video thinks in them.
  */
-function answerLine(request: ClipRequest, readThrough?: string | null): string {
+/**
+ * How long, said the way someone would say it out loud.
+ *
+ * Nobody reads "08:12" as a length. Timecodes are for pointing at a position
+ * in the video, which is what the moment list uses them for; a sentence about
+ * how much has been watched wants "8 minutes".
+ */
+function describeMinutes(seconds: number): string {
+  if (seconds < 90) return "a minute"
+  return `${Math.round(seconds / 60)} minutes`
+}
+
+function answerLine(request: ClipRequest, readThroughSeconds?: number | null): string {
   const count = request.matches?.length ?? 0
   if (request.status === "failed") return request.error ?? "Something went wrong with that search."
 
@@ -57,9 +69,9 @@ function answerLine(request: ClipRequest, readThrough?: string | null): string {
   const partial = request.coverage?.gaps?.some((gap) => gap.reason === "not_read_yet") ?? false
 
   if (partial && count > 0) {
-    const sofar = readThrough ? `the first ${readThrough}` : "the part I had watched"
-    const found = count === 1 ? "Found one moment" : `Found ${count} moments`
-    return `${found} in ${sofar}. I'm still watching the rest — ask again when I'm done and I'll cover the whole thing.`
+    const found = count === 1 ? "One so far" : `${count} so far`
+    const sofar = readThroughSeconds ? ` — I'm only ${describeMinutes(readThroughSeconds)} in` : ""
+    return `${found}${sofar}. Still watching the rest.`
   }
 
   if (count === 0) {
@@ -341,9 +353,9 @@ export function QueryDrawer({
             <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
               {video.readyForSearch && understanding && exchanges.length === 0 && (
                 <p className="text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
-                  {video.index?.readThroughTimecode && video.durationTimecode
-                    ? `Still watching — I'm ${video.index.readThroughTimecode} into ${video.durationTimecode} so far. Ask anything now; I'll answer from what I've seen, and keep watching the rest.`
-                    : "Still watching this video. Ask anything now — I'll answer as soon as I've seen enough."}
+                  {video.index?.readThroughSeconds
+                    ? `Still watching — ${describeMinutes(video.index.readThroughSeconds)} in so far. Ask away, and I'll answer from what I've seen.`
+                    : "Still watching this video. Ask away — I'll answer as soon as I've seen enough."}
                 </p>
               )}
 
@@ -384,7 +396,7 @@ export function QueryDrawer({
                   onRate={onRate}
                   onSearch={onSearch}
                   stillWatching={understanding}
-                  readThrough={video.index?.readThroughTimecode ?? null}
+                  readThroughSeconds={video.index?.readThroughSeconds ?? null}
                   // "Look again" means the last thing asked, because that is
                   // what it means to the backend and to a person. Offering it
                   // on an older answer would quietly re-run a different
@@ -459,7 +471,7 @@ function ExchangeBlock({
   isLatest,
   canAsk,
   stillWatching,
-  readThrough,
+  readThroughSeconds,
 }: {
   exchange: DrawerExchange
   onSeek: (seconds: number) => void
@@ -471,7 +483,7 @@ function ExchangeBlock({
   /** The video is still being read, so a pending search is waiting on it. */
   stillWatching: boolean
   /** How far the watching has got, for an answer given before it finished. */
-  readThrough: string | null
+  readThroughSeconds: number | null
 }) {
   const { request, clips } = exchange
   const searching = request.status === "pending" || request.status === "searching"
@@ -505,7 +517,7 @@ function ExchangeBlock({
         <div className="flex flex-col gap-1">
           <StreamedLine
             key={request.id + request.status}
-            text={answerLine(request, readThrough)}
+            text={answerLine(request, readThroughSeconds)}
             className={`text-sm leading-relaxed ${request.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
           />
           {/* Recalled and re-read are different acts, and the difference
