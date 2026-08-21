@@ -16,9 +16,13 @@ export type ClipStatus = "pending" | "generating" | "ready" | "failed"
 
 export type MatchSource = "visual" | "transcript" | "multimodal"
 
+/**
+ * No percentage. Every stage used to carry one and none was measured — the
+ * number jumped to 60 the instant a stage began and sat there for the whole
+ * job, which reads as stuck rather than busy. The backend no longer sends it.
+ */
 export interface Progress {
   stage: string
-  percent: number
   message: string
 }
 
@@ -94,8 +98,24 @@ export interface ClipRequest {
   resolvedMode: "visual" | "transcript" | "both" | null
   status: ClipRequestStatus
   error: string | null
+  /** Whether this was recalled from the notes or read off the footage. */
+  answeredFrom: "notes" | "footage" | null
+  /**
+   * Moments the model reported and the backend's confidence threshold
+   * discarded. Not results — they cannot be cut into clips. They exist so an
+   * answer can admit to a maybe instead of reporting an absence.
+   */
+  uncertain: Array<{
+    startSeconds: number
+    endSeconds: number
+    startTimecode: string
+    endTimecode: string
+    confidence: number
+    description: string
+  }>
   progress: {
     stage: string
+    /** Real here: chunks finished out of chunks to do. */
     percent: number
     chunksTotal: number
     chunksCompleted: number
