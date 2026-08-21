@@ -184,7 +184,10 @@ export default function StartPage() {
 
   const startSearch = useCallback(
     async (instruction: string) => {
-      if (!video) return
+      // Guarded here rather than only at each button. Every caller pays for a
+      // search, and a second one started while the first is in flight is work
+      // the person asked for once and is charged for twice.
+      if (!video || busy) return
       setError(null)
       setBusy(true)
       try {
@@ -197,7 +200,7 @@ export default function StartPage() {
         setBusy(false)
       }
     },
-    [video, fail],
+    [video, busy, fail],
   )
 
   const clipMatch = useCallback(

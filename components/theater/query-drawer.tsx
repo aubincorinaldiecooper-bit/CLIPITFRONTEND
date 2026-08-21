@@ -35,20 +35,31 @@ function StreamedLine({ text, className }: { text: string; className?: string })
   )
 }
 
+/**
+ * What the answer says, out loud.
+ *
+ * Written the way a person would say it. Words like "segment" and "examine"
+ * are ours, not the reader's — they describe how we chopped their file up, and
+ * nobody uploading a video thinks in them.
+ */
 function answerLine(request: ClipRequest): string {
   const count = request.matches?.length ?? 0
-  if (request.status === "failed") return request.error ?? "The search failed."
+  if (request.status === "failed") return request.error ?? "Something went wrong with that search."
+
   if (count === 0) {
-    // Telling someone to rephrase is wrong when part of the video was never
-    // read. The gap itself is shown separately; this only stops the copy from
+    // Never claim the video lacks something when part of it went unread. The
+    // stretch itself is shown separately; this only keeps the sentence from
     // asserting an absence it cannot vouch for.
-    return request.coverage?.complete === false
-      ? "Nothing in the parts of the video I could examine matches that."
-      : "Nothing in the video matches that. Try describing the moment differently."
+    if (request.coverage?.complete === false) {
+      return "I didn't find that in the parts of the video I could look at."
+    }
+    return request.uncertain?.length
+      ? "I didn't find a clear match — but there's one I'm unsure about below."
+      : "I couldn't find that. Try describing the moment a different way."
   }
-  return count === 1
-    ? "Found one moment. Click it to jump there — or cut it as a clip."
-    : `Found ${count} moments. Click one to jump there — or cut them as clips.`
+
+  const found = count === 1 ? "Found one moment." : `Found ${count} moments.`
+  return `${found} Click one to jump there, or cut it into a clip.`
 }
 
 /** Whole minutes and seconds, for a duration rather than a position. */
@@ -80,9 +91,9 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
   // wrong — its matches are real.
   const gapLine =
     gaps.length > 0
-      ? `${describeDuration(coverage.unsearchedSeconds)} of this video could not be examined, so anything in ${gaps.length === 1 ? "that stretch" : "those stretches"} would have been missed.`
+      ? `I couldn't look at ${describeDuration(coverage.unsearchedSeconds)} of this video, so I'd have missed anything in ${gaps.length === 1 ? "it" : "those bits"}.`
       : coverage.locatable === false
-        ? "Part of this video could not be examined, so something there may have been missed."
+        ? "There's part of this video I couldn't look at, so I may have missed something."
         : null
 
   return (
@@ -109,8 +120,8 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
       {degraded.length > 0 && (
         <div className={gapLine ? "mt-3 border-t border-amber-400/15 pt-2.5" : ""}>
           <p className="text-[13px] leading-snug text-amber-200/90">
-            {degraded.length === 1 ? "One stretch was" : `${degraded.length} stretches were`} searched without
-            speech, so anything only said out loud there could not be matched.
+            {degraded.length === 1 ? "There's a bit" : `There are ${degraded.length} bits`} where I could see the
+            video but not hear it, so I'd have missed anything that was only said out loud.
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {degraded.map((window) => (
@@ -125,6 +136,66 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
             ))}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The moments we found and did not show.
+ *
+ * A match under the confidence threshold used to be dropped silently, and the
+ * answer said nothing matched — which a person cannot tell apart from their
+ * video genuinely not containing it. Saying "I saw something here, I'm not
+ * sure" is both more honest and more useful, and it costs one quiet line.
+ *
+ * Kept deliberately plain: these are not results. No meter, no thumbs, nothing
+ * to cut. Just a time you can jump to and judge yourself.
+ */
+function UncertainMoments({
+  request,
+  onSeek,
+  onLookAgain,
+}: {
+  request: ClipRequest
+  onSeek: (seconds: number) => void
+  /** Null when looking again is not available — see the call site. */
+  onLookAgain: (() => void) | null
+}) {
+  const uncertain = request.uncertain ?? []
+  if (uncertain.length === 0) return null
+
+  return (
+    <div className="rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
+      <p className="text-[12.5px] leading-snug text-foreground/55">
+        {uncertain.length === 1 ? "There's one moment" : `There are ${uncertain.length} moments`} I spotted but
+        wasn't sure about.
+      </p>
+      <div className="mt-2 flex flex-col gap-1">
+        {uncertain.map((moment) => (
+          <button
+            key={`${moment.startSeconds}-${moment.endSeconds}`}
+            type="button"
+            onClick={() => onSeek(moment.startSeconds)}
+            className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/5"
+          >
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-foreground/45">
+              {moment.startTimecode}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground/65">
+              {moment.description || "Something worth a look"}
+            </span>
+          </button>
+        ))}
+      </div>
+      {onLookAgain && (
+        <button
+          type="button"
+          onClick={onLookAgain}
+          className="mt-1.5 rounded-lg px-1.5 py-1 text-[12px] font-medium text-amber-300/80 transition-colors hover:bg-white/5 hover:text-amber-300"
+        >
+          Look again, properly
+        </button>
       )}
     </div>
   )
@@ -279,13 +350,20 @@ export function QueryDrawer({
               )}
 
               {/* The conversation: every exchange stays, oldest first. */}
-              {exchanges.map((exchange) => (
+              {exchanges.map((exchange, index) => (
                 <ExchangeBlock
                   key={exchange.request.id}
                   exchange={exchange}
                   onSeek={onSeek}
                   onClip={onClip}
                   onRate={onRate}
+                  onSearch={onSearch}
+                  // "Look again" means the last thing asked, because that is
+                  // what it means to the backend and to a person. Offering it
+                  // on an older answer would quietly re-run a different
+                  // question than the one being looked at.
+                  isLatest={index === exchanges.length - 1}
+                  canAsk={canSend || (!busy && !searching && video.readyForSearch)}
                 />
               ))}
             </div>
@@ -350,11 +428,17 @@ function ExchangeBlock({
   onSeek,
   onClip,
   onRate,
+  onSearch,
+  isLatest,
+  canAsk,
 }: {
   exchange: DrawerExchange
   onSeek: (seconds: number) => void
   onClip: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null) => void
+  onSearch: (instruction: string) => void
+  isLatest: boolean
+  canAsk: boolean
 }) {
   const { request, clips } = exchange
   const searching = request.status === "pending" || request.status === "searching"
@@ -379,14 +463,33 @@ function ExchangeBlock({
           Searching what I know about this video…
         </p>
       ) : (
-        <StreamedLine
-          key={request.id + request.status}
-          text={answerLine(request)}
-          className={`text-sm leading-relaxed ${request.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
-        />
+        <div className="flex flex-col gap-1">
+          <StreamedLine
+            key={request.id + request.status}
+            text={answerLine(request)}
+            className={`text-sm leading-relaxed ${request.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
+          />
+          {/* Recalled and re-read are different acts, and the difference
+              matters to someone deciding whether to trust the answer. Said
+              once, quietly, rather than dressed up as a badge. */}
+          {request.answeredFrom === "notes" && (
+            <span className="text-[11.5px] text-foreground/35">From what I remember of this video</span>
+          )}
+        </div>
       )}
 
       {!searching && <CoverageGap request={request} onSeek={onSeek} />}
+
+      {!searching && (
+        <UncertainMoments
+          request={request}
+          onSeek={onSeek}
+          // The same words a person would type. "Look again" is already
+          // understood as a correction, so the button is the phrase made
+          // visible rather than a second way in.
+          onLookAgain={isLatest && canAsk ? () => onSearch("look again") : null}
+        />
+      )}
 
       {matches.length > 0 && (
         <EvidencePicker
