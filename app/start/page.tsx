@@ -316,9 +316,16 @@ export default function StartPage() {
           <button
             type="button"
             onClick={reset}
-            className="text-xs text-foreground/40 underline underline-offset-4 transition-colors hover:text-foreground/80"
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 py-2 text-[13px] font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
           >
-            Start over
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <line x1="20" y1="4" x2="8.12" y2="15.88" />
+              <line x1="14.47" y1="14.48" x2="20" y2="20" />
+              <line x1="8.12" y1="8.12" x2="12" y2="12" />
+            </svg>
+            Clip another video
           </button>
         )}
       </header>
