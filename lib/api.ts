@@ -3,9 +3,23 @@ import type { ApiErrorBody, Clip, ClipMatch, ClipRequest, MatchFeedback, UploadT
 /**
  * Client for the CLIPIT backend.
  *
- * Auth is an anonymous session token: minted once, kept in localStorage, and
- * sent as a bearer token on every call. A 401 means the token expired or the
- * backend lost it, so the client mints a fresh one and retries once.
+ * Auth is an anonymous session token, sent as a bearer token on every call. A
+ * 401 means the token expired or the backend lost it, so the client mints a
+ * fresh one and retries once.
+ *
+ * It lives in `sessionStorage`, which means it dies with the browser tab. That
+ * is deliberate while there are no accounts: a token in `localStorage` survives
+ * closing the browser for thirty days, so the next person to open the app on a
+ * shared or borrowed computer would resume the last person's session and see
+ * their videos. Nothing to resume is the only guarantee available until there
+ * is something to log into.
+ *
+ * The footage goes the same way — the backend removes it once a session stops
+ * being used — so a closed tab leaves nothing behind on either side.
+ *
+ * When accounts arrive this changes: a signed-in person should come back to
+ * their videos, because then there is a name on them and a password in front
+ * of them.
  */
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "")
@@ -23,19 +37,44 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Throws away any token left in localStorage by a build before this one.
+ *
+ * The app not reading it is invisibility, not safety. That entry is a live
+ * credential for its full thirty days, and anyone on the same computer can
+ * lift it out of devtools and use it against the API directly — which is the
+ * exact thing this change exists to prevent. It is deleted rather than moved
+ * into sessionStorage: an old session should not be recoverable, and adopting
+ * it would quietly hand the next person the last person's videos in a new
+ * wrapper.
+ */
+let legacyDiscarded = false
+function discardLegacyToken(): void {
+  if (legacyDiscarded || typeof window === "undefined") return
+  legacyDiscarded = true
+  try {
+    window.localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // Storage can throw where it is blocked outright. Nothing here is worth
+    // failing a request over, and a browser that refuses localStorage is not
+    // holding an old token in it either.
+  }
+}
+
 function readToken(): string | null {
   if (typeof window === "undefined") return null
-  return window.localStorage.getItem(TOKEN_KEY)
+  discardLegacyToken()
+  return window.sessionStorage.getItem(TOKEN_KEY)
 }
 
 function writeToken(token: string): void {
   if (typeof window === "undefined") return
-  window.localStorage.setItem(TOKEN_KEY, token)
+  window.sessionStorage.setItem(TOKEN_KEY, token)
 }
 
 function clearToken(): void {
   if (typeof window === "undefined") return
-  window.localStorage.removeItem(TOKEN_KEY)
+  window.sessionStorage.removeItem(TOKEN_KEY)
 }
 
 async function createSession(): Promise<string> {
