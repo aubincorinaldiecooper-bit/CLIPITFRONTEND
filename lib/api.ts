@@ -37,8 +37,33 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Throws away any token left in localStorage by a build before this one.
+ *
+ * The app not reading it is invisibility, not safety. That entry is a live
+ * credential for its full thirty days, and anyone on the same computer can
+ * lift it out of devtools and use it against the API directly — which is the
+ * exact thing this change exists to prevent. It is deleted rather than moved
+ * into sessionStorage: an old session should not be recoverable, and adopting
+ * it would quietly hand the next person the last person's videos in a new
+ * wrapper.
+ */
+let legacyDiscarded = false
+function discardLegacyToken(): void {
+  if (legacyDiscarded || typeof window === "undefined") return
+  legacyDiscarded = true
+  try {
+    window.localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // Storage can throw where it is blocked outright. Nothing here is worth
+    // failing a request over, and a browser that refuses localStorage is not
+    // holding an old token in it either.
+  }
+}
+
 function readToken(): string | null {
   if (typeof window === "undefined") return null
+  discardLegacyToken()
   return window.sessionStorage.getItem(TOKEN_KEY)
 }
 
