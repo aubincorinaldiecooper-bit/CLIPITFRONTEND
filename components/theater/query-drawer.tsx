@@ -638,9 +638,14 @@ function EvidencePicker({
    */
   useEffect(() => {
     if (!undoableId) return
+    // Only the floating toast expires. When every moment has been waved off
+    // the undo is the only thing left in that answer — not news over a card
+    // but the record of what happened — and removing it on a timer would make
+    // the whole thread jump upward six seconds after a click.
+    if (ranked.length === 0) return
     const timer = setTimeout(() => setUndoableId(null), 6000)
     return () => clearTimeout(timer)
-  }, [undoableId])
+  }, [undoableId, ranked.length])
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -663,9 +668,20 @@ function EvidencePicker({
   // Everything has been waved off. The undo has to outlive the card it came
   // from, or rejecting the last moment would take its own undo with it.
   if (!active) {
+    // Nothing to float over, so this is not a toast. Inline, quiet, and it
+    // stays: it is the only trace of what was removed.
     return undoable ? (
-      <div className="flex justify-center">
-        <UndoRejection match={undoable} onUndo={() => rate(undoable, null)} />
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/10">
+        <span className="truncate text-[12px] text-foreground/45">
+          Removed <span className="font-mono tabular-nums">{undoable.startTimecode}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => rate(undoable, null)}
+          className="shrink-0 whitespace-nowrap text-[12px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
+        >
+          Undo
+        </button>
       </div>
     ) : null
   }
@@ -863,7 +879,7 @@ function EvidencePicker({
         {undoable && (
           <motion.div
             key="undo"
-            className="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center"
+            className="pointer-events-none absolute right-2 top-2 flex justify-end"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
@@ -940,20 +956,21 @@ function Verdict({ match, onRate }: { match: ClipMatch; onRate: (verdict: MatchF
 /**
  * A toast: which moment went, and a way back, for a few seconds.
  *
- * `pointer-events-auto` because the wrapper turns them off — the toast floats
- * over the card, and everything under it except this button must stay
- * clickable.
+ * Only the Undo button takes clicks. The pill floats over the card, and
+ * anything beneath the rest of it — including whichever button happens to be
+ * under there — has to stay usable rather than being blocked for six seconds
+ * by a label.
  */
 function UndoRejection({ match, onUndo }: { match: ClipMatch; onUndo: () => void }) {
   return (
-    <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-black/85 px-3 py-1.5 shadow-lg ring-1 ring-white/15 backdrop-blur">
+    <div className="flex items-center gap-3 rounded-full bg-black/85 px-3 py-1.5 shadow-lg ring-1 ring-white/15 backdrop-blur">
       <span className="whitespace-nowrap text-[11.5px] text-foreground/60">
         Removed <span className="font-mono tabular-nums">{match.startTimecode}</span>
       </span>
       <button
         type="button"
         onClick={onUndo}
-        className="whitespace-nowrap text-[11.5px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
+        className="pointer-events-auto whitespace-nowrap text-[11.5px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
       >
         Undo
       </button>
