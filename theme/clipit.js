@@ -293,6 +293,10 @@ export const clipitTheme = {
       },
       "base": {
         "borderRadius": "9999px"
+      },
+      "variant:primary": {
+        "backgroundColor": "light-dark(#111113, #ffffff)",
+        "color": "light-dark(#ffffff, #0b0b0c)"
       }
     },
     "badge": {
