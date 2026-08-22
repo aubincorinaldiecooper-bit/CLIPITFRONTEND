@@ -20,18 +20,22 @@ const EASE = [0.2, 0.03, 0.26, 0.99] as const
  */
 
 /**
- * The collage: believable results, tilted like prints on a table.
- *
- * Cards may overlap each other's picture areas, never each other's text —
- * a caption you can't read looks broken, not artful. Positions are percentages
- * of a fixed-height stage so nothing drifts out of the hero.
+ * The waterfall, after the reference: large frameless stills cascading down
+ * the right edge in a loose zigzag, each overlapping the one above it, the
+ * right-shifted ones cropped by the screen edge. Not cards — pictures, with
+ * the timecode and description burned into the image top-left the way a
+ * camera stamps its overlay, so a lower still can overlap the bottom of the
+ * one above without ever covering its words.
  */
-const COLLAGE = [
-  { rotate: -8, x: "0%", y: "2%", z: 2, hue: "from-zinc-500/80 via-zinc-800 to-zinc-950", timecode: "00:04:12", label: "Crowd rushes the stage" },
-  { rotate: 6, x: "46%", y: "0%", z: 1, hue: "from-sky-700/80 via-slate-900 to-slate-950", timecode: "00:11:48", label: "The demo finally works" },
-  { rotate: -3, x: "8%", y: "38%", z: 4, hue: "from-stone-400/70 via-stone-800 to-stone-950", timecode: "00:07:03", label: "Dog steals the microphone" },
-  { rotate: 7, x: "54%", y: "36%", z: 4, hue: "from-amber-600/80 via-orange-950 to-zinc-950", timecode: "00:16:27", label: "Sunset over the pier" },
-  { rotate: -6, x: "28%", y: "68%", z: 3, hue: "from-indigo-600/70 via-indigo-950 to-zinc-950", timecode: "00:02:55", label: "Game-winning three" },
+const WATERFALL = [
+  // The corner still is a cropped accent, as in the reference — no text,
+  // because the header's button crosses it and words under a button are
+  // words nobody can read. Its moment is the one featured in the mock below.
+  { rotate: 6, x: "62%", y: "-6%", w: "24rem", text: false, hue: "from-zinc-700/80 via-zinc-900 to-zinc-950", timecode: "00:04:12", label: "Crowd rushes the stage" },
+  { rotate: -4, x: "4%", y: "15%", w: "26rem", text: true, hue: "from-sky-700/80 via-slate-900 to-slate-950", timecode: "00:11:48", label: "The demo finally works" },
+  { rotate: 3, x: "40%", y: "34%", w: "24rem", text: true, hue: "from-amber-600/80 via-orange-950 to-zinc-950", timecode: "00:16:27", label: "Sunset over the pier" },
+  { rotate: -3, x: "0%", y: "53%", w: "26rem", text: true, hue: "from-stone-400/70 via-stone-800 to-stone-950", timecode: "00:07:03", label: "Dog steals the microphone" },
+  { rotate: 5, x: "36%", y: "76%", w: "24rem", text: true, hue: "from-indigo-600/70 via-indigo-950 to-zinc-950", timecode: "00:02:55", label: "Game-winning three" },
 ] as const
 
 export default function LandingPage() {
@@ -44,23 +48,25 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-dvh w-full overflow-x-clip">
-      <div className="mx-auto flex w-full max-w-6xl flex-col px-6 py-7">
+      {/* z-20: the header stays legible above the waterfall's topmost still,
+          which climbs up beside it the way the reference's corner photo does. */}
+      <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-col px-6 py-7">
         <header className="flex items-center justify-between gap-4">
           <span className="font-serif text-2xl tracking-tight">CLIPIT</span>
           <Link
             href="/start"
-            className="whitespace-nowrap rounded-full px-4 py-2 text-[13px] text-foreground/70 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
+            className="whitespace-nowrap rounded-full bg-black/30 px-4 py-2 text-[13px] text-foreground/70 ring-1 ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/5 hover:text-foreground"
           >
             Open the app
           </Link>
         </header>
       </div>
 
-      {/* Hero: copy left, collage bleeding off the right edge. A grid, not
-          absolute positioning at the section level, so the collage's stage
+      {/* Hero: copy left, waterfall bleeding off the right edge. A grid, not
+          absolute positioning at the section level, so the waterfall's stage
           contributes real height and can never spill into the section below. */}
-      <section className="relative mx-auto w-full max-w-6xl px-6 pb-20 pt-10 lg:grid lg:grid-cols-2 lg:items-center lg:gap-6 lg:pt-16">
-        <div className="relative z-10 max-w-xl">
+      <section className="relative mx-auto w-full max-w-6xl px-6 pb-20 pt-10 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:pb-6 lg:pt-0">
+        <div className="relative z-10 max-w-xl lg:pt-28">
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
             <h1 className="text-balance font-serif text-5xl leading-[1.06] sm:text-6xl lg:text-7xl">
               Describe the moment
@@ -89,34 +95,29 @@ export default function LandingPage() {
           </motion.div>
         </div>
 
-        {/* The card stack, on a fixed-height stage that runs off the right
-            edge as in the reference; hidden on phones, where the headline is
-            the hero. */}
-        <div aria-hidden className="pointer-events-none relative hidden h-[40rem] select-none lg:block">
-          <div className="absolute -right-24 top-0 h-full w-[44rem]">
-          {COLLAGE.map((card, index) => (
+        {/* The waterfall, on a fixed-height stage that runs off the right
+            edge as in the reference and starts up beside the header; hidden
+            on phones, where the headline is the hero. Later stills stack on
+            top of earlier ones, so each overlap covers the bottom of the
+            still above — never its top-left overlay text. */}
+        <div aria-hidden className="pointer-events-none relative hidden h-[54rem] select-none lg:block">
+          <div className="absolute -right-24 -top-12 h-full w-[40rem]">
+          {WATERFALL.map((still, index) => (
             <motion.div
-              key={card.timecode}
-              initial={{ opacity: 0, y: 24, rotate: card.rotate * 1.4 }}
-              animate={{ opacity: 1, y: 0, rotate: card.rotate }}
-              transition={{ duration: 0.8, ease: EASE, delay: 0.15 + index * 0.09 }}
-              className="absolute w-64"
-              style={{ left: card.x, top: card.y, zIndex: card.z }}
+              key={still.timecode}
+              initial={{ opacity: 0, y: 32, rotate: still.rotate * 1.6 }}
+              animate={{ opacity: 1, y: 0, rotate: still.rotate }}
+              transition={{ duration: 0.8, ease: EASE, delay: 0.15 + index * 0.1 }}
+              className="absolute"
+              style={{ left: still.x, top: still.y, width: still.w, zIndex: index + 1 }}
             >
-              {/* Solid card body: cards overlap, and a translucent caption
-                  with another card showing through reads as a glitch. */}
-              <div className="overflow-hidden rounded-2xl bg-zinc-950 shadow-[0_24px_60px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
-                <div className={`relative aspect-video w-full bg-gradient-to-br ${card.hue}`}>
-                  <span className="absolute inset-0 m-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/40 ring-1 ring-white/20">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className="translate-x-px text-white/80" aria-hidden>
-                      <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
-                    </svg>
-                  </span>
-                </div>
-                <div className="px-3 py-2">
-                  <p className="font-mono text-[11px] tabular-nums text-amber-300/90">{card.timecode}</p>
-                  <p className="mt-0.5 truncate text-[12.5px] text-foreground/80">{card.label}</p>
-                </div>
+              <div className={`relative aspect-video w-full overflow-hidden rounded-3xl bg-gradient-to-br shadow-[0_28px_70px_rgba(0,0,0,0.6)] ring-1 ring-white/10 ${still.hue}`}>
+                {still.text && (
+                  <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 via-black/25 to-transparent p-4 pb-8">
+                    <p className="font-mono text-[11.5px] tabular-nums text-amber-300/90">{still.timecode}</p>
+                    <p className="mt-0.5 text-[13px] text-white/85">{still.label}</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           ))}
