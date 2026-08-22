@@ -130,7 +130,6 @@ export function AccountControl() {
                 placeholder="you@example.com"
                 hasAutoFocus
                 isRequired
-                onEnter={() => void send()}
                 status={state === "failed" ? { type: "error", message: "Couldn't send to that address." } : undefined}
               />
               <Button
