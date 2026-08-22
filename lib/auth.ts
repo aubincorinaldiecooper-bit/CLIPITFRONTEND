@@ -18,9 +18,18 @@ import { Pool } from "pg"
 
 let instance: ReturnType<typeof buildAuth> | null = null
 
-/** True when every env var sign-in needs is present. */
+/**
+ * True when every env var sign-in needs is present — including the Resend
+ * key that actually sends the links. Without it the whole flow is a form
+ * that can only fail, so the sign-in control must not render at all.
+ */
 export function authConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL && process.env.BETTER_AUTH_SECRET && process.env.BETTER_AUTH_URL)
+  return Boolean(
+    process.env.DATABASE_URL &&
+      process.env.BETTER_AUTH_SECRET &&
+      process.env.BETTER_AUTH_URL &&
+      process.env.RESEND_API_KEY,
+  )
 }
 
 function buildAuth() {
