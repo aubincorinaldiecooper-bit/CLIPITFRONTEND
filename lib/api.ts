@@ -1,4 +1,5 @@
 import type {
+  ActivityStats,
   ApiErrorBody,
   Clip,
   ClipMatch,
@@ -303,6 +304,11 @@ export const api = {
 
   async getClip(clipId: string): Promise<{ clip: Clip }> {
     return request(`/api/clips/${clipId}`)
+  },
+
+  /** What the caller has done here: videos, minutes, questions, clips. */
+  async getStats(): Promise<{ stats: ActivityStats }> {
+    return request("/api/stats")
   },
 
   /**

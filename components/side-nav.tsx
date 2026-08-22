@@ -25,9 +25,20 @@ const MOTION = {
 
 const COLLAPSED_KEY = "clipit.nav.collapsed"
 
-export type NavDestination = "start" | "clips" | "publishing"
+export type NavDestination = "home" | "start" | "clips" | "publishing"
 
 export const NAV_ITEMS: Array<{ key: NavDestination; label: string; href: string; icon: ReactNode }> = [
+  {
+    key: "home",
+    label: "Home",
+    href: "/home",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M3 10.5 12 3l9 7.5" />
+        <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
+      </svg>
+    ),
+  },
   {
     key: "start",
     label: "New clip",
