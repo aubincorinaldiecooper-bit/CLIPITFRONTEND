@@ -10,8 +10,8 @@ const EASE = [0.2, 0.03, 0.26, 0.99] as const
 
 /**
  * The front door, after the reference: an oversized two-tone headline on the
- * left, a waterfall of stills pouring off the right edge, two pill buttons,
- * and a footer. One screen, one idea.
+ * left, a waterfall of stills pouring off the right edge, and the buttons.
+ * Nothing else — one screen, one idea, no scroll.
  *
  * The reference's pictures are photographs; ours are the product's own clip
  * stills — a frame, an amber timecode, a one-line description — because what
@@ -65,7 +65,7 @@ export default function LandingPage() {
   }, [])
 
   return (
-    <main className="min-h-dvh w-full overflow-x-clip">
+    <main className="flex min-h-dvh w-full flex-col overflow-x-clip">
       {/* z-20: the header stays legible above the waterfall's topmost still,
           which climbs up beside it the way the reference's corner photo does. */}
       <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-col px-6 py-7">
@@ -83,7 +83,10 @@ export default function LandingPage() {
       {/* Hero: copy left, waterfall bleeding off the right edge. A grid, not
           absolute positioning at the section level, so the waterfall's stage
           contributes real height and can never spill into the section below. */}
-      <section className="relative mx-auto w-full max-w-6xl px-6 pb-20 pt-10 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:pb-6 lg:pt-0">
+      {/* Nothing follows the hero, so on phones — where the waterfall steps
+          aside — it takes the leftover height and centres in it rather than
+          leaving a screen of dead space beneath the buttons. */}
+      <section className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-6 pb-20 pt-10 lg:grid lg:flex-none lg:grid-cols-2 lg:items-start lg:gap-6 lg:pb-6 lg:pt-0">
         <div className="relative z-10 max-w-xl lg:pt-28">
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
             <h1 className="text-balance font-serif text-5xl leading-[1.06] sm:text-6xl lg:text-7xl">
@@ -144,16 +147,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
-      <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 border-t border-white/10 px-6 py-6">
-        <p className="text-[13px] text-foreground/40">Upload → ask in plain words → download post-ready clips.</p>
-        <Link
-          href="/start"
-          className="whitespace-nowrap rounded-full bg-white px-5 py-2 text-[13px] font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
-        >
-          Start clipping
-        </Link>
-      </footer>
     </main>
   )
 }
