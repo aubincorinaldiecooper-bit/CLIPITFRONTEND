@@ -67,6 +67,16 @@ export interface Video {
   playback?: { url: string; expiresAt: string } | null
 }
 
+/**
+ * A clip as the library shows it: the cut plus what it is of — the moment's
+ * description and still, and the video it came from.
+ */
+export interface LibraryClip extends Clip {
+  description: string
+  thumbnailUrl: string | null
+  videoTitle: string | null
+}
+
 export interface UploadTarget {
   method: "PUT"
   url: string
@@ -187,6 +197,7 @@ export interface Clip {
   /** Signed with an attachment disposition so the browser saves rather than plays. */
   downloadUrl: string | null
   urlExpiresAt: string | null
+  createdAt: string
 }
 
 export interface ApiErrorBody {

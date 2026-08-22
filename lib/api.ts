@@ -1,4 +1,13 @@
-import type { ApiErrorBody, Clip, ClipMatch, ClipRequest, MatchFeedback, UploadTarget, Video } from "./types"
+import type {
+  ApiErrorBody,
+  Clip,
+  ClipMatch,
+  ClipRequest,
+  LibraryClip,
+  MatchFeedback,
+  UploadTarget,
+  Video,
+} from "./types"
 
 /**
  * Client for the CLIPIT backend.
@@ -294,5 +303,10 @@ export const api = {
 
   async getClip(clipId: string): Promise<{ clip: Clip }> {
     return request(`/api/clips/${clipId}`)
+  },
+
+  /** Every finished clip the caller can still play, newest first. */
+  async listClips(): Promise<{ clips: LibraryClip[] }> {
+    return request("/api/clips")
   },
 }

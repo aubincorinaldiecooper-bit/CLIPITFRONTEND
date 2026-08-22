@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
@@ -8,7 +7,7 @@ import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
 import { SourceStep } from "@/components/flow/source-step"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
-import { AccountControl } from "@/components/account-control"
+import { AppShell } from "@/components/app-shell"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
@@ -375,14 +374,10 @@ export default function StartPage() {
     [...exchanges].reverse().find((exchange) => exchange.request.status === "completed")?.request.matches ?? []
 
   return (
-    <main className="flex min-h-dvh w-full flex-col px-6 py-8">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
-        <Link href="/" className="font-serif text-2xl tracking-tight">
-          CLIPIT
-        </Link>
-        <span className="flex items-center gap-3">
-        <AccountControl />
-        {video && (
+    <AppShell
+      active="start"
+      headerExtra={
+        video ? (
           <button
             type="button"
             onClick={reset}
@@ -397,10 +392,9 @@ export default function StartPage() {
             </svg>
             Clip another video
           </button>
-        )}
-        </span>
-      </header>
-
+        ) : undefined
+      }
+    >
       {!video ? (
         <motion.div
           className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center py-10"
@@ -477,6 +471,6 @@ export default function StartPage() {
           {error}
         </motion.p>
       )}
-    </main>
+    </AppShell>
   )
 }
