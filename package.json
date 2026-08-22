@@ -8,6 +8,9 @@
     "start": "node scripts/auth-migrate.mjs && next start"
   },
   "dependencies": {
+    "@astryxdesign/core": "^0.4.5",
+    "@astryxdesign/theme-neutral": "^0.4.5",
+    "@stylexjs/stylex": "^0.19.0",
     "better-auth": "^1.7.1",
     "clsx": "^2.1.1",
     "motion": "^13.1.0",
@@ -18,6 +21,7 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@astryxdesign/cli": "^0.4.5",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
