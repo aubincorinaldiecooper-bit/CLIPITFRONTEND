@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import type { ReactNode } from "react"
+import { ProgressBar as AstryxProgressBar } from "@astryxdesign/core/ProgressBar"
 
 export const EASE = [0.2, 0.03, 0.26, 0.99] as const
 
@@ -50,7 +51,7 @@ export function StepShell({ index, title, state, summary, children }: StepShellP
         >
           {done ? "✓" : index}
         </span>
-        <h2 className={`font-serif tracking-tight ${done ? "text-base text-foreground/60" : "text-xl"}`}>{title}</h2>
+        <h2 className={`font-medium tracking-tight ${done ? "text-base text-foreground/60" : "text-xl"}`}>{title}</h2>
         {done && summary && (
           <span className="ml-auto truncate pl-4 text-right text-xs text-foreground/40">{summary}</span>
         )}
@@ -74,17 +75,12 @@ export function StepShell({ index, title, state, summary, children }: StepShellP
   )
 }
 
-/** Thin determinate progress bar used by the processing and search steps. */
+/**
+ * Thin determinate progress bar used by the upload, processing and search
+ * steps — Astryx's underneath, so it carries the progressbar role and aria
+ * values; the surrounding copy stays the visible label.
+ */
 export function ProgressBar({ percent }: { percent: number }) {
   const clamped = Math.min(100, Math.max(0, percent))
-  return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
-      <motion.div
-        className="h-full rounded-full bg-foreground"
-        initial={{ width: 0 }}
-        animate={{ width: `${clamped}%` }}
-        transition={{ duration: 0.6, ease: EASE }}
-      />
-    </div>
-  )
+  return <AstryxProgressBar value={clamped} max={100} label="Progress" isLabelHidden />
 }
