@@ -24,6 +24,15 @@ export const clipitTheme = defineTheme({
   },
   tokens: {
     "--color-background-body": ["#ffffff", "#08080a"],
+    // The amber accent seed tints the generated neutral ramp warm — the
+    // rail came out brown against our cool near-black content. Structural
+    // surfaces stay in the zinc family; amber is for accents, not walls.
+    "--color-background-surface": ["#ffffff", "#131316"],
+    "--color-background-card": ["#fafafa", "#131316"],
+    "--color-background-popover": ["#ffffff", "#232327"],
+    "--color-background-inverted": ["#18181b", "#f4f4f5"],
+    "--color-border": ["#1113171a", "#f4f4f51a"],
+    "--color-border-emphasized": ["#8b8b93", "#5d5d66"],
     "--color-text-primary": ["#111113", "#f4f4f5"],
     // Interface type is Geist, loaded by next/font in the root layout.
     "--font-family-body": "var(--font-geist-sans), system-ui, sans-serif",
@@ -34,6 +43,12 @@ export const clipitTheme = defineTheme({
     // Every action in CLIPIT is a pill; keep that identity on Astryx buttons.
     button: {
       base: { borderRadius: "9999px" },
+    },
+    // The one place serif is allowed: the wordmark. The rail's heading IS
+    // the wordmark, so it carries the brand voice; every other heading is
+    // Geist via the heading font token above.
+    "side-nav-heading": {
+      base: { fontFamily: "var(--font-instrument-serif), ui-serif, Georgia, serif" },
     },
   },
 })

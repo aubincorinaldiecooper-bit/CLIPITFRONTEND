@@ -42,3 +42,4 @@ next-env.d.ts
 
 # scratch space for scripts/fetch-demo-tiles.mjs
 /.tmp/
+.astryx-ref/
