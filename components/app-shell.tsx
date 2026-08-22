@@ -28,12 +28,15 @@ export function AppShell({
 }) {
   return (
     <AstryxAppShell height="auto" variant="section" contentPadding={0} mobileNav={false} sideNav={<SideNav active={active} />}>
-      <div className="flex min-h-dvh min-w-0 flex-1 flex-col px-6 py-6">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
+        {/* The shell no longer pads the content area: each page's Layout owns
+            its own inset now, and double horizontal padding pushed content
+            out of line with this header. The header pads itself instead. */}
         {/* flex-wrap: on a phone with a video open this row holds the brand,
             three links, the clip-another button and the account — which is
             more than 360px owns. Wrapping to a second row beats controls at
             zero width. */}
-        <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-6 pt-6">
           <span className="flex min-w-0 items-center gap-4 lg:hidden">
             <Link href="/" className="shrink-0 font-serif text-2xl tracking-tight">
               CLIPIT

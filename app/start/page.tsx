@@ -399,6 +399,7 @@ export default function StartPage() {
         ) : undefined
       }
     >
+      <div className="flex w-full flex-1 flex-col px-6 py-6">
       {!video ? (
         <motion.div
           className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center py-10"
@@ -477,6 +478,7 @@ export default function StartPage() {
           {error}
         </motion.p>
       )}
+      </div>
     </AppShell>
   )
 }
