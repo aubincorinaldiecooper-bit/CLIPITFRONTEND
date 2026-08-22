@@ -1,6 +1,9 @@
 "use client"
 
 import { useRef, useState } from "react"
+import { Button } from "@astryxdesign/core/Button"
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
+import { Text } from "@astryxdesign/core/Text"
 import { ProgressBar } from "./step-shell"
 
 interface SourceStepProps {
@@ -21,32 +24,22 @@ export function SourceStep({ onUpload, onYoutube, busy, uploadFraction }: Source
     return (
       <div className="space-y-3">
         <ProgressBar percent={uploadFraction * 100} />
-        <p className="text-sm text-foreground/60">
+        <Text as="p" type="body" color="secondary">
           Uploading — {Math.round(uploadFraction * 100)}%
-        </p>
-        <p className="text-xs text-foreground/40">
+        </Text>
+        <Text as="p" type="supporting">
           The file goes straight to storage, not through the API.
-        </p>
+        </Text>
       </div>
     )
   }
 
   return (
     <div className="space-y-5">
-      <div className="inline-flex rounded-full border border-white/10 p-0.5 text-sm">
-        {(["upload", "youtube"] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setTab(value)}
-            className={`rounded-full px-4 py-1.5 transition-colors ${
-              tab === value ? "bg-foreground text-background" : "text-foreground/60 hover:text-foreground"
-            }`}
-          >
-            {value === "upload" ? "Upload a file" : "YouTube URL"}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl value={tab} onChange={(value) => setTab(value as "upload" | "youtube")} label="Video source">
+        <SegmentedControlItem value="upload" label="Upload a file" />
+        <SegmentedControlItem value="youtube" label="YouTube URL" />
+      </SegmentedControl>
 
       {tab === "upload" ? (
         <div
@@ -65,16 +58,11 @@ export function SourceStep({ onUpload, onYoutube, busy, uploadFraction }: Source
             dragging ? "border-foreground/50 bg-white/[0.04]" : "border-white/15"
           }`}
         >
-          <p className="text-sm text-foreground/70">Drop a video here</p>
-          <p className="mt-1 text-xs text-foreground/40">MP4, MOV, MKV, WebM — up to 6 hours</p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => fileInput.current?.click()}
-            className="mt-5 rounded-full bg-foreground px-5 py-2 text-sm font-medium text-background transition-transform hover:scale-[1.03] disabled:opacity-50"
-          >
-            Choose a file
-          </button>
+          <Text as="p" type="body">Drop a video here</Text>
+          <Text as="p" type="supporting">MP4, MOV, MKV, WebM — up to 6 hours</Text>
+          <span className="mt-5">
+            <Button label="Choose a file" variant="primary" isDisabled={busy} onClick={() => fileInput.current?.click()} />
+          </span>
           <input
             ref={fileInput}
             type="file"
@@ -102,13 +90,13 @@ export function SourceStep({ onUpload, onYoutube, busy, uploadFraction }: Source
             placeholder="https://youtube.com/watch?v=…"
             className="flex-1 rounded-full border border-white/15 bg-transparent px-5 py-2.5 text-sm outline-none placeholder:text-foreground/30 focus:border-foreground/40"
           />
-          <button
+          <Button
             type="submit"
-            disabled={busy || !url.trim()}
-            className="rounded-full bg-foreground px-6 py-2.5 text-sm font-medium text-background transition-transform hover:scale-[1.03] disabled:opacity-50"
-          >
-            {busy ? "Starting…" : "Fetch video"}
-          </button>
+            label={busy ? "Starting…" : "Fetch video"}
+            variant="primary"
+            isLoading={busy}
+            isDisabled={!url.trim()}
+          />
         </form>
       )}
     </div>

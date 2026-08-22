@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
 import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Text } from "@astryxdesign/core/Text"
 import { SourceStep } from "@/components/flow/source-step"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
@@ -360,7 +363,7 @@ export default function StartPage() {
   if (!configured) {
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-16">
-        <h1 className="font-serif text-2xl">Backend not configured</h1>
+        <Heading level={1}>Backend not configured</Heading>
         <p className="mt-3 text-sm text-foreground/60">
           Set <code className="rounded bg-white/10 px-1.5 py-0.5">NEXT_PUBLIC_API_URL</code> to the CLIPIT API
           URL and redeploy.
@@ -378,20 +381,21 @@ export default function StartPage() {
       active="start"
       headerExtra={
         video ? (
-          <button
-            type="button"
+          <Button
+            label="Clip another video"
+            variant="primary"
+            size="sm"
             onClick={reset}
-            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 py-2 text-[13px] font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="6" cy="6" r="3" />
-              <circle cx="6" cy="18" r="3" />
-              <line x1="20" y1="4" x2="8.12" y2="15.88" />
-              <line x1="14.47" y1="14.48" x2="20" y2="20" />
-              <line x1="8.12" y1="8.12" x2="12" y2="12" />
-            </svg>
-            Clip another video
-          </button>
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="6" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <line x1="20" y1="4" x2="8.12" y2="15.88" />
+                <line x1="14.47" y1="14.48" x2="20" y2="20" />
+                <line x1="8.12" y1="8.12" x2="12" y2="12" />
+              </svg>
+            }
+          />
         ) : undefined
       }
     >
@@ -402,11 +406,13 @@ export default function StartPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
         >
-          <h1 className="font-serif text-3xl">Add a video</h1>
-          <p className="mt-2 text-sm text-foreground/55">
-            Upload a file or paste a YouTube link. The video takes the stage while it is read once, end to end —
-            then ask it anything.
-          </p>
+          <Heading level={1}>Add a video</Heading>
+          <div className="mt-2">
+            <Text as="p" type="supporting">
+              Upload a file or paste a YouTube link. The video takes the stage while it is read once, end to end —
+              then ask it anything.
+            </Text>
+          </div>
           <div className="mt-8">
             <SourceStep onUpload={startUpload} onYoutube={startYoutube} busy={busy} uploadFraction={uploadFraction} />
           </div>
@@ -466,7 +472,7 @@ export default function StartPage() {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: EASE }}
-          className="mx-auto mt-4 w-full max-w-xl rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300"
+          className="mx-auto mt-4 w-full max-w-xl rounded-lg border border-error px-4 py-3 text-sm text-error"
         >
           {error}
         </motion.p>
