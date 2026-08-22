@@ -8,6 +8,7 @@ import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
 import { SourceStep } from "@/components/flow/source-step"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
+import { AccountControl } from "@/components/account-control"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
@@ -314,6 +315,49 @@ export default function StartPage() {
     setSeekRequest(null)
   }, [])
 
+  /**
+   * What signing in is for: the videos come back.
+   *
+   * Fetched once on the landing screen. Guests get their own tab's uploads,
+   * which on a fresh tab is nothing — so for them the list simply never
+   * appears and the screen is exactly what it was before accounts existed.
+   */
+  const [library, setLibrary] = useState<Video[]>([])
+  useEffect(() => {
+    if (video) return
+    let cancelled = false
+    void api
+      .listVideos()
+      .then(({ videos }) => {
+        if (!cancelled) setLibrary(videos.filter((entry) => entry.status !== "failed"))
+      })
+      .catch(() => {
+        // A library that cannot load is a landing page without a list, not an
+        // error worth interrupting an upload for.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [video])
+
+  const openFromLibrary = useCallback(
+    async (videoId: string) => {
+      setError(null)
+      setBusy(true)
+      try {
+        const { video: opened } = await api.getVideo(videoId)
+        setExchanges([])
+        setSeekRequest(null)
+        setVideo(opened)
+      } catch (cause) {
+        fail(cause)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [fail],
+  )
+
   if (!configured) {
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-16">
@@ -332,10 +376,12 @@ export default function StartPage() {
 
   return (
     <main className="flex min-h-dvh w-full flex-col px-6 py-8">
-      <header className="mx-auto flex w-full max-w-6xl items-baseline justify-between gap-4">
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
         <Link href="/" className="font-serif text-2xl tracking-tight">
           CLIPIT
         </Link>
+        <span className="flex items-center gap-3">
+        <AccountControl />
         {video && (
           <button
             type="button"
@@ -352,6 +398,7 @@ export default function StartPage() {
             Clip another video
           </button>
         )}
+        </span>
       </header>
 
       {!video ? (
@@ -369,6 +416,35 @@ export default function StartPage() {
           <div className="mt-8">
             <SourceStep onUpload={startUpload} onYoutube={startYoutube} busy={busy} uploadFraction={uploadFraction} />
           </div>
+
+          {library.length > 0 && (
+            <div className="mt-10">
+              <p className="text-[13px] font-medium text-foreground/40">Your videos</p>
+              <div className="mt-2 flex flex-col gap-1">
+                {library.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => void openFromLibrary(entry.id)}
+                    disabled={busy}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ring-1 ring-white/10 transition-colors hover:bg-white/5 disabled:opacity-50"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground/85">
+                      {entry.title ?? entry.originalFilename ?? entry.sourceUrl ?? "Untitled video"}
+                    </span>
+                    {entry.durationTimecode && (
+                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-foreground/40">
+                        {entry.durationTimecode}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-[12px] text-foreground/35">
+                      {new Date(entry.createdAt).toLocaleDateString()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </motion.div>
       ) : (
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center py-8 lg:pr-[380px]">
