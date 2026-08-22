@@ -117,19 +117,42 @@ async function createSession(): Promise<string> {
  * remembered until the next full load, which is exactly when sign-in state
  * can have changed (the magic link lands on a fresh page).
  */
-let exchangeSettled = false
-async function exchangeSignedInToken(): Promise<string | null> {
-  if (exchangeSettled || typeof window === "undefined") return null
-  exchangeSettled = true
-  try {
-    const response = await fetch("/api/backend-session", { method: "POST" })
-    if (!response.ok) return null
-    const body = (await response.json()) as { token: string }
-    writeToken(body.token, "user")
-    return body.token
-  } catch {
-    return null
-  }
+let exchangePromise: Promise<string | null> | null = null
+function exchangeSignedInToken(): Promise<string | null> {
+  if (typeof window === "undefined") return Promise.resolve(null)
+  // The in-flight PROMISE is memoized, not a boolean. A home screen fires two
+  // requests at once; with a flag, the second saw "already asked" while the
+  // first was still waiting, skipped the exchange, and minted a guest — so a
+  // signed-in person's two dashboard calls ran as two different people, and
+  // whichever token landed last became the tab. Sharing the promise means
+  // every concurrent caller waits for the same answer.
+  exchangePromise ??= (async () => {
+    try {
+      const response = await fetch("/api/backend-session", { method: "POST" })
+      if (!response.ok) return null
+      const body = (await response.json()) as { token: string }
+      writeToken(body.token, "user")
+      return body.token
+    } catch {
+      return null
+    }
+  })()
+  return exchangePromise
+}
+
+/**
+ * The same dedup for minting a guest session: two concurrent first-requests
+ * must become one session, not two sessions racing to own the tab.
+ */
+let guestPromise: Promise<string> | null = null
+function mintGuestSession(): Promise<string> {
+  guestPromise ??= createSession().finally(() => {
+    // The token in sessionStorage is the durable record; the promise exists
+    // only to collapse concurrent minting. A failure clears it so the next
+    // attempt can try again.
+    guestPromise = null
+  })
+  return guestPromise
 }
 
 async function ensureToken(): Promise<string> {
@@ -142,13 +165,13 @@ async function ensureToken(): Promise<string> {
   const upgraded = await exchangeSignedInToken()
   if (upgraded) return upgraded
 
-  return stored ?? (await createSession())
+  return stored ?? (await mintGuestSession())
 }
 
 /** Forgets the API session. The caller also ends the Better Auth one. */
 export function forgetApiSession(): void {
   clearToken()
-  exchangeSettled = false
+  exchangePromise = null
 }
 
 async function parseError(response: Response): Promise<ApiError> {

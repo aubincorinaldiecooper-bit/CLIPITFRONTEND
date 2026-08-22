@@ -19,6 +19,7 @@ export default function HomePage() {
   const { data: session } = authClient.useSession()
   const [stats, setStats] = useState<ActivityStats | null>(null)
   const [recent, setRecent] = useState<LibraryClip[] | null>(null)
+  const [recentFailed, setRecentFailed] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -37,7 +38,9 @@ export default function HomePage() {
         if (!cancelled) setRecent(page.clips.slice(0, 6))
       })
       .catch(() => {
-        if (!cancelled) setRecent([])
+        // A failed load is not an empty library. "Nothing yet" over an outage
+        // tells someone their clips are gone when they are not.
+        if (!cancelled) setRecentFailed(true)
       })
     return () => {
       cancelled = true
@@ -96,7 +99,9 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {recent === null ? (
+        {recentFailed ? (
+          <p className="mt-4 text-sm text-red-300">Couldn't load your clips just now — refresh to try again.</p>
+        ) : recent === null ? (
           <p className="mt-4 text-sm text-foreground/50" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
             Loading…
           </p>
