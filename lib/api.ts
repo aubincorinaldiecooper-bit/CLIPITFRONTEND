@@ -305,8 +305,11 @@ export const api = {
     return request(`/api/clips/${clipId}`)
   },
 
-  /** Every finished clip the caller can still play, newest first. */
-  async listClips(): Promise<{ clips: LibraryClip[] }> {
-    return request("/api/clips")
+  /**
+   * A page of the caller's finished clips, newest first. `nextBefore` is the
+   * cursor for the page after it, or null when this is everything.
+   */
+  async listClips(before?: string): Promise<{ clips: LibraryClip[]; nextBefore: string | null }> {
+    return request(`/api/clips${before ? `?before=${encodeURIComponent(before)}` : ""}`)
   },
 }

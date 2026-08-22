@@ -15,6 +15,8 @@ import { AppShell } from "@/components/app-shell"
  */
 export default function ClipsPage() {
   const [clips, setClips] = useState<LibraryClip[] | null>(null)
+  const [nextBefore, setNextBefore] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [failed, setFailed] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
 
@@ -22,8 +24,10 @@ export default function ClipsPage() {
     let cancelled = false
     void api
       .listClips()
-      .then(({ clips: entries }) => {
-        if (!cancelled) setClips(entries)
+      .then((page) => {
+        if (cancelled) return
+        setClips(page.clips)
+        setNextBefore(page.nextBefore)
       })
       .catch(() => {
         if (!cancelled) setFailed(true)
@@ -32,6 +36,21 @@ export default function ClipsPage() {
       cancelled = true
     }
   }, [])
+
+  const loadOlder = async () => {
+    if (!nextBefore || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const page = await api.listClips(nextBefore)
+      setClips((current) => [...(current ?? []), ...page.clips])
+      setNextBefore(page.nextBefore)
+    } catch {
+      // The button stays; pressing it again retries. A failed "older clips"
+      // fetch is not worth an error banner over a page that already works.
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   return (
     <AppShell active="clips">
@@ -58,6 +77,7 @@ export default function ClipsPage() {
             </Link>
           </div>
         ) : (
+          <>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {clips.map((clip) => (
               <div key={clip.id} className="overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10">
@@ -112,6 +132,19 @@ export default function ClipsPage() {
               </div>
             ))}
           </div>
+          {nextBefore && (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => void loadOlder()}
+                disabled={loadingMore}
+                className="whitespace-nowrap rounded-full px-4 py-2 text-[13px] text-foreground/70 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-50"
+              >
+                {loadingMore ? "Loading…" : "Show older clips"}
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </AppShell>
