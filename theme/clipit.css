@@ -376,6 +376,11 @@
     --_button-radius: 9999px;
   }
 
+  .astryx-button.primary {
+    background-color: light-dark(#111113, #ffffff);
+    color: light-dark(#ffffff, #0b0b0c);
+  }
+
   .astryx-badge.info {
     background-color: light-dark(#0074e2, #6d9cfe);
     color: light-dark(#ffffff, #171717);
