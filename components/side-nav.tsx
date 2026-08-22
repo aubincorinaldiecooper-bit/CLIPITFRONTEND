@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
+import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react"
 import Link from "next/link"
 
 /**
@@ -86,15 +86,21 @@ const CollapseGlyph = ({ flipped = false }: { flipped?: boolean }) => (
 
 export function SideNav({ active }: { active: NavDestination }) {
   const [collapsed, setCollapsed] = useState(false)
+  // Transitions stay off until after the saved state is applied. Every page
+  // mounts its own shell, so without this a person who saved the rail closed
+  // watched it open and animate shut on every navigation — the whole screen
+  // sliding 172px that they never asked to move.
+  const [settled, setSettled] = useState(false)
 
-  // Read after mount: the server render cannot know this browser's choice,
-  // and guessing would make the rail jump on load.
-  useEffect(() => {
+  // Before first paint, not after mount: the server cannot know this
+  // browser's choice, and applying it post-paint is the flash being avoided.
+  useLayoutEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "true")
     } catch {
       // Blocked storage just means the rail starts open. Nothing to do.
     }
+    setSettled(true)
   }, [])
 
   const toggle = () => {
@@ -116,7 +122,7 @@ export function SideNav({ active }: { active: NavDestination }) {
       className="sticky top-0 hidden h-dvh shrink-0 overflow-hidden border-r border-white/10 bg-black/20 lg:flex"
       style={{
         width: collapsed ? MOTION.collapsedWidth : MOTION.expandedWidth,
-        transition: `width ${MOTION.duration}ms ${MOTION.easing}`,
+        transition: settled ? `width ${MOTION.duration}ms ${MOTION.easing}` : "none",
       } as CSSProperties}
     >
       {/* Fixed inner width so rows keep their shape while the rail animates —
