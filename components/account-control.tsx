@@ -24,6 +24,13 @@ export function AccountControl() {
   const [email, setEmail] = useState("")
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle")
 
+  // Arriving with #signin (the landing page's Sign in button) opens the
+  // panel directly — a Sign in button that lands you somewhere you must find
+  // another Sign in button is a broken promise.
+  useEffect(() => {
+    if (window.location.hash === "#signin") setOpen(true)
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     void fetch("/api/auth-configured")

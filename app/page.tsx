@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "motion/react"
@@ -9,142 +9,304 @@ import { authClient } from "@/lib/auth-client"
 const EASE = [0.2, 0.03, 0.26, 0.99] as const
 
 /**
- * The front door.
+ * The front door, after the reference: a tight two-tone headline on the left,
+ * a ribbon of stills sweeping down the right edge, a pill button. One screen,
+ * one idea, no scroll.
  *
- * A visitor sees the product doing its one thing — a question in plain words,
- * an answer with timecodes — because a depiction of the actual screen sells
- * this better than abstractions. Someone already signed in is sent to their
- * home instead; the pitch is for people who have not seen it yet.
+ * Measured off the reference rather than eyeballed, because the first attempts
+ * missed it: its pictures are SMALL — about a sixth of the viewport wide —
+ * packed into a narrow band down the right third, overlapping by roughly a
+ * third of their height, tilted only a few degrees, and carrying no text at
+ * all. They sweep in a gentle S (right, out to the left, back to the right),
+ * not a hard zigzag, and the ones at each end are washed out and cropped by
+ * the edge of the screen.
  *
- * Deliberately no invented numbers anywhere: no "10k creators", no fabricated
- * view counts. The product's honesty is the pitch.
+ * Theirs are photographs. Ours are video frames — the honest picture of what
+ * CLIPIT makes — drawn rather than photographed, because the repository ships
+ * no stock imagery and inventing a real-looking photo of a real-looking event
+ * is not something a landing page should do. They are built from shapes, not
+ * soft gradients, so each one reads as a scene: a sun over water, a lit pitch,
+ * a skyline at dusk. No invented numbers anywhere either.
  */
+
+type Scene = {
+  /** Sky (or room) behind everything. */
+  sky: string
+  /** Where the ground/water begins, as a percentage of frame height. */
+  horizon?: number
+  ground?: string
+  /** A sun or lamp: position and size as percentages, plus its colour. */
+  sun?: { x: number; y: number; size: number; color: string }
+  /** A cone of light falling from the top edge. */
+  beam?: string
+  /** Building silhouettes along the horizon: [left%, width%, height%]. */
+  skyline?: Array<[number, number, number]>
+  /** Heads in the foreground, as a crowd would read from behind. */
+  crowd?: boolean
+  /** A lit sign, as a neon storefront reads at night. */
+  sign?: { x: number; y: number; w: number; h: number; color: string }
+}
+
+const RIBBON: Array<{
+  y: string
+  x: string
+  rotate: number
+  fade: number
+  scene: Scene
+}> = [
+  // Cropped by the top edge and washed out, as the reference's corner photo is.
+  {
+    y: "-14%", x: "58%", rotate: 5, fade: 0.45,
+    scene: {
+      sky: "linear-gradient(to bottom, #bfe3ec, #e6f1f2)",
+      horizon: 52,
+      ground: "linear-gradient(to bottom, #6fb0c2, #2f6a7d)",
+      sun: { x: 72, y: 26, size: 16, color: "rgba(255,252,230,.95)" },
+    },
+  },
+  {
+    y: "-1%", x: "46%", rotate: 3, fade: 1,
+    scene: {
+      sky: "linear-gradient(to bottom, #6fb2dd, #bfdcee)",
+      horizon: 46,
+      ground: "linear-gradient(to bottom, #e0d770 0%, #b9bd50 45%, #7c8c3a 100%)",
+    },
+  },
+  {
+    y: "11.5%", x: "33%", rotate: -2, fade: 1,
+    scene: {
+      sky: "linear-gradient(to bottom, #f9c072 0%, #ec8347 45%, #c25a5c 100%)",
+      horizon: 62,
+      ground: "linear-gradient(to bottom, #7c3b58, #2f1830)",
+      sun: { x: 64, y: 40, size: 22, color: "rgba(255,240,190,.98)" },
+    },
+  },
+  // Night street: the dark frame in the run, kept legible by its own lights.
+  {
+    y: "24%", x: "20%", rotate: -5, fade: 1,
+    scene: {
+      sky: "linear-gradient(to bottom, #2b3a52, #141b28)",
+      horizon: 70,
+      ground: "linear-gradient(to bottom, #1b2433, #0d1219)",
+      sign: { x: 52, y: 26, w: 30, h: 15, color: "rgba(255,96,84,.95)" },
+      skyline: [[4, 14, 34], [20, 10, 22], [78, 16, 40], [94, 10, 26]],
+    },
+  },
+  {
+    y: "36.5%", x: "14%", rotate: -3, fade: 1,
+    scene: {
+      sky: "linear-gradient(to bottom, #16323c, #0e232b)",
+      horizon: 44,
+      ground: "linear-gradient(to bottom, #3f8f6a 0%, #276a4d 60%, #17422f 100%)",
+      beam: "radial-gradient(50% 62% at 50% 0%, rgba(255,252,225,.75), transparent 70%)",
+    },
+  },
+  {
+    y: "49%", x: "25%", rotate: 2, fade: 1,
+    scene: {
+      sky: "linear-gradient(to bottom, #4f4d9e 0%, #8f6a9c 52%, #e79b6c 100%)",
+      horizon: 74,
+      ground: "linear-gradient(to bottom, #3b2a3a, #1c1419)",
+      skyline: [[2, 12, 40], [16, 8, 26], [26, 14, 52], [42, 9, 32], [54, 16, 46], [72, 11, 30], [86, 13, 42]],
+    },
+  },
+  {
+    y: "61.5%", x: "45%", rotate: 5, fade: 1,
+    scene: {
+      sky: "linear-gradient(to bottom, #4a3120, #23181a)",
+      beam: "radial-gradient(42% 78% at 50% 0%, rgba(255,198,98,.9), transparent 66%)",
+      crowd: true,
+    },
+  },
+  // Cropped by the bottom edge and washed out, closing the run.
+  {
+    y: "74%", x: "70%", rotate: 7, fade: 0.35,
+    scene: {
+      sky: "linear-gradient(to bottom, #7e93a6, #35424e)",
+      horizon: 58,
+      ground: "linear-gradient(to bottom, #46586a, #1b232c)",
+    },
+  },
+]
+
+/** One drawn frame. Shapes, not blur — a swatch does not read as footage. */
+function SceneFrame({ scene }: { scene: Scene }) {
+  return (
+    <div className="absolute inset-0" style={{ backgroundImage: scene.sky }}>
+      {scene.sun && (
+        <span
+          className="absolute rounded-full"
+          style={{
+            left: `${scene.sun.x}%`,
+            top: `${scene.sun.y}%`,
+            width: `${scene.sun.size}%`,
+            aspectRatio: "1",
+            background: scene.sun.color,
+            boxShadow: `0 0 ${scene.sun.size * 2}px ${scene.sun.color}`,
+          }}
+        />
+      )}
+
+      {scene.skyline?.map(([left, width, height], index) => (
+        <span
+          key={index}
+          className="absolute bg-black/55"
+          style={{
+            left: `${left}%`,
+            width: `${width}%`,
+            height: `${height}%`,
+            bottom: `${100 - (scene.horizon ?? 100)}%`,
+          }}
+        />
+      ))}
+
+      {scene.ground && (
+        <span
+          className="absolute inset-x-0 bottom-0"
+          style={{ top: `${scene.horizon ?? 60}%`, backgroundImage: scene.ground }}
+        />
+      )}
+
+      {scene.sign && (
+        <span
+          className="absolute rounded-[2px]"
+          style={{
+            left: `${scene.sign.x}%`,
+            top: `${scene.sign.y}%`,
+            width: `${scene.sign.w}%`,
+            height: `${scene.sign.h}%`,
+            background: scene.sign.color,
+            boxShadow: `0 0 24px ${scene.sign.color}`,
+          }}
+        />
+      )}
+
+      {scene.beam && <span className="absolute inset-0" style={{ backgroundImage: scene.beam }} />}
+
+      {scene.crowd && (
+        <span className="absolute inset-x-0 bottom-0 h-[38%]">
+          {[6, 22, 38, 54, 70, 86].map((left, index) => (
+            <span
+              key={left}
+              className="absolute bottom-0 rounded-t-full bg-black/70"
+              style={{ left: `${left - 7}%`, width: "15%", height: `${58 + (index % 3) * 16}%` }}
+            />
+          ))}
+        </span>
+      )}
+
+      {/* A photograph darkens at its corners; a flat fill does not. */}
+      <span className="absolute inset-0 bg-[radial-gradient(120%_100%_at_50%_45%,transparent_45%,rgba(0,0,0,0.45)_100%)]" />
+    </div>
+  )
+}
+
 export default function LandingPage() {
   const router = useRouter()
   const { data: session } = authClient.useSession()
+
+  // Sign in is offered only where it exists. A guest-only deployment (no
+  // auth env) renders no sign-in form on /start, so a Sign in button there
+  // would be a door painted on a wall. Same check the app header makes.
+  const [signInAvailable, setSignInAvailable] = useState(false)
 
   useEffect(() => {
     if (session?.user) router.replace("/home")
   }, [session, router])
 
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/auth-configured")
+      .then((response) => response.json() as Promise<{ configured: boolean }>)
+      .then((body) => {
+        if (!cancelled && body.configured) setSignInAvailable(true)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-6 py-8">
-      <header className="flex items-center justify-between gap-4">
-        <span className="font-serif text-2xl tracking-tight">CLIPIT</span>
-        <Link
-          href="/start"
-          className="whitespace-nowrap rounded-full px-4 py-2 text-[13px] text-foreground/70 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
-        >
-          Open the app
-        </Link>
-      </header>
-
-      <div className="grid flex-1 items-center gap-12 py-14 lg:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: EASE }}
-        >
-          <h1 className="text-balance font-serif text-4xl leading-tight sm:text-5xl">
-            Describe the moment.
-            <br />
-            Get the clip.
-          </h1>
-          <p className="mt-5 max-w-md text-[15px] leading-relaxed text-foreground/60">
-            Drop in a long video and ask for moments the way you'd ask a person — "every time the
-            crowd rushes the stage". CLIPIT watches it once, answers in seconds, and cuts each moment
-            into a post-ready MP4.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              href="/start"
-              className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="6" cy="6" r="3" />
-                <circle cx="6" cy="18" r="3" />
-                <line x1="20" y1="4" x2="8.12" y2="15.88" />
-                <line x1="14.47" y1="14.48" x2="20" y2="20" />
-                <line x1="8.12" y1="8.12" x2="12" y2="12" />
-              </svg>
-              Start clipping
-            </Link>
-            <span className="text-[13px] text-foreground/40">No account needed to try it.</span>
-          </div>
-
-          <ul className="mt-10 flex flex-col gap-2.5 text-[13.5px] text-foreground/55">
-            <li className="flex items-start gap-2.5">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-amber-300/80" aria-hidden />
-              Watches your video once, then answers every question in seconds.
-            </li>
-            <li className="flex items-start gap-2.5">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-amber-300/80" aria-hidden />
-              Tells you what it couldn't see — it never passes off a blind spot as an empty video.
-            </li>
-            <li className="flex items-start gap-2.5">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-amber-300/80" aria-hidden />
-              Every clip downloads as a post-ready MP4, straight from your library.
-            </li>
-          </ul>
-        </motion.div>
-
-        {/* A depiction of the actual screen: the stage, a question as you'd
-            type it, and the answer as it comes back. Illustrative content,
-            clearly of the product's own UI — not data pretending to be real. */}
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: EASE, delay: 0.12 }}
-          aria-hidden
-          className="select-none"
-        >
-          <div className="rounded-2xl bg-black/45 p-3 shadow-[0_0_60px_rgba(0,0,0,0.5)] ring-1 ring-white/10">
-            <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-gradient-to-br from-zinc-800 via-zinc-900 to-black">
-              <span className="absolute right-3 top-3 flex items-center gap-2 rounded-full bg-black/55 px-2.5 py-1.5 text-[11px] text-white/70">
-                <span className="size-3 animate-spin rounded-full border-2 border-white/20 border-t-white/70" aria-hidden />
-                Watching — 8 minutes in
-              </span>
-              <span className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/25">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="translate-x-0.5 text-white" aria-hidden>
-                  <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
-                </svg>
-              </span>
-            </div>
-
-            <div className="mt-3 flex flex-col gap-2.5 px-1 pb-1">
-              <div className="flex justify-end">
-                <span className="rounded-2xl bg-white/10 px-3 py-1.5 text-[13px]">
-                  clip every time the crowd rushes the stage
-                </span>
-              </div>
-              <p className="text-[13px] text-foreground/80">Found 3 moments. Click one to jump there, or cut it into a clip.</p>
-              <div className="rounded-xl bg-black/35 p-2.5 ring-1 ring-white/10">
-                <p className="font-mono text-[11.5px] tabular-nums text-amber-300/90">00:04:12 – 00:04:31</p>
-                <p className="mt-1 text-[13px] text-foreground/85">Crowd breaks past the barrier toward the stage</p>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1" aria-hidden>
-                    <span className="h-2.5 w-1 rounded-sm bg-emerald-400/90" />
-                    <span className="h-2.5 w-1 rounded-sm bg-emerald-400/90" />
-                    <span className="h-2.5 w-1 rounded-sm bg-emerald-400/90" />
-                    <span className="ml-1.5 text-[11.5px] text-foreground/50">High confidence</span>
-                  </span>
-                  <span className="rounded-lg bg-white px-2.5 py-1 text-[11.5px] font-medium text-black">Cut this clip</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+    <main className="flex min-h-dvh w-full flex-col overflow-x-clip">
+      {/* z-20: the header stays legible above the ribbon's topmost still,
+          which climbs up beside it the way the reference's corner photo does. */}
+      <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-col px-6 py-7">
+        <header className="flex items-center justify-between gap-4">
+          <span className="font-serif text-2xl tracking-tight">CLIPIT</span>
+          <Link
+            href="/start"
+            className="whitespace-nowrap rounded-full bg-black/30 px-4 py-2 text-[13px] text-foreground/70 ring-1 ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/5 hover:text-foreground"
+          >
+            Open the app
+          </Link>
+        </header>
       </div>
 
-      <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 py-6">
-        <p className="text-[13px] text-foreground/40">Upload → ask in plain words → download post-ready clips.</p>
-        <Link
-          href="/start"
-          className="whitespace-nowrap rounded-full bg-white px-5 py-2 text-[13px] font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
+      {/* Hero: copy left, ribbon down the right third. Nothing follows it, so
+          on phones — where the ribbon steps aside — the copy takes the leftover
+          height and centres in it rather than leaving a screen of dead space. */}
+      <section className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-6 pb-20 pt-6 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-8 lg:pb-0 lg:pt-0">
+        <div className="relative z-10 max-w-2xl">
+          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
+            {/* The reference's headline is a heavy sans set very tight, and
+                that weight is most of its character — a serif reads as a
+                different page entirely. The wordmark stays serif; it's ours. */}
+            <h1 className="text-balance font-sans text-[2.6rem] font-semibold leading-[0.98] tracking-[-0.045em] sm:text-6xl lg:text-[4.25rem]">
+              Describe the moment
+              <br />
+              <span className="text-foreground/40">get the clip</span>
+            </h1>
+            <p className="mt-7 max-w-lg text-[17px] leading-relaxed text-foreground/55">
+              The future of clipping. Ask a long video for moments the way you'd ask a person —
+              CLIPIT watches it once, answers in seconds, and cuts post-ready MP4s.
+            </p>
+            <div className="mt-9 flex flex-wrap items-center gap-3">
+              <Link
+                href="/start"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-7 py-3.5 text-[15px] font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
+              >
+                Start clipping
+              </Link>
+              {signInAvailable && (
+                <Link
+                  href="/start#signin"
+                  className="whitespace-nowrap rounded-full px-7 py-3.5 text-[15px] text-foreground/75 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
+                >
+                  Sign in
+                </Link>
+              )}
+            </div>
+            <p className="mt-4 text-[13px] text-foreground/40">No account needed to try it.</p>
+          </motion.div>
+        </div>
+
+        {/* The ribbon's stage. overflow-hidden is the point, not an oversight:
+            it is what crops the top and bottom stills against the edge of the
+            screen, the way the reference's photos are cropped. Hidden on
+            phones, where the headline is the hero. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 hidden w-[34rem] select-none overflow-hidden lg:block"
         >
-          Start clipping
-        </Link>
-      </footer>
+          <div className="absolute -right-20 top-0 h-full w-[30rem]">
+            {RIBBON.map((still, index) => (
+              <motion.div
+                key={still.y}
+                initial={{ opacity: 0, y: 26, rotate: still.rotate * 1.8 }}
+                animate={{ opacity: still.fade, y: 0, rotate: still.rotate }}
+                transition={{ duration: 0.8, ease: EASE, delay: 0.12 + index * 0.075 }}
+                className="absolute w-[16rem]"
+                style={{ left: still.x, top: still.y, zIndex: index + 1 }}
+              >
+                <div className="relative aspect-video w-full overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.55)] ring-1 ring-white/15">
+                  <SceneFrame scene={still.scene} />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
     </main>
   )
 }
