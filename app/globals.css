@@ -83,18 +83,6 @@ body {
   }
 }
 
-/* Sidebar labels fade and slide as the rail narrows, so collapsing reads as
-   the same furniture shrinking rather than different furniture appearing. */
-.sidebar-copy {
-  transition:
-    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-[data-sidebar-collapsed="true"] .sidebar-copy {
-  opacity: 0;
-  transform: translateX(-8px);
-  pointer-events: none;
-}
 
 /* When the visitor's system asks for reduced motion, everything settles
    instantly: no drifting collages, no blur-resolves, no sliding rails.

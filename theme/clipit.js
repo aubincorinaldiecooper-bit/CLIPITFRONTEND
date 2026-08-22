@@ -97,10 +97,10 @@ export const clipitTheme = {
     "--color-syntax-property": "light-dark(#005348, #83dac9)",
     "--color-syntax-punctuation": "light-dark(#a3a3a3, #525252)",
     "--color-syntax-background": "light-dark(#fafafa, #0a0a0a)",
-    "--color-background-surface": "light-dark(#FFFBF8, #1E1B15)",
+    "--color-background-surface": "light-dark(#ffffff, #131316)",
     "--color-background-body": "light-dark(#ffffff, #08080a)",
-    "--color-background-card": "light-dark(#FFFBF8, #1E1B15)",
-    "--color-background-popover": "light-dark(#FFFBF8, #333029)",
+    "--color-background-card": "light-dark(#fafafa, #131316)",
+    "--color-background-popover": "light-dark(#ffffff, #232327)",
     "--color-background-muted": "light-dark(#211A160D, #1E1B1580)",
     "--color-accent": "light-dark(#9F4200, #EAC33C)",
     "--color-accent-muted": "light-dark(color-mix(in srgb, var(--color-accent) 20%, transparent), color-mix(in srgb, var(--color-accent) 25%, transparent))",
@@ -128,8 +128,8 @@ export const clipitTheme = {
     "--color-success-muted": "light-dark(#c5e5c0, #84c9803D)",
     "--color-error-muted": "light-dark(#facecb, #ff9e973D)",
     "--color-warning-muted": "light-dark(#f8da9d, #deb4333D)",
-    "--color-border": "light-dark(#211A161A, #F5F0E71A)",
-    "--color-border-emphasized": "light-dark(#9D8E85, #6E675B)",
+    "--color-border": "light-dark(#1113171a, #f4f4f51a)",
+    "--color-border-emphasized": "light-dark(#8b8b93, #5d5d66)",
     "--color-skeleton": "light-dark(#B8A89F, #4C463A)",
     "--color-shadow": "light-dark(#0000001A, #0000004D)",
     "--color-tint-hover": "light-dark(black, white)",
@@ -187,7 +187,7 @@ export const clipitTheme = {
     "--shadow-inset-success": "inset 0px 0px 0px 2px #1981004D",
     "--shadow-inset-warning": "inset 0px 0px 0px 2px #ffce2f4D",
     "--shadow-inset-error": "inset 0px 0px 0px 2px #e33f4a4D",
-    "--color-background-inverted": "light-dark(#211A16, #FFFCF2)",
+    "--color-background-inverted": "light-dark(#18181b, #f4f4f5)",
     "--color-track": "light-dark(#B8A89F, #4C463A)"
   },
   components: {
@@ -424,6 +424,11 @@ export const clipitTheme = {
     "section": {
       "base": {
         "padding": "var(--spacing-3)"
+      }
+    },
+    "side-nav-heading": {
+      "base": {
+        "fontFamily": "var(--font-instrument-serif), ui-serif, Georgia, serif"
       }
     }
   },
