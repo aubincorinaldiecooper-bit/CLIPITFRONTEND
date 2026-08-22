@@ -1,21 +1,33 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Button } from "@astryxdesign/core/Button"
+import { Popover } from "@astryxdesign/core/Popover"
+import { Text } from "@astryxdesign/core/Text"
+import { TextInput } from "@astryxdesign/core/TextInput"
+import { VStack } from "@astryxdesign/core/Stack"
 import { authClient } from "@/lib/auth-client"
 import { forgetApiSession } from "@/lib/api"
 
 /**
- * Who you are, in the header.
+ * Who you are, in the header — now on Astryx's Popover, Button and TextInput,
+ * which bring the dialog semantics, focus handling, and Escape/outside
+ * dismissal we previously hand-rolled or lacked.
  *
  * Signed out it offers one thing: type your email, get a sign-in link. No
  * password exists anywhere to be typed, stored or forgotten. Signed in it
  * shows the address and a way out.
  *
- * The form opens as a panel floated under the header, not inside its row — a
- * 300px form in a fixed header row crushes the logo on a phone, and the rule
- * is that nothing reflows when actioned. And on a deployment where sign-in is
- * not configured, this renders nothing at all: a guest-only setup is a
- * supported setup, not one with a broken button in the corner.
+ * The decisions that predate the move, all kept:
+ * - On a deployment where sign-in is not configured, this renders nothing at
+ *   all — a guest-only setup is a supported setup, not one with a broken
+ *   button in the corner.
+ * - Arriving with #signin (the landing page's Sign in button) opens the
+ *   panel directly — a Sign in button that lands you somewhere you must find
+ *   another Sign in button is a broken promise.
+ * - The sent state never locks the door: email can be mistyped, delayed, or
+ *   lost, and a confirmation without a way back strands exactly the person
+ *   whose email did not arrive.
  */
 export function AccountControl() {
   const { data: session, isPending } = authClient.useSession()
@@ -24,9 +36,6 @@ export function AccountControl() {
   const [email, setEmail] = useState("")
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle")
 
-  // Arriving with #signin (the landing page's Sign in button) opens the
-  // panel directly — a Sign in button that lands you somewhere you must find
-  // another Sign in button is a broken promise.
   useEffect(() => {
     if (window.location.hash === "#signin") setOpen(true)
   }, [])
@@ -54,21 +63,20 @@ export function AccountControl() {
   if (session?.user) {
     return (
       <span className="flex items-center gap-3">
-        <span className="hidden max-w-[16rem] truncate text-[13px] text-foreground/50 sm:block">
-          {session.user.email}
+        <span className="hidden max-w-[16rem] truncate sm:block">
+          <Text type="supporting">{session.user.email}</Text>
         </span>
-        <button
-          type="button"
+        <Button
+          label="Sign out"
+          variant="secondary"
+          size="sm"
           onClick={() => {
             void authClient.signOut().finally(() => {
               forgetApiSession()
               window.location.assign("/start")
             })
           }}
-          className="whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] text-foreground/70 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
-        >
-          Sign out
-        </button>
+        />
       </span>
     )
   }
@@ -82,68 +90,62 @@ export function AccountControl() {
   }
 
   return (
-    <span className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] text-foreground/70 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
-      >
-        Sign in
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-20 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-xl bg-black/90 p-3 shadow-xl ring-1 ring-white/15 backdrop-blur">
-          {state === "sent" ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-[13px] text-foreground/70">
-                Link sent — check your email at <span className="text-foreground/90">{email.trim()}</span>.
-              </p>
-              {/* Email can be mistyped, delayed, or lost. A confirmation that
-                  locks the door behind it strands exactly the person whose
-                  email did not arrive. */}
-              <button
-                type="button"
-                onClick={() => setState("idle")}
-                className="self-start whitespace-nowrap text-[12.5px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
-              >
-                Send it again, or use a different address
-              </button>
-            </div>
-          ) : (
-            <form
-              className="flex flex-col gap-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void send()
-              }}
-            >
-              <p className="text-[12.5px] text-foreground/55">
+    <Popover
+      isOpen={open}
+      onOpenChange={setOpen}
+      placement="below"
+      alignment="end"
+      width={300}
+      label="Sign in to CLIPIT"
+      content={
+        state === "sent" ? (
+          <VStack gap={2}>
+            <Text as="p" type="body">
+              Link sent — check your email at {email.trim()}.
+            </Text>
+            <Button
+              label="Send it again, or use a different address"
+              variant="ghost"
+              size="sm"
+              onClick={() => setState("idle")}
+            />
+          </VStack>
+        ) : (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void send()
+            }}
+          >
+            <VStack gap={2}>
+              <Text as="p" type="supporting">
                 No password — we email you a sign-in link.
-              </p>
-              <input
+              </Text>
+              <TextInput
                 type="email"
-                required
-                autoFocus
+                label="Email"
+                isLabelHidden
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(value) => setEmail(value)}
                 placeholder="you@example.com"
-                className="w-full rounded-lg bg-white/5 px-3 py-2 text-[13px] outline-none ring-1 ring-white/15 placeholder:text-foreground/30 focus:ring-white/30"
+                hasAutoFocus
+                isRequired
+                onEnter={() => void send()}
+                status={state === "failed" ? { type: "error", message: "Couldn't send to that address." } : undefined}
               />
-              <button
+              <Button
                 type="submit"
-                disabled={state === "sending"}
-                className="whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[13px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
-              >
-                {state === "sending" ? "Sending…" : "Email me a sign-in link"}
-              </button>
-              {state === "failed" && (
-                <p className="text-[12px] text-red-300">Couldn't send to that address.</p>
-              )}
-            </form>
-          )}
-        </div>
-      )}
-    </span>
+                label={state === "sending" ? "Sending…" : "Email me a sign-in link"}
+                variant="primary"
+                isLoading={state === "sending"}
+                width="100%"
+              />
+            </VStack>
+          </form>
+        )
+      }
+    >
+      <Button label="Sign in" variant="secondary" size="sm" />
+    </Popover>
   )
 }
