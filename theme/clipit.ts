@@ -40,9 +40,15 @@ export const clipitTheme = defineTheme({
     "--font-family-code": "var(--font-geist-mono), ui-monospace, monospace",
   },
   components: {
-    // Every action in CLIPIT is a pill; keep that identity on Astryx buttons.
+    // Every action in CLIPIT is a pill, and the primary action is the white
+    // pill it has always been — amber stays the accent of timecodes and
+    // highlights, not the colour of buttons.
     button: {
       base: { borderRadius: "9999px" },
+      "variant:primary": {
+        backgroundColor: "light-dark(#111113, #ffffff)",
+        color: "light-dark(#ffffff, #0b0b0c)",
+      },
     },
     // The one place serif is allowed: the wordmark. The rail's heading IS
     // the wordmark, so it carries the brand voice; every other heading is
