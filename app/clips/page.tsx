@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
+import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
@@ -63,37 +64,34 @@ export default function ClipsPage() {
 
   return (
     <AppShell active="clips">
-      <div className="mx-auto w-full max-w-6xl flex-1 py-8">
-        <VStack gap={1.5}>
-          <Heading level={1}>Your clips</Heading>
-          <Text as="p" type="supporting">
-            Every clip you have cut, ready to play or download.
-          </Text>
-        </VStack>
-
-        {failed ? (
-          <p className="mt-10 text-sm text-error">Couldn't load your clips. Refresh to try again.</p>
-        ) : clips === null ? (
-          <div className="mt-8">
-            <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
-              {[0, 1, 2, 3, 4, 5].map((index) => (
-                <Skeleton key={index} height={230} radius={3} index={index} />
-              ))}
-            </Grid>
-          </div>
-        ) : clips.length === 0 ? (
-          <div className="mt-10">
-            <VStack gap={3} align="start">
+      <Layout height="auto" contentWidth={1152}>
+        <LayoutContent padding={6}>
+          <VStack gap={5} align="stretch">
+            <VStack gap={1.5}>
+              <Heading level={1}>Your clips</Heading>
               <Text as="p" type="supporting">
-                Nothing here yet — cut a moment from a video and it lands here.
+                Every clip you have cut, ready to play or download.
               </Text>
-              <Button label="Clip a video" variant="primary" size="sm" href="/start" />
             </VStack>
-          </div>
-        ) : (
-          <>
-            <div className="mt-8">
+
+            {failed ? (
+              <p className="text-sm text-error">Couldn't load your clips. Refresh to try again.</p>
+            ) : clips === null ? (
               <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
+                {[0, 1, 2, 3, 4, 5].map((index) => (
+                  <Skeleton key={index} height={230} radius={3} index={index} />
+                ))}
+              </Grid>
+            ) : clips.length === 0 ? (
+              <VStack gap={3} align="start">
+                <Text as="p" type="supporting">
+                  Nothing here yet — cut a moment from a video and it lands here.
+                </Text>
+                <Button label="Clip a video" variant="primary" size="sm" href="/start" />
+              </VStack>
+            ) : (
+              <VStack gap={4} align="stretch">
+                <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
                 {clips.map((clip) => (
                   <div key={clip.id} className="overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10">
                     {playingId === clip.id && clip.url ? (
@@ -148,24 +146,23 @@ export default function ClipsPage() {
                     </div>
                   </div>
                 ))}
-              </Grid>
-            </div>
-            {nextBefore && (
-              <div className="mt-6">
-                <HStack justify="center">
-                  <Button
-                    label={loadingMore ? "Loading…" : "Show older clips"}
-                    variant="secondary"
-                    size="sm"
-                    isLoading={loadingMore}
-                    onClick={() => void loadOlder()}
-                  />
-                </HStack>
-              </div>
+                </Grid>
+                {nextBefore && (
+                  <HStack justify="center">
+                    <Button
+                      label={loadingMore ? "Loading…" : "Show older clips"}
+                      variant="secondary"
+                      size="sm"
+                      isLoading={loadingMore}
+                      onClick={() => void loadOlder()}
+                    />
+                  </HStack>
+                )}
+              </VStack>
             )}
-          </>
-        )}
-      </div>
+          </VStack>
+        </LayoutContent>
+      </Layout>
     </AppShell>
   )
 }
