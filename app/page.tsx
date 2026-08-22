@@ -56,7 +56,7 @@ const RIBBON: Array<{
 }> = [
   // Cropped by the top edge and washed out, as the reference's corner photo is.
   {
-    y: "-14%", x: "58%", rotate: 5, fade: 0.45,
+    y: "-9%", x: "58%", rotate: 5, fade: 0.45,
     scene: {
       sky: "linear-gradient(to bottom, #bfe3ec, #e6f1f2)",
       horizon: 52,
@@ -120,7 +120,7 @@ const RIBBON: Array<{
   },
   // Cropped by the bottom edge and washed out, closing the run.
   {
-    y: "74%", x: "70%", rotate: 7, fade: 0.35,
+    y: "84%", x: "70%", rotate: 7, fade: 0.35,
     scene: {
       sky: "linear-gradient(to bottom, #7e93a6, #35424e)",
       horizon: 58,
@@ -228,7 +228,36 @@ export default function LandingPage() {
   }, [])
 
   return (
-    <main className="flex min-h-dvh w-full flex-col overflow-x-clip">
+    <main className="relative flex min-h-dvh w-full flex-col overflow-x-clip">
+      {/* The ribbon's stage, anchored to MAIN rather than the centered
+          section: the section stops 144px short of the browser edge at
+          1440px (further on wider screens), and a ribbon clipped there
+          floats mid-air instead of being cropped by the screen. Anchored
+          here, overflow-hidden crops the first still at the true top corner
+          behind the header and the run at the true right edge — that crop
+          is the point, not an oversight. Hidden on phones, where the
+          headline is the hero. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 hidden w-[34rem] select-none overflow-hidden lg:block"
+      >
+        <div className="absolute -right-20 top-0 h-full w-[30rem]">
+          {RIBBON.map((still, index) => (
+              <motion.div
+                key={still.y}
+                initial={{ opacity: 0, y: 26, rotate: still.rotate * 1.8 }}
+                animate={{ opacity: still.fade, y: 0, rotate: still.rotate }}
+                transition={{ duration: 0.8, ease: EASE, delay: 0.12 + index * 0.075 }}
+                className="absolute w-[16rem]"
+                style={{ left: still.x, top: still.y, zIndex: index + 1 }}
+              >
+                <div className="relative aspect-video w-full overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.55)] ring-1 ring-white/15">
+                  <SceneFrame scene={still.scene} />
+                </div>
+              </motion.div>
+            ))}
+        </div>
+      </div>
       {/* z-20: the header stays legible above the ribbon's topmost still,
           which climbs up beside it the way the reference's corner photo does. */}
       <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-col px-6 py-7">
@@ -281,31 +310,6 @@ export default function LandingPage() {
           </motion.div>
         </div>
 
-        {/* The ribbon's stage. overflow-hidden is the point, not an oversight:
-            it is what crops the top and bottom stills against the edge of the
-            screen, the way the reference's photos are cropped. Hidden on
-            phones, where the headline is the hero. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 hidden w-[34rem] select-none overflow-hidden lg:block"
-        >
-          <div className="absolute -right-20 top-0 h-full w-[30rem]">
-            {RIBBON.map((still, index) => (
-              <motion.div
-                key={still.y}
-                initial={{ opacity: 0, y: 26, rotate: still.rotate * 1.8 }}
-                animate={{ opacity: still.fade, y: 0, rotate: still.rotate }}
-                transition={{ duration: 0.8, ease: EASE, delay: 0.12 + index * 0.075 }}
-                className="absolute w-[16rem]"
-                style={{ left: still.x, top: still.y, zIndex: index + 1 }}
-              >
-                <div className="relative aspect-video w-full overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.55)] ring-1 ring-white/15">
-                  <SceneFrame scene={still.scene} />
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
       </section>
     </main>
   )
