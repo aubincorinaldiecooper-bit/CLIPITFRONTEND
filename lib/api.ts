@@ -24,6 +24,8 @@ import type { ApiErrorBody, Clip, ClipMatch, ClipRequest, MatchFeedback, UploadT
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "")
 const TOKEN_KEY = "clipit.session.token"
+/** "guest" or "user" — which kind of session the stored token is. */
+const TOKEN_KIND_KEY = "clipit.session.kind"
 
 export class ApiError extends Error {
   readonly status: number
@@ -67,14 +69,22 @@ function readToken(): string | null {
   return window.sessionStorage.getItem(TOKEN_KEY)
 }
 
-function writeToken(token: string): void {
+function readKind(): "guest" | "user" | null {
+  if (typeof window === "undefined") return null
+  const kind = window.sessionStorage.getItem(TOKEN_KIND_KEY)
+  return kind === "user" || kind === "guest" ? kind : null
+}
+
+function writeToken(token: string, kind: "guest" | "user" = "guest"): void {
   if (typeof window === "undefined") return
   window.sessionStorage.setItem(TOKEN_KEY, token)
+  window.sessionStorage.setItem(TOKEN_KIND_KEY, kind)
 }
 
 function clearToken(): void {
   if (typeof window === "undefined") return
   window.sessionStorage.removeItem(TOKEN_KEY)
+  window.sessionStorage.removeItem(TOKEN_KIND_KEY)
 }
 
 async function createSession(): Promise<string> {
@@ -83,12 +93,52 @@ async function createSession(): Promise<string> {
     throw new ApiError(response.status, "session_failed", "Could not start a session with the backend")
   }
   const body = (await response.json()) as { token: string }
-  writeToken(body.token)
+  writeToken(body.token, "guest")
   return body.token
 }
 
+/**
+ * Asks this site's own server whether the browser is signed in, and if so,
+ * trades that for an API token owned by the person rather than the tab.
+ *
+ * The proof of sign-in is an httpOnly cookie only the server can read, so the
+ * question has to go through it. "No" is the everyday answer for guests, so it
+ * is asked once per page load, not once per request — a failed exchange is
+ * remembered until the next full load, which is exactly when sign-in state
+ * can have changed (the magic link lands on a fresh page).
+ */
+let exchangeSettled = false
+async function exchangeSignedInToken(): Promise<string | null> {
+  if (exchangeSettled || typeof window === "undefined") return null
+  exchangeSettled = true
+  try {
+    const response = await fetch("/api/backend-session", { method: "POST" })
+    if (!response.ok) return null
+    const body = (await response.json()) as { token: string }
+    writeToken(body.token, "user")
+    return body.token
+  } catch {
+    return null
+  }
+}
+
 async function ensureToken(): Promise<string> {
-  return readToken() ?? (await createSession())
+  const stored = readToken()
+  // A signed-in token is already the strongest identity there is; keep it.
+  if (stored && readKind() === "user") return stored
+
+  // A guest tab might have signed in since — the magic link lands on a fresh
+  // page, and that page's first API call is where the upgrade happens.
+  const upgraded = await exchangeSignedInToken()
+  if (upgraded) return upgraded
+
+  return stored ?? (await createSession())
+}
+
+/** Forgets the API session. The caller also ends the Better Auth one. */
+export function forgetApiSession(): void {
+  clearToken()
+  exchangeSettled = false
 }
 
 async function parseError(response: Response): Promise<ApiError> {
@@ -194,6 +244,15 @@ export const api = {
 
   async getVideo(videoId: string): Promise<{ video: Video }> {
     return request(`/api/videos/${videoId}`)
+  },
+
+  /**
+   * The caller's videos, newest first. Signed in, that spans every session
+   * they have ever had — the thing signing in is for. Guests see only what
+   * this tab uploaded, which is usually nothing.
+   */
+  async listVideos(): Promise<{ videos: Video[] }> {
+    return request("/api/videos")
   },
 
   async createClipRequest(videoId: string, instruction: string): Promise<{ clipRequest: ClipRequest }> {

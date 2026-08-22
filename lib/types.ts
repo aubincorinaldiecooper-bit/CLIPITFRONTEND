@@ -62,6 +62,7 @@ export interface Video {
     readThroughTimecode?: string | null
     error: string | null
   }
+  createdAt: string
   /** Signed source playback URL; present on the detail endpoint once bytes are in storage. */
   playback?: { url: string; expiresAt: string } | null
 }
