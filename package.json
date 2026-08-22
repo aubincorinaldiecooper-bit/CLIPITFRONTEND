@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/auth-migrate.mjs && next dev",
     "build": "next build",
     "start": "node scripts/auth-migrate.mjs && next start",
     "tiles:fetch": "node scripts/fetch-demo-tiles.mjs"

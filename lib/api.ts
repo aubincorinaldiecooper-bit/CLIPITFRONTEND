@@ -169,8 +169,12 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
   })
 
   if (response.status === 401 && retryOn401) {
-    // The stored token is no longer valid — mint a new one and try once more.
-    clearToken()
+    // The stored token is no longer valid. Forget it AND the settled exchange:
+    // a signed-in person's expired token must be replaced by asking the
+    // sign-in cookie again, not by quietly minting a guest session — that
+    // would leave the header saying who they are while their new uploads
+    // belong to a tab-lifetime nobody.
+    forgetApiSession()
     return request<T>(path, init, false)
   }
 

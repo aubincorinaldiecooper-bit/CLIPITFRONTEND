@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { authClient } from "@/lib/auth-client"
 import { forgetApiSession } from "@/lib/api"
 
@@ -11,19 +11,38 @@ import { forgetApiSession } from "@/lib/api"
  * password exists anywhere to be typed, stored or forgotten. Signed in it
  * shows the address and a way out.
  *
- * Signing out ends both halves of the identity — the sign-in cookie on this
- * site and the API session derived from it — then reloads, so the page never
- * shows one person's videos with another person's name in the corner.
+ * The form opens as a panel floated under the header, not inside its row — a
+ * 300px form in a fixed header row crushes the logo on a phone, and the rule
+ * is that nothing reflows when actioned. And on a deployment where sign-in is
+ * not configured, this renders nothing at all: a guest-only setup is a
+ * supported setup, not one with a broken button in the corner.
  */
 export function AccountControl() {
   const { data: session, isPending } = authClient.useSession()
+  const [configured, setConfigured] = useState<boolean | null>(null)
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState("")
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle")
 
-  // While the signed-in state is still being read, saying nothing beats
-  // flashing "Sign in" at someone who is.
-  if (isPending) return null
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/auth-configured")
+      .then((response) => response.json() as Promise<{ configured: boolean }>)
+      .then((body) => {
+        if (!cancelled) setConfigured(body.configured)
+      })
+      .catch(() => {
+        if (!cancelled) setConfigured(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Nothing until we know sign-in exists here and whether someone is signed
+  // in — flashing "Sign in" at a signed-in person is worse than a beat of
+  // empty space.
+  if (!configured || isPending) return null
 
   if (session?.user) {
     return (
@@ -47,18 +66,6 @@ export function AccountControl() {
     )
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] text-foreground/70 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
-      >
-        Sign in
-      </button>
-    )
-  }
-
   const send = async () => {
     const address = email.trim()
     if (!address || state === "sending") return
@@ -67,41 +74,69 @@ export function AccountControl() {
     setState(error ? "failed" : "sent")
   }
 
-  if (state === "sent") {
-    return (
-      <span className="whitespace-nowrap text-[13px] text-foreground/60">
-        Link sent — check your email.
-      </span>
-    )
-  }
-
   return (
-    <form
-      className="flex items-center gap-2"
-      onSubmit={(event) => {
-        event.preventDefault()
-        void send()
-      }}
-    >
-      <input
-        type="email"
-        required
-        autoFocus
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-        placeholder="you@example.com"
-        className="w-48 rounded-full bg-white/5 px-3 py-1.5 text-[13px] outline-none ring-1 ring-white/15 placeholder:text-foreground/30 focus:ring-white/30"
-      />
+    <span className="relative">
       <button
-        type="submit"
-        disabled={state === "sending"}
-        className="whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[13px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] text-foreground/70 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
       >
-        {state === "sending" ? "Sending…" : "Email me a link"}
+        Sign in
       </button>
-      {state === "failed" && (
-        <span className="whitespace-nowrap text-[12px] text-red-300">Couldn't send to that address.</span>
+
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-xl bg-black/90 p-3 shadow-xl ring-1 ring-white/15 backdrop-blur">
+          {state === "sent" ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-[13px] text-foreground/70">
+                Link sent — check your email at <span className="text-foreground/90">{email.trim()}</span>.
+              </p>
+              {/* Email can be mistyped, delayed, or lost. A confirmation that
+                  locks the door behind it strands exactly the person whose
+                  email did not arrive. */}
+              <button
+                type="button"
+                onClick={() => setState("idle")}
+                className="self-start whitespace-nowrap text-[12.5px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
+              >
+                Send it again, or use a different address
+              </button>
+            </div>
+          ) : (
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void send()
+              }}
+            >
+              <p className="text-[12.5px] text-foreground/55">
+                No password — we email you a sign-in link.
+              </p>
+              <input
+                type="email"
+                required
+                autoFocus
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-lg bg-white/5 px-3 py-2 text-[13px] outline-none ring-1 ring-white/15 placeholder:text-foreground/30 focus:ring-white/30"
+              />
+              <button
+                type="submit"
+                disabled={state === "sending"}
+                className="whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[13px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
+              >
+                {state === "sending" ? "Sending…" : "Email me a sign-in link"}
+              </button>
+              {state === "failed" && (
+                <p className="text-[12px] text-red-300">Couldn't send to that address.</p>
+              )}
+            </form>
+          )}
+        </div>
       )}
-    </form>
+    </span>
   )
 }
