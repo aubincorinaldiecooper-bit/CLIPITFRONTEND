@@ -2,6 +2,7 @@
 
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { AppShell } from "@/components/app-shell"
@@ -21,20 +22,22 @@ import { AppShell } from "@/components/app-shell"
 export default function PublishingPage() {
   return (
     <AppShell active="publishing">
-      <div className="mx-auto w-full max-w-2xl flex-1 py-8">
-        <VStack gap={3} align="start">
-          <Heading level={1}>Publishing</Heading>
-          <Text as="p" type="body" color="secondary">
-            This is where you'll connect the accounts you post to — TikTok, YouTube, Instagram — and
-            send clips straight from your library.
-          </Text>
-          <Text as="p" type="body" color="secondary">
-            None of those connections exist yet. Until they do, every clip in your library downloads
-            as a ready-to-post MP4.
-          </Text>
-          <Button label="Go to your clips" variant="primary" size="sm" href="/clips" />
-        </VStack>
-      </div>
+      <Layout height="auto" contentWidth={672}>
+        <LayoutContent padding={6}>
+          <VStack gap={3} align="start">
+            <Heading level={1}>Publishing</Heading>
+            <Text as="p" type="body" color="secondary">
+              This is where you'll connect the accounts you post to — TikTok, YouTube, Instagram — and
+              send clips straight from your library.
+            </Text>
+            <Text as="p" type="body" color="secondary">
+              None of those connections exist yet. Until they do, every clip in your library downloads
+              as a ready-to-post MP4.
+            </Text>
+            <Button label="Go to your clips" variant="primary" size="sm" href="/clips" />
+          </VStack>
+        </LayoutContent>
+      </Layout>
     </AppShell>
   )
 }
