@@ -200,6 +200,14 @@ export interface Clip {
   createdAt: string
 }
 
+/** The caller's own activity, counted from their rows. Never estimated. */
+export interface ActivityStats {
+  videos: number
+  minutesOfVideo: number
+  questionsAnswered: number
+  clipsCut: number
+}
+
 export interface ApiErrorBody {
   error: { code: string; message: string; details?: unknown }
 }
