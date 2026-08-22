@@ -43,3 +43,51 @@ Every control ships laid out properly, and nothing moves when you use it.
 - **Check it at the width it will actually be seen at.** This drawer is a
   fixed 380px column. Anything designed at full width and squeezed into it
   will look squeezed into it.
+
+## The design floors
+
+Settled decisions — hold every screen to these:
+
+- **Two type voices, one job each.** Instrument Serif is the wordmark's
+  voice and nothing else's. Every other word in the interface is Geist.
+- **A contrast floor for grey text.** On the dark ground, body-size text
+  never drops below 60% foreground opacity; display-size text may go to
+  50%. Anything fainter is decoration and must not carry words.
+- **Reduced motion is honoured everywhere.** MotionConfig in
+  components/providers.tsx covers motion/react; the guard in globals.css
+  covers CSS animations. Spinners keep turning — they are information,
+  not decoration.
+- **Astryx components first.** Interface furniture (buttons, forms, nav,
+  dialogs, tables) comes from @astryxdesign/core wearing theme/clipit.ts;
+  hand-rolled equivalents need a reason. The theater media player stays
+  custom by the owner's decision (2026-08-22).
+
+<!-- ASTRYX:START -->
+Astryx v0.4.5 · 158 components
+CLI: run every command as `npx astryx <cmd>` (shown below as `astryx ...`).
+
+SETUP (once, in your app entry e.g. main.tsx) — without these, components render unstyled:
+  import "@astryxdesign/core/reset.css";
+  import "@astryxdesign/core/astryx.css";
+
+WORKFLOW — discover, don't guess. Before writing UI:
+1. `astryx build "<idea>"` — START HERE: returns a kit (closest [page] + [block]s + [component]s). No args = full playbook.
+2. `astryx template <name> [--skeleton]` — scaffold the [page]/[block]s it named, or study their layout. Templates are reference code.
+3. `astryx component <Name>` — props + examples for every component you use.
+
+RULES:
+- No <div> — components do all layout/spacing, page frame included.
+- Frame first: read `astryx docs layout` before writing any page or screen — page frame, region widths, breakpoint behavior.
+- Dense data = rows (Table, List/Item), never Card-wrapped list items; Card is for standalone widgets. Status = StatusDot/Token; Badge = counts only.
+- Custom styling: component props first; else Tailwind utilities backed by tokens (bg-surface, text-primary, rounded-lg) via tailwind-theme.css. No raw hex/px.
+- Tokens for every value (`astryx docs tokens`). Brand/accent belongs in the theme (`astryx theme list` / `theme add <slug>`, or `astryx theme template` for a custom one) — never override --color-* in :root.
+- SELF-CHECK before you finish: re-read the file and replace any style={{…}}, raw <div>/<span> layout, imported .css/@apply, or hardcoded/arbitrary value (e.g. bg-[#fff], p-[13px]) with the component or a token-backed utility. If unsure a component/prop exists, run `astryx component <Name>` / `astryx search "<thing>"`; don't hand-roll CSS.
+
+MORE CLI:
+  search "<query>"   find any component / hook / doc / template / block
+  component --list   158 components by category
+  template --list    page + block recipes
+  docs <topic>       color, elevation, icons, illustrations, internationalization, layout, migration, motion, principles, shape, spacing, styling, theme, tokens, typography
+  swizzle <Name>     eject component source for deep customization
+  upgrade --apply    run after any @astryxdesign/core bump
+<!-- ASTRYX:END -->

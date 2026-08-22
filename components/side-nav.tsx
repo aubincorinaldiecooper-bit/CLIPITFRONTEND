@@ -1,192 +1,132 @@
 "use client"
 
-import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react"
-import Link from "next/link"
+import { useLayoutEffect, useState, type ComponentProps, type SVGProps } from "react"
+import {
+  SideNav as AstryxSideNav,
+  SideNavHeading,
+  SideNavItem,
+  SideNavSection,
+} from "@astryxdesign/core/SideNav"
 
 /**
  * The left rail: where you are in CLIPIT, and the way to everywhere else.
  *
- * Modeled on the reference sidebar's motion — 224px open, 52px collapsed,
- * one easing for the width and a fade-and-slide for the labels — with the
- * contents replaced by what this product actually has: a new clip, the
- * library of cut clips, and the place publishing will live.
+ * Astryx's SideNav does the furniture — the landmark, aria-current on the
+ * selected item, the disclosure-pattern collapse, icon-only flyouts — and we
+ * keep the decisions that were ours before the move:
  *
- * Collapsed is remembered per browser. On the theater screen the drawer
- * already owns the right edge, so being able to fold this away is what keeps
- * a laptop screen workable.
+ * - Collapsed is remembered per browser (same key as always), restored
+ *   before first paint so a person who saved the rail closed never watches
+ *   it animate shut on every navigation.
+ * - "New clip" is a full navigation on purpose: landing on /start fresh is
+ *   what resets the theater, so it must work even from /start itself.
+ * - The wordmark keeps its serif voice via the theme's side-nav-heading
+ *   override — the one place serif is allowed to appear.
  */
-
-const MOTION = {
-  expandedWidth: 224,
-  collapsedWidth: 52,
-  duration: 280,
-  easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-}
 
 const COLLAPSED_KEY = "clipit.nav.collapsed"
 
 export type NavDestination = "home" | "start" | "clips" | "publishing"
 
-export const NAV_ITEMS: Array<{ key: NavDestination; label: string; href: string; icon: ReactNode }> = [
-  {
-    key: "home",
-    label: "Home",
-    href: "/home",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M3 10.5 12 3l9 7.5" />
-        <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
-      </svg>
-    ),
-  },
-  {
-    key: "start",
-    label: "New clip",
-    href: "/start",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="6" cy="6" r="3" />
-        <circle cx="6" cy="18" r="3" />
-        <line x1="20" y1="4" x2="8.12" y2="15.88" />
-        <line x1="14.47" y1="14.48" x2="20" y2="20" />
-        <line x1="8.12" y1="8.12" x2="12" y2="12" />
-      </svg>
-    ),
-  },
-  {
-    key: "clips",
-    label: "Your clips",
-    href: "/clips",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <rect x="3" y="5" width="18" height="14" rx="2" />
-        <path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4" />
-      </svg>
-    ),
-  },
-  {
-    key: "publishing",
-    label: "Publishing",
-    href: "/publishing",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="12" r="2" />
-        <path d="M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M4.93 19.07a10 10 0 0 1 0-14.14M19.07 4.93a10 10 0 0 1 0 14.14" />
-      </svg>
-    ),
-  },
-]
-
-const CollapseGlyph = ({ flipped = false }: { flipped?: boolean }) => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden
-    className={flipped ? "rotate-180" : undefined}
-  >
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M9 4v16M17 10l-2.5 2L17 14" />
+/** Width/height come last so Astryx's sizing wins when it passes its own. */
+const HomeGlyph = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden width={18} height={18} {...props}>
+    <path d="M3 10.5 12 3l9 7.5" />
+    <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
   </svg>
 )
 
+const ScissorsGlyph = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden width={18} height={18} {...props}>
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <line x1="20" y1="4" x2="8.12" y2="15.88" />
+    <line x1="14.47" y1="14.48" x2="20" y2="20" />
+    <line x1="8.12" y1="8.12" x2="12" y2="12" />
+  </svg>
+)
+
+const LibraryGlyph = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden width={18} height={18} {...props}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4" />
+  </svg>
+)
+
+const BroadcastGlyph = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden width={18} height={18} {...props}>
+    <circle cx="12" cy="12" r="2" />
+    <path d="M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M4.93 19.07a10 10 0 0 1 0-14.14M19.07 4.93a10 10 0 0 1 0 14.14" />
+  </svg>
+)
+
+export const NAV_ITEMS: Array<{
+  key: NavDestination
+  label: string
+  href: string
+  icon: (props: SVGProps<SVGSVGElement>) => React.JSX.Element
+}> = [
+  { key: "home", label: "Home", href: "/home", icon: HomeGlyph },
+  { key: "start", label: "New clip", href: "/start", icon: ScissorsGlyph },
+  { key: "clips", label: "Your clips", href: "/clips", icon: LibraryGlyph },
+  { key: "publishing", label: "Publishing", href: "/publishing", icon: BroadcastGlyph },
+]
+
+/**
+ * A plain anchor, bypassing the router on purpose — see the "New clip" note
+ * above. Everything else in the rail navigates through Next via LinkProvider.
+ */
+const FullNavigationLink = (props: ComponentProps<"a">) => <a {...props} />
+
 export function SideNav({ active }: { active: NavDestination }) {
   const [collapsed, setCollapsed] = useState(false)
-  // Transitions stay off until after the saved state is applied. Every page
-  // mounts its own shell, so without this a person who saved the rail closed
-  // watched it open and animate shut on every navigation — the whole screen
-  // sliding 172px that they never asked to move.
-  const [settled, setSettled] = useState(false)
-
-  // Before first paint, not after mount: the server cannot know this
-  // browser's choice, and applying it post-paint is the flash being avoided.
+  // Transitions must not play while the saved state is being applied: the
+  // restore happens in useLayoutEffect, before the browser ever paints the
+  // default, so the rail simply appears the way its owner left it.
   useLayoutEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "true")
     } catch {
       // Blocked storage just means the rail starts open. Nothing to do.
     }
-    setSettled(true)
   }, [])
 
-  const toggle = () => {
-    setCollapsed((current) => {
-      const next = !current
-      try {
-        window.localStorage.setItem(COLLAPSED_KEY, String(next))
-      } catch {
-        // Not remembering the fold is fine; refusing to fold would not be.
-      }
-      return next
-    })
+  const handleCollapsedChange = (next: boolean) => {
+    setCollapsed(next)
+    try {
+      window.localStorage.setItem(COLLAPSED_KEY, String(next))
+    } catch {
+      // Not remembering the fold is fine; refusing to fold would not be.
+    }
   }
 
   return (
-    <aside
-      data-sidebar-collapsed={collapsed}
-      aria-label="CLIPIT navigation"
-      className="sticky top-0 hidden h-dvh shrink-0 overflow-hidden border-r border-white/10 bg-black/20 lg:flex"
-      style={{
-        width: collapsed ? MOTION.collapsedWidth : MOTION.expandedWidth,
-        transition: settled ? `width ${MOTION.duration}ms ${MOTION.easing}` : "none",
-      } as CSSProperties}
+    <AstryxSideNav
+      collapsible={{ isCollapsed: collapsed, onCollapsedChange: handleCollapsedChange }}
+      header={<SideNavHeading heading="CLIPIT" headingHref="/" />}
     >
-      {/* Fixed inner width so rows keep their shape while the rail animates —
-          the reference's trick, and the reason collapsing looks calm. */}
-      <div className="flex w-[224px] shrink-0 flex-col py-4">
-        <div className="relative mb-4 h-9">
-          <Link
-            href="/"
-            aria-hidden={collapsed}
-            tabIndex={collapsed ? -1 : 0}
-            className="sidebar-copy absolute left-4 top-1 font-serif text-xl tracking-tight"
-          >
-            CLIPIT
-          </Link>
-          <button
-            type="button"
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            onClick={toggle}
-            className={`absolute top-0 flex size-9 items-center justify-center rounded-lg text-foreground/40 transition-colors hover:bg-white/5 hover:text-foreground ${collapsed ? "left-1.5" : "right-2"}`}
-            style={{ transition: `left ${MOTION.duration}ms ${MOTION.easing}, right ${MOTION.duration}ms ${MOTION.easing}` }}
-          >
-            <CollapseGlyph flipped={collapsed} />
-          </button>
-        </div>
-
-        <nav className="flex flex-col gap-px">
-          {NAV_ITEMS.map((item) =>
-            item.key === "start" ? (
-              /* A full navigation on purpose: landing on /start fresh is what
-                 resets the theater, so this works even from /start itself. */
-              <a
-                key={item.key}
-                href={item.href}
-                title={item.label}
-                className={`mx-2 flex h-9 items-center rounded-lg px-2 transition-colors hover:bg-white/5 ${active === item.key ? "bg-white/10 text-foreground" : "text-foreground/60"}`}
-              >
-                <span className="flex size-5 shrink-0 items-center justify-center">{item.icon}</span>
-                <span className="sidebar-copy ml-2 min-w-0 flex-1 truncate text-[13.5px] font-medium">{item.label}</span>
-              </a>
-            ) : (
-              <Link
-                key={item.key}
-                href={item.href}
-                title={item.label}
-                className={`mx-2 flex h-9 items-center rounded-lg px-2 transition-colors hover:bg-white/5 ${active === item.key ? "bg-white/10 text-foreground" : "text-foreground/60"}`}
-              >
-                <span className="flex size-5 shrink-0 items-center justify-center">{item.icon}</span>
-                <span className="sidebar-copy ml-2 min-w-0 flex-1 truncate text-[13.5px] font-medium">{item.label}</span>
-              </Link>
-            ),
-          )}
-        </nav>
-      </div>
-    </aside>
+      <SideNavSection title="Navigate" isHeaderHidden>
+        {NAV_ITEMS.map((item) =>
+          item.key === "start" ? (
+            <SideNavItem
+              key={item.key}
+              label={item.label}
+              href={item.href}
+              icon={item.icon}
+              isSelected={active === item.key}
+              as={FullNavigationLink}
+            />
+          ) : (
+            <SideNavItem
+              key={item.key}
+              label={item.label}
+              href={item.href}
+              icon={item.icon}
+              isSelected={active === item.key}
+            />
+          ),
+        )}
+      </SideNavSection>
+    </AstryxSideNav>
   )
 }

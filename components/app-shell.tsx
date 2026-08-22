@@ -2,16 +2,20 @@
 
 import Link from "next/link"
 import type { ReactNode } from "react"
+import { AppShell as AstryxAppShell } from "@astryxdesign/core/AppShell"
 import { AccountControl } from "@/components/account-control"
 import { NAV_ITEMS, SideNav, type NavDestination } from "@/components/side-nav"
 
 /**
- * The frame every screen sits in: side rail on the left (desktop), a small
- * link row instead on phones, and a header whose right side holds the account
- * and whatever the current screen needs at hand.
+ * The frame every screen sits in, now on Astryx's AppShell: it owns the skip
+ * link, the main landmark, and the rail slot; we keep the decisions that are
+ * ours — the account control stays in the header (its own rework comes with
+ * the account screens), and phones keep the link row that already earns its
+ * space instead of the auto-generated drawer, until that drawer gets its own
+ * verified pass (mobileNav={false} suppresses it deliberately).
  *
- * The brand lives in the rail on desktop and in the header on phones — once
- * each, never both.
+ * The brand lives in the rail on desktop and in the header row on phones —
+ * once each, never both.
  */
 export function AppShell({
   active,
@@ -23,9 +27,7 @@ export function AppShell({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-h-dvh w-full">
-      <SideNav active={active} />
-
+    <AstryxAppShell height="auto" variant="section" contentPadding={0} mobileNav={false} sideNav={<SideNav active={active} />}>
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col px-6 py-6">
         {/* flex-wrap: on a phone with a video open this row holds the brand,
             three links, the clip-another button and the account — which is
@@ -36,7 +38,7 @@ export function AppShell({
             <Link href="/" className="shrink-0 font-serif text-2xl tracking-tight">
               CLIPIT
             </Link>
-            <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
+            <nav aria-label="CLIPIT" className="flex min-w-0 items-center gap-1 overflow-x-auto">
               {NAV_ITEMS.map((item) => {
                 const className = `whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] transition-colors ${
                   active === item.key ? "bg-white/10 text-foreground" : "text-foreground/60 hover:text-foreground"
@@ -64,6 +66,6 @@ export function AppShell({
 
         {children}
       </div>
-    </div>
+    </AstryxAppShell>
   )
 }

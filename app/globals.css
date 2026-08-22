@@ -1,4 +1,12 @@
-@import "tailwindcss";
+@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "../theme/clipit.css";
+@import "@astryxdesign/core/tailwind-theme.css";
+@import "tailwindcss/utilities.css" layer(utilities);
 
 /*
  * The landing page is a dark, cinematic surface in both schemes: the orbit
@@ -75,15 +83,21 @@ body {
   }
 }
 
-/* Sidebar labels fade and slide as the rail narrows, so collapsing reads as
-   the same furniture shrinking rather than different furniture appearing. */
-.sidebar-copy {
-  transition:
-    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-[data-sidebar-collapsed="true"] .sidebar-copy {
-  opacity: 0;
-  transform: translateX(-8px);
-  pointer-events: none;
+
+/* When the visitor's system asks for reduced motion, everything settles
+   instantly: no drifting collages, no blur-resolves, no sliding rails.
+   The spinner keeps turning — it is information, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
 }

@@ -90,13 +90,15 @@ export function stageActivity(video: Video | null, uploadFraction: number | null
 function Working({ label, size = 13, className = "" }: { label: string; size?: number; className?: string }) {
   return (
     <span className={`flex items-center gap-2 text-[11.5px] text-white/70 ${className}`}>
+      {/* animate-spin, not an inline animation: the reduced-motion guard in
+          globals.css freezes inline animations but exempts this class — a
+          working spinner that stops reads as a stuck app. */}
       <svg
         width={size}
         height={size}
         viewBox="0 0 24 24"
         fill="none"
-        className="shrink-0"
-        style={{ animation: "spin 900ms linear infinite" }}
+        className="shrink-0 animate-spin"
         aria-hidden
       >
         <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" />
