@@ -325,13 +325,19 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
               actions={
                 <>
                   {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
-                  <Button
-                    label="Take out"
-                    variant="secondary"
-                    size="sm"
-                    isLoading={busyId === clip.id}
-                    onClick={() => void takeOut(clip.id)}
-                  />
+                  {/* "Take out" removes a SHARE. The personal workspace holds
+                      the clips themselves — nothing was sent there, so there
+                      is nothing to take out, and offering it would be
+                      offering an operation that cannot apply. */}
+                  {!page.workspace.isPersonal && (
+                    <Button
+                      label="Take out"
+                      variant="secondary"
+                      size="sm"
+                      isLoading={busyId === clip.id}
+                      onClick={() => void takeOut(clip.id)}
+                    />
+                  )}
                 </>
               }
             />

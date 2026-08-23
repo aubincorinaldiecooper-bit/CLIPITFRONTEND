@@ -37,6 +37,16 @@ function WorkspacesBody() {
   const [inviteEmail, setInviteEmail] = useState("")
   const [creating, setCreating] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  /**
+   * Set when a workspace was created but its invitation email could not be
+   * sent. The invitation itself is live — this holds the link so the owner
+   * can pass it on by hand, because nothing else in the app can recover it.
+   */
+  const [handoff, setHandoff] = useState<{
+    workspace: { id: string; name: string }
+    email: string
+    url: string
+  } | null>(null)
   const router = useRouter()
   const toast = useToast()
 
@@ -60,6 +70,16 @@ function WorkspacesBody() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** Close the handoff and go to the workspace that was made. */
+  const finishHandoff = () => {
+    const target = handoff?.workspace.id
+    setHandoff(null)
+    setCreateOpen(false)
+    setName("")
+    setInviteEmail("")
+    if (target) router.push(`/workspaces/${target}`)
+  }
+
   const create = async (event: React.FormEvent) => {
     event.preventDefault()
     const trimmed = name.trim()
@@ -70,19 +90,21 @@ function WorkspacesBody() {
     try {
       const { workspace } = await api.createWorkspace(trimmed)
       window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
+
       if (email) {
-        // The room exists either way; the invitation is its own step and its
+        // The room exists either way; the invitation is its own step with its
         // own honest outcome.
         try {
           const result = await api.inviteToWorkspace(workspace.id, email)
-          toast(
-            result.emailed
-              ? { body: `${workspace.name} created — invitation sent to ${email}.` }
-              : {
-                  type: "error",
-                  body: `${workspace.name} created, but the invitation email couldn't be sent. Invite again from the workspace page.`,
-                },
-          )
+          if (!result.emailed) {
+            // The invitation is REAL and its link works — only the email
+            // failed. Closing here would throw that link away, and nothing
+            // else in the app can recover it, so the dialog stays open and
+            // hands it over instead.
+            setHandoff({ workspace, email, url: result.acceptUrl })
+            return
+          }
+          toast({ body: `${workspace.name} created — invitation sent to ${email}.` })
         } catch (cause) {
           toast({
             type: "error",
@@ -95,6 +117,7 @@ function WorkspacesBody() {
       } else {
         toast({ body: `${workspace.name} created.` })
       }
+
       setCreateOpen(false)
       setName("")
       setInviteEmail("")
@@ -171,37 +194,88 @@ function WorkspacesBody() {
         ))}
       </List>
 
-      <Dialog isOpen={createOpen} onOpenChange={setCreateOpen} purpose="form" width={420}>
-        <DialogHeader title="Create a workspace" />
-        <form onSubmit={create}>
-          <VStack gap={3} align="stretch">
-            {formError && <Banner status="error" title="That didn't work" description={formError} />}
-            <TextInput
-              label="Workspace name"
-              isRequired
-              value={name}
-              onChange={(value) => setName(value)}
-              placeholder="e.g. Northside Films"
-              hasAutoFocus
-            />
-            <TextInput
-              label="Invite someone (optional)"
-              type="email"
-              value={inviteEmail}
-              onChange={(value) => setInviteEmail(value)}
-              placeholder="teammate@example.com"
-              description="They'll get an email link that works once and expires in seven days."
-            />
-            <Text as="p" type="supporting" display="block">
-              You'll own the workspace. Everyone in it sees the clips sent there; your own library
-              stays yours.
-            </Text>
-            <HStack gap={2} justify="end">
-              <Button label="Cancel" variant="ghost" onClick={() => setCreateOpen(false)} />
-              <Button label="Create workspace" variant="primary" type="submit" isLoading={creating} />
-            </HStack>
-          </VStack>
-        </form>
+      <Dialog
+        isOpen={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open)
+          // Dismissing the handoff is the owner saying they have the link;
+          // the workspace was made either way, so take them to it.
+          if (!open && handoff) finishHandoff()
+        }}
+        purpose="form"
+        width={420}
+      >
+        {handoff ? (
+          <>
+            <DialogHeader title={`${handoff.workspace.name} is ready`} />
+            <VStack gap={3} align="stretch">
+              <Banner
+                status="warning"
+                title={`The invitation for ${handoff.email} couldn't be emailed`}
+                description="The invitation itself is live — send this link to them yourself. It works once and expires in seven days."
+              />
+              {/* The link is the whole point of this state: selectable, and
+                  scrolling inside its own line rather than widening the
+                  dialog. */}
+              <Text
+                as="p"
+                type="supporting"
+                display="block"
+                className="select-all overflow-x-auto whitespace-nowrap rounded-md bg-black/30 p-2"
+              >
+                {handoff.url}
+              </Text>
+              <HStack gap={2} justify="end">
+                <Button
+                  label="Copy link"
+                  variant="secondary"
+                  onClick={() => {
+                    void navigator.clipboard
+                      ?.writeText(handoff.url)
+                      .then(() => toast({ body: "Link copied." }))
+                      // A blocked clipboard is not a failure worth stopping
+                      // for: the link is on screen and selectable.
+                      .catch(() => toast({ type: "error", body: "Couldn't copy — select the link and copy it." }))
+                  }}
+                />
+                <Button label="Done" variant="primary" onClick={finishHandoff} />
+              </HStack>
+            </VStack>
+          </>
+        ) : (
+          <>
+            <DialogHeader title="Create a workspace" />
+            <form onSubmit={create}>
+              <VStack gap={3} align="stretch">
+                {formError && <Banner status="error" title="That didn't work" description={formError} />}
+                <TextInput
+                  label="Workspace name"
+                  isRequired
+                  value={name}
+                  onChange={(value) => setName(value)}
+                  placeholder="e.g. Northside Films"
+                  hasAutoFocus
+                />
+                <TextInput
+                  label="Invite someone (optional)"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(value) => setInviteEmail(value)}
+                  placeholder="teammate@example.com"
+                  description="They'll get an email link that works once and expires in seven days."
+                />
+                <Text as="p" type="supporting" display="block">
+                  You'll own the workspace. Everyone in it sees the clips sent there; your own library
+                  stays yours.
+                </Text>
+                <HStack gap={2} justify="end">
+                  <Button label="Cancel" variant="ghost" onClick={() => setCreateOpen(false)} />
+                  <Button label="Create workspace" variant="primary" type="submit" isLoading={creating} />
+                </HStack>
+              </VStack>
+            </form>
+          </>
+        )}
       </Dialog>
     </VStack>
   )
