@@ -4,9 +4,9 @@ import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
-import { Card } from "@astryxdesign/core/Card"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
+import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
@@ -49,6 +49,18 @@ function CallbackBanner() {
       />
     )
   }
+  if (error === "nothing_new") {
+    // The backend compared the account list before and after this attempt
+    // and saw no change — an older account was already connected, but this
+    // attempt itself added nothing. Saying "connected" here would be a lie.
+    return (
+      <Banner
+        status="warning"
+        title={`${platform ? PLATFORM_LABELS[platform] ?? platform : "That platform"} was already connected`}
+        description="This attempt didn't add anything new. If you meant to add a different account, try again and finish the sign-in with the platform."
+      />
+    )
+  }
   if (error === "subscription_required") {
     return (
       <Banner
@@ -84,8 +96,16 @@ function PublishingBody() {
       .then((result) => {
         if (!cancelled) setPage(result)
       })
-      .catch(() => {
-        if (!cancelled) setFailed(true)
+      .catch((cause) => {
+        if (cancelled) return
+        // A backend without this endpoint yet (this frontend deployed first)
+        // answers 404 — that is "publishing isn't switched on here", not a
+        // loading failure, and the page should say so.
+        if (cause instanceof ApiError && cause.status === 404) {
+          setPage({ configured: false, signInRequired: false, accounts: [] })
+        } else {
+          setFailed(true)
+        }
       })
     return () => {
       cancelled = true
@@ -169,36 +189,39 @@ function PublishingBody() {
             Nothing connected yet — pick a platform below to connect your first account.
           </Text>
         ) : (
-          connectedAccounts.map((account) => (
-            <Card key={account.id} variant="muted" padding={3}>
-              <HStack justify="between" align="center" gap={4} wrap="wrap">
-                <VStack gap={0.5}>
-                  <Text weight="medium">{PLATFORM_LABELS[account.platform] ?? account.platform}</Text>
-                  <Text type="supporting">
-                    {account.displayName ?? "Connected account"}
-                    {account.status === "reconnect_required" ? " — needs reconnecting" : ""}
-                  </Text>
-                </VStack>
-                {account.status === "reconnect_required" ? (
-                  <Button
-                    label="Reconnect"
-                    variant="primary"
-                    size="sm"
-                    isLoading={connecting === account.platform}
-                    onClick={() => void connect(account.platform)}
-                  />
-                ) : (
-                  <Button
-                    label="Disconnect"
-                    variant="secondary"
-                    size="sm"
-                    isLoading={busyAccountId === account.id}
-                    onClick={() => void disconnect(account)}
-                  />
-                )}
-              </HStack>
-            </Card>
-          ))
+          /* A repeated collection is rows, not Card-wrapped items — the
+             AGENTS.md interface rule. */
+          <List hasDividers>
+            {connectedAccounts.map((account) => (
+              <ListItem
+                key={account.id}
+                label={PLATFORM_LABELS[account.platform] ?? account.platform}
+                description={
+                  (account.displayName ?? "Connected account") +
+                  (account.status === "reconnect_required" ? " — needs reconnecting" : "")
+                }
+                endContent={
+                  account.status === "reconnect_required" ? (
+                    <Button
+                      label="Reconnect"
+                      variant="primary"
+                      size="sm"
+                      isLoading={connecting === account.platform}
+                      onClick={() => void connect(account.platform)}
+                    />
+                  ) : (
+                    <Button
+                      label="Disconnect"
+                      variant="secondary"
+                      size="sm"
+                      isLoading={busyAccountId === account.id}
+                      onClick={() => void disconnect(account)}
+                    />
+                  )
+                }
+              />
+            ))}
+          </List>
         )}
       </VStack>
 
