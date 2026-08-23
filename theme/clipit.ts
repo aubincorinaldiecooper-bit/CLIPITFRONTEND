@@ -34,6 +34,10 @@ export const clipitTheme = defineTheme({
     "--color-border": ["#1113171a", "#f4f4f51a"],
     "--color-border-emphasized": ["#8b8b93", "#5d5d66"],
     "--color-text-primary": ["#111113", "#f4f4f5"],
+    // Like the backgrounds: the amber seed tints the generated grays warm,
+    // and secondary text came out beige on our cool near-black. Pinned to
+    // the zinc family so quiet text is gray, not tan.
+    "--color-text-secondary": ["#52525b", "#a1a1aa"],
     // Interface type is Geist, loaded by next/font in the root layout.
     "--font-family-body": "var(--font-geist-sans), system-ui, sans-serif",
     "--font-family-heading": "var(--font-geist-sans), system-ui, sans-serif",
@@ -42,7 +46,7 @@ export const clipitTheme = defineTheme({
     // tight the way the reference's headline is. It appears nowhere in the
     // app's chrome, so the app's heading scale is untouched.
     "--text-display-1-size": "clamp(2.6rem, 5vw, 4.25rem)",
-    "--text-display-1-weight": "600",
+    "--text-display-1-weight": "var(--font-weight-semibold)",
     "--text-display-1-leading": "1.02",
   },
   components: {

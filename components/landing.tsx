@@ -57,18 +57,11 @@ const RIBBON: Array<{
   fade: number
   scene: Scene
 }> = [
-  // Cropped by the top edge and washed out, as the reference's corner photo is.
+  // Four stills, like the reference's handful — the run starts below the
+  // header so nothing ever collides with Sign in, sweeps a gentle S down
+  // the right edge, and the last one is cropped by the screen's corner.
   {
-    y: "-9%", x: "58%", rotate: 5, fade: 0.45,
-    scene: {
-      sky: "linear-gradient(to bottom, #bfe3ec, #e6f1f2)",
-      horizon: 52,
-      ground: "linear-gradient(to bottom, #6fb0c2, #2f6a7d)",
-      sun: { x: 72, y: 26, size: 16, color: "rgba(255,252,230,.95)" },
-    },
-  },
-  {
-    y: "-1%", x: "46%", rotate: 3, fade: 1,
+    y: "10%", x: "48%", rotate: 3, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #6fb2dd, #bfdcee)",
       horizon: 46,
@@ -76,7 +69,7 @@ const RIBBON: Array<{
     },
   },
   {
-    y: "11.5%", x: "33%", rotate: -2, fade: 1,
+    y: "32%", x: "24%", rotate: -3, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #f9c072 0%, #ec8347 45%, #c25a5c 100%)",
       horizon: 62,
@@ -86,7 +79,7 @@ const RIBBON: Array<{
   },
   // Night street: the dark frame in the run, kept legible by its own lights.
   {
-    y: "24%", x: "20%", rotate: -5, fade: 1,
+    y: "54%", x: "38%", rotate: 2, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #2b3a52, #141b28)",
       horizon: 70,
@@ -96,38 +89,12 @@ const RIBBON: Array<{
     },
   },
   {
-    y: "36.5%", x: "14%", rotate: -3, fade: 1,
-    scene: {
-      sky: "linear-gradient(to bottom, #16323c, #0e232b)",
-      horizon: 44,
-      ground: "linear-gradient(to bottom, #3f8f6a 0%, #276a4d 60%, #17422f 100%)",
-      beam: "radial-gradient(50% 62% at 50% 0%, rgba(255,252,225,.75), transparent 70%)",
-    },
-  },
-  {
-    y: "49%", x: "25%", rotate: 2, fade: 1,
+    y: "78%", x: "58%", rotate: 5, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #4f4d9e 0%, #8f6a9c 52%, #e79b6c 100%)",
       horizon: 74,
       ground: "linear-gradient(to bottom, #3b2a3a, #1c1419)",
       skyline: [[2, 12, 40], [16, 8, 26], [26, 14, 52], [42, 9, 32], [54, 16, 46], [72, 11, 30], [86, 13, 42]],
-    },
-  },
-  {
-    y: "61.5%", x: "45%", rotate: 5, fade: 1,
-    scene: {
-      sky: "linear-gradient(to bottom, #4a3120, #23181a)",
-      beam: "radial-gradient(42% 78% at 50% 0%, rgba(255,198,98,.9), transparent 66%)",
-      crowd: true,
-    },
-  },
-  // Cropped by the bottom edge and washed out, closing the run.
-  {
-    y: "84%", x: "70%", rotate: 7, fade: 0.35,
-    scene: {
-      sky: "linear-gradient(to bottom, #7e93a6, #35424e)",
-      horizon: 58,
-      ground: "linear-gradient(to bottom, #46586a, #1b232c)",
     },
   },
 ]
@@ -246,7 +213,7 @@ export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
                 initial={{ opacity: 0, y: 26, rotate: still.rotate * 1.8 }}
                 animate={{ opacity: still.fade, y: 0, rotate: still.rotate }}
                 transition={{ duration: 0.8, ease: EASE, delay: 0.12 + index * 0.075 }}
-                className="absolute w-[16rem]"
+                className="absolute w-[17rem]"
                 style={{ left: still.x, top: still.y, zIndex: index + 1 }}
               >
                 <div className="relative aspect-video w-full overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.55)] ring-1 ring-white/15">
@@ -278,22 +245,13 @@ export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
             <Heading level={1} type="display-1" className="tracking-tighter">
               <span className="lg:whitespace-nowrap">Describe the moment</span>
               <br />
-              <span className="text-foreground/50">get the clip</span>
+              <Text type="inherit" color="secondary">get the clip</Text>
             </Heading>
-            <div className="mt-7 max-w-lg">
-              <Text as="p" type="body" size="lg" color="secondary">
-                The future of clipping. Ask a long video for moments the way you'd ask a person —
-                CLIPIT watches it once, answers in seconds, and cuts post-ready MP4s.
-              </Text>
-            </div>
-            <div className="mt-9">
-              <Button label="Start clipping" variant="primary" size="lg" href="/start" />
-            </div>
-            <div className="mt-4">
-              <Text as="p" type="supporting">
-                No account needed to try it.
-              </Text>
-            </div>
+            <Text as="p" type="body" size="lg" color="secondary" display="block" className="mt-7 max-w-lg">
+              The future of clipping. Ask a long video for moments the way you'd ask a person —
+              CLIPIT watches it once, answers in seconds, and cuts post-ready MP4s.
+            </Text>
+            <Button label="Start clipping" variant="primary" size="lg" href="/start" className="mt-9" />
           </motion.div>
         </div>
 
