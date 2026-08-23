@@ -14,6 +14,7 @@ import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 
 /**
  * Everything you have cut, newest first — chrome on Astryx, clips
@@ -191,57 +192,15 @@ export default function ClipsPage() {
               <VStack gap={4} align="stretch">
                 <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
                 {clips.map((clip) => (
-                  <div key={clip.id} className="overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10">
-                    {playingId === clip.id && clip.url ? (
-                      <video src={clip.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setPlayingId(clip.id)}
-                        disabled={!clip.url}
-                        aria-label={`Play: ${clip.description}`}
-                        className="group relative block aspect-video w-full bg-black/60 disabled:cursor-default"
-                      >
-                        {clip.thumbnailUrl && (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img src={clip.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                        )}
-                        {clip.url && (
-                          <span className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/25 transition-transform group-hover:scale-105">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                              <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
-                            </svg>
-                          </span>
-                        )}
-                      </button>
-                    )}
-
-                    <div className="flex flex-col gap-2 p-3">
-                      <p className="line-clamp-2 min-h-[2.5rem] text-[13.5px] leading-snug text-foreground/85">
-                        {clip.description || "A moment from your video"}
-                      </p>
-                      <p className="truncate text-[12px] text-foreground/40">
-                        <span className="font-mono tabular-nums">
-                          {clip.startTimecode} – {clip.endTimecode}
-                        </span>
-                        {clip.videoTitle ? ` · ${clip.videoTitle}` : ""}
-                        {` · ${new Date(clip.createdAt).toLocaleDateString()}`}
-                      </p>
-                      <HStack gap={2} align="center" wrap="wrap">
-                        {clip.downloadUrl && (
-                          /* A plain anchor with `download`, not a routed link:
-                             the browser must save the signed file directly. */
-                          <a
-                            href={clip.downloadUrl}
-                            download
-                            className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                              <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
-                            </svg>
-                            Download
-                          </a>
-                        )}
+                  <ClipCard
+                    key={clip.id}
+                    clip={clip}
+                    isPlaying={playingId === clip.id}
+                    onPlay={() => setPlayingId(clip.id)}
+                    showDate
+                    actions={
+                      <>
+                        {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
                         {clip.status === "ready" && (
                           <Popover
                             isOpen={publishOpenId === clip.id}
@@ -332,9 +291,9 @@ export default function ClipsPage() {
                             <Button label="Send to workspace" variant="secondary" size="sm" />
                           </Popover>
                         )}
-                      </HStack>
-                    </div>
-                  </div>
+                      </>
+                    }
+                  />
                 ))}
                 </Grid>
                 {nextBefore && (
