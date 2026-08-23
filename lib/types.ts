@@ -181,6 +181,19 @@ export interface ClipRequest {
   matches?: ClipMatch[]
 }
 
+/** One piece of text burned onto a clip: what, how, and where. */
+export interface ClipCaption {
+  text: string
+  font: "sans" | "serif" | "mono" | "bold"
+  /** Text height as % of the video's height. */
+  sizePct: number
+  /** #rrggbb. */
+  color: string
+  /** Vertical centre as % of the video's height. */
+  yPct: number
+  outline: boolean
+}
+
 export interface Clip {
   id: string
   videoId: string
@@ -194,6 +207,11 @@ export interface Clip {
   durationSeconds: number | null
   sizeBytes: number | null
   url: string | null
+  /** The caption spec this render carries, so the editor starts from it. */
+  captions?: ClipCaption[] | null
+  derivedFromClipId?: string | null
+  /** Only the person who cut a clip may replace it in place. */
+  canReplace?: boolean
   /** Signed with an attachment disposition so the browser saves rather than plays. */
   downloadUrl: string | null
   urlExpiresAt: string | null
