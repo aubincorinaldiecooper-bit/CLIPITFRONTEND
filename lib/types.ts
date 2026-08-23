@@ -227,3 +227,38 @@ export interface SocialAccountsPage {
   signInRequired: boolean
   accounts: SocialAccount[]
 }
+
+/** A person in the caller's workspace. */
+export interface TeamMember {
+  userId: string
+  email: string | null
+  role: "owner" | "member"
+  joinedAt: string
+  isYou: boolean
+}
+
+/** An invitation that has been sent and not yet accepted. */
+export interface TeamInvite {
+  id: string
+  email: string
+  invitedAt: string
+  expiresAt: string
+}
+
+export interface TeamPage {
+  /** True for a guest: a team belongs to a person, never to a browser tab. */
+  signInRequired: boolean
+  workspace: { id: string; name: string; isOwner: boolean } | null
+  members: TeamMember[]
+  /** Only the owner sees pending invitations. */
+  invites: TeamInvite[]
+  /** False when no email service is configured: links must be copied by hand. */
+  emailConfigured?: boolean
+}
+
+/** What an invitation link is for, read without spending it. */
+export interface InvitePreview {
+  valid: boolean
+  workspaceName: string | null
+  email: string | null
+}

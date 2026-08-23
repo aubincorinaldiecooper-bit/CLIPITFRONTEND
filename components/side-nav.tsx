@@ -26,7 +26,7 @@ import {
 
 const COLLAPSED_KEY = "clipit.nav.collapsed"
 
-export type NavDestination = "home" | "start" | "clips" | "publishing"
+export type NavDestination = "home" | "start" | "clips" | "publishing" | "team"
 
 /** Width/height come last so Astryx's sizing wins when it passes its own. */
 const HomeGlyph = (props: SVGProps<SVGSVGElement>) => (
@@ -60,6 +60,14 @@ const BroadcastGlyph = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
+const TeamGlyph = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden width={18} height={18} {...props}>
+    <path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19" />
+    <circle cx="10" cy="8" r="3.2" />
+    <path d="M20 19v-1.5a3.5 3.5 0 0 0-2.6-3.38M15.6 5.2a3.2 3.2 0 0 1 0 5.6" />
+  </svg>
+)
+
 export const NAV_ITEMS: Array<{
   key: NavDestination
   label: string
@@ -70,6 +78,7 @@ export const NAV_ITEMS: Array<{
   { key: "start", label: "New clip", href: "/start", icon: ScissorsGlyph },
   { key: "clips", label: "Your clips", href: "/clips", icon: LibraryGlyph },
   { key: "publishing", label: "Publishing", href: "/publishing", icon: BroadcastGlyph },
+  { key: "team", label: "Team", href: "/team", icon: TeamGlyph },
 ]
 
 /**

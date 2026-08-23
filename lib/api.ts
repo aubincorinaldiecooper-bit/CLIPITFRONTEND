@@ -4,10 +4,13 @@ import type {
   Clip,
   ClipMatch,
   ClipRequest,
+  InvitePreview,
   LibraryClip,
   MatchFeedback,
   SocialAccount,
   SocialAccountsPage,
+  TeamInvite,
+  TeamPage,
   UploadTarget,
   Video,
 } from "./types"
@@ -368,5 +371,47 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     })
+  },
+
+  // --- Team ----------------------------------------------------------------
+
+  async getTeam(): Promise<TeamPage> {
+    return request("/api/workspace")
+  },
+
+  /**
+   * Invite someone. `emailed` is the truth about delivery — when it is false
+   * the invitation still exists and `acceptUrl` still works, so the link can
+   * be passed along by hand instead.
+   */
+  async inviteToTeam(
+    email: string,
+  ): Promise<{ invite: TeamInvite; emailed: boolean; emailProblem: string | null; acceptUrl: string }> {
+    return request("/api/workspace/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    })
+  },
+
+  async revokeInvite(inviteId: string): Promise<{ inviteId: string; revoked: boolean }> {
+    return request(`/api/workspace/invites/${encodeURIComponent(inviteId)}`, { method: "DELETE" })
+  },
+
+  /** Reads an invitation without spending it, so the /join page can explain. */
+  async previewInvite(token: string): Promise<InvitePreview> {
+    return request(`/api/workspace/invites/preview?invite=${encodeURIComponent(token)}`)
+  },
+
+  async acceptInvite(token: string): Promise<{ joined: boolean; workspace: TeamPage["workspace"] }> {
+    return request("/api/workspace/invites/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invite: token }),
+    })
+  },
+
+  async removeTeamMember(userId: string): Promise<{ removed: boolean }> {
+    return request(`/api/workspace/members/${encodeURIComponent(userId)}`, { method: "DELETE" })
   },
 }
