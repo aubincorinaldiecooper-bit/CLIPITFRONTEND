@@ -64,9 +64,21 @@ function CaptionEditor({ clipId }: { clipId: string }) {
   const [selected, setSelected] = useState(0)
   const [saving, setSaving] = useState<"new" | "replace" | null>(null)
   const [rendering, setRendering] = useState<string | null>(null)
+  /** The source's real shape, learned from the video itself; 16:9 until known. */
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null)
   const previewRef = useRef<HTMLDivElement | null>(null)
+  /** True while the editor is on screen; the render poll checks it so a
+   *  finished render never yanks someone off whatever page they went to. */
+  const aliveRef = useRef(true)
   const router = useRouter()
   const toast = useToast()
+
+  useEffect(() => {
+    aliveRef.current = true
+    return () => {
+      aliveRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -91,8 +103,10 @@ function CaptionEditor({ clipId }: { clipId: string }) {
   const waitForRender = async (targetId: string, mode: "new" | "replace") => {
     for (let attempt = 0; attempt < 48; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 2500))
+      if (!aliveRef.current) return
       try {
         const { clip: current } = await api.getClip(targetId)
+        if (!aliveRef.current) return
         if (current.status === "ready") {
           toast({
             body: mode === "new" ? "Saved — the captioned clip is in your library." : "Replaced — the clip now carries these captions.",
@@ -201,16 +215,30 @@ function CaptionEditor({ clipId }: { clipId: string }) {
         />
       )}
 
-      <div className="flex flex-wrap gap-6">
+      <HStack gap={6} align="start" wrap="wrap">
         {/* The preview: the media carve-out. Dynamic styles are the data —
             the user's own colour, size and position choices. */}
         <div
           ref={previewRef}
-          className="relative aspect-video w-full max-w-3xl shrink-0 overflow-hidden rounded-xl bg-black ring-1 ring-white/10"
-          style={{ containerType: "size" }}
+          className="relative w-full max-w-3xl shrink-0 overflow-hidden rounded-xl bg-black ring-1 ring-white/10"
+          style={{ containerType: "size", aspectRatio: aspectRatio ?? 16 / 9 }}
         >
           {clip.url && (
-            <video src={clip.url} controls playsInline className="absolute inset-0 h-full w-full" />
+            <video
+              src={clip.url}
+              controls
+              playsInline
+              onLoadedMetadata={(event) => {
+                const element = event.currentTarget
+                if (element.videoWidth && element.videoHeight) {
+                  // The frame takes the source's real shape, so portrait and
+                  // square footage preview exactly as they will render, and
+                  // caption positions mean the same thing in both places.
+                  setAspectRatio(element.videoWidth / element.videoHeight)
+                }
+              }}
+              className="absolute inset-0 h-full w-full"
+            />
           )}
           {captions.map((caption, index) => (
             <button
@@ -331,7 +359,7 @@ function CaptionEditor({ clipId }: { clipId: string }) {
             </VStack>
           )}
         </VStack>
-      </div>
+      </HStack>
     </VStack>
   )
 }
