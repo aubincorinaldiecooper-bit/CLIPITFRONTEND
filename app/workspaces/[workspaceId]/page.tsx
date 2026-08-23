@@ -273,9 +273,12 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
         <VStack gap={1.5}>
           <Heading level={1}>{page.workspace.name}</Heading>
           <Text as="p" type="supporting" display="block">
-            Clips people have sent here.
+            {page.workspace.isPersonal
+              ? "Your workspace — every clip you cut lives here. Create a workspace to share clips with people."
+              : "Clips people have sent here."}
           </Text>
         </VStack>
+        {!page.workspace.isPersonal && (
         <HStack gap={2} align="center">
           <Popover
             isOpen={peopleOpen}
@@ -302,12 +305,14 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
             </Popover>
           )}
         </HStack>
+        )}
       </HStack>
 
       {page.clips.length === 0 ? (
         <Text as="p" type="supporting" display="block">
-          Nothing here yet. In Your clips, every ready clip has a "Send to workspace" option — what
-          you send lands here for everyone in the room.
+          {page.workspace.isPersonal
+            ? "Nothing here yet — cut a moment from a video and it lands here."
+            : 'Nothing here yet. In Your clips, every ready clip has a "Send to workspace" option — what you send lands here for everyone in the room.'}
         </Text>
       ) : (
         <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
@@ -320,13 +325,19 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
               actions={
                 <>
                   {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
-                  <Button
-                    label="Take out"
-                    variant="secondary"
-                    size="sm"
-                    isLoading={busyId === clip.id}
-                    onClick={() => void takeOut(clip.id)}
-                  />
+                  {/* "Take out" removes a SHARE. The personal workspace holds
+                      the clips themselves — nothing was sent there, so there
+                      is nothing to take out, and offering it would be
+                      offering an operation that cannot apply. */}
+                  {!page.workspace.isPersonal && (
+                    <Button
+                      label="Take out"
+                      variant="secondary"
+                      size="sm"
+                      isLoading={busyId === clip.id}
+                      onClick={() => void takeOut(clip.id)}
+                    />
+                  )}
                 </>
               }
             />

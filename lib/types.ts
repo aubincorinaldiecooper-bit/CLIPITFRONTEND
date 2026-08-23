@@ -268,6 +268,8 @@ export interface WorkspaceSummary {
   id: string
   name: string
   isOwner: boolean
+  /** True for the first workspace: the one where all your clips live. */
+  isPersonal?: boolean
   memberCount: number
   clipCount: number
 }
@@ -283,7 +285,7 @@ export interface WorkspacesPage {
 
 /** One room: what is in it and who is in it. */
 export interface WorkspaceDetail {
-  workspace: { id: string; name: string; isOwner: boolean }
+  workspace: { id: string; name: string; isOwner: boolean; isPersonal?: boolean }
   members: TeamMember[]
   clips: LibraryClip[]
   /** Only the owner sees pending invitations. */
