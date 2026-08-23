@@ -17,10 +17,10 @@ import { AppShell } from "@/components/app-shell"
  * Where an invitation link lands.
  *
  * The token is read but not spent until someone presses Join, so a person can
- * see whose workspace they are being asked to share — and sign in first if
- * they need to — without burning a single-use link. What joining means is
- * stated before the button, not after: the same library, the same connected
- * accounts.
+ * see which room they are being asked into — and sign in first if they need
+ * to — without burning a single-use link. What joining means is stated before
+ * the button, not after: you see what is sent to the room, and your own
+ * library stays yours.
  */
 
 function JoinBody() {
@@ -61,7 +61,7 @@ function JoinBody() {
       // Already a member: the invitation was not spent, and saying "you're
       // in" would be true but confusing. Say which it was.
       setAlready(Boolean(result.alreadyMember))
-      router.push("/team")
+      router.push("/workspaces")
     } catch (cause) {
       // The API's refusals are already written for people — "sign in first",
       // "that invitation has expired" — so repeat them rather than rephrase.
@@ -100,16 +100,15 @@ function JoinBody() {
         <Banner
           status="success"
           title={already ? "You're already in this workspace" : "You're in"}
-          description="Taking you to the team…"
+          description="Taking you to your workspaces…"
         />
       )}
       <Text as="p" type="body" display="block">
         You've been invited to join <strong>{preview.workspaceName}</strong> on CLIPIT.
       </Text>
       <Text as="p" type="supporting" display="block">
-        Joining means you share this workspace's videos and clips, and can publish to its connected
-        accounts. Anything you already have stays exactly where it is — you can switch back to your own
-        workspace, or any other team, whenever you like.
+        Joining means you see the clips people send to this workspace, and you can send clips there
+        from your own library. Your library itself stays yours — joining shares nothing automatically.
       </Text>
       <Text as="p" type="supporting" display="block">
         You'll need to be signed in as the person accepting — use Sign in at the top right first if you
@@ -122,7 +121,7 @@ function JoinBody() {
 
 export default function JoinPage() {
   return (
-    <AppShell active="team">
+    <AppShell active="workspaces">
       <Layout height="auto" contentWidth={560}>
         <LayoutContent padding={6}>
           <VStack gap={4} align="stretch">

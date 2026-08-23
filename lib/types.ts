@@ -245,25 +245,31 @@ export interface TeamInvite {
   expiresAt: string
 }
 
-/** One room a person belongs to. */
+/** One shared room a person belongs to, as the Workspaces list shows it. */
 export interface WorkspaceSummary {
   id: string
   name: string
   isOwner: boolean
-  isActive: boolean
+  memberCount: number
+  clipCount: number
 }
 
-export interface TeamPage {
-  /** True for a guest: a team belongs to a person, never to a browser tab. */
+/** The rooms a person is in. */
+export interface WorkspacesPage {
+  /** True for a guest: a workspace belongs to a person, never to a tab. */
   signInRequired: boolean
-  /** The room they are working in — whose library and accounts they see. */
-  workspace: { id: string; name: string; isOwner: boolean } | null
-  /** Every room they belong to, so they can switch between them. */
   workspaces: WorkspaceSummary[]
+  /** False when no email service is configured: links must be copied by hand. */
+  emailConfigured?: boolean
+}
+
+/** One room: what is in it and who is in it. */
+export interface WorkspaceDetail {
+  workspace: { id: string; name: string; isOwner: boolean }
   members: TeamMember[]
+  clips: LibraryClip[]
   /** Only the owner sees pending invitations. */
   invites: TeamInvite[]
-  /** False when no email service is configured: links must be copied by hand. */
   emailConfigured?: boolean
 }
 

@@ -10,7 +10,9 @@ import type {
   SocialAccount,
   SocialAccountsPage,
   TeamInvite,
-  TeamPage,
+  WorkspaceDetail,
+  WorkspaceSummary,
+  WorkspacesPage,
   UploadTarget,
   Video,
 } from "./types"
@@ -373,10 +375,45 @@ export const api = {
     })
   },
 
-  // --- Team ----------------------------------------------------------------
+  // --- Workspaces -----------------------------------------------------------
 
-  async getTeam(): Promise<TeamPage> {
-    return request("/api/workspace")
+  async listWorkspaces(): Promise<WorkspacesPage> {
+    return request("/api/workspaces")
+  },
+
+  async createWorkspace(name: string): Promise<{ workspace: WorkspaceSummary }> {
+    return request("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+  },
+
+  async getWorkspace(workspaceId: string): Promise<WorkspaceDetail> {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}`)
+  },
+
+  /** Send a clip to a room. It stays in the library too — a share, not a move. */
+  async sendClipToWorkspace(workspaceId: string, clipId: string): Promise<{ shared: boolean }> {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/clips`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipId }),
+    })
+  },
+
+  async removeClipFromWorkspace(workspaceId: string, clipId: string): Promise<{ removed: boolean }> {
+    return request(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/clips/${encodeURIComponent(clipId)}`,
+      { method: "DELETE" },
+    )
+  },
+
+  /** Where a clip can be sent, and where it already is. */
+  async getClipWorkspaces(
+    clipId: string,
+  ): Promise<{ workspaces: Array<{ id: string; name: string }>; sharedWith: string[] }> {
+    return request(`/api/clips/${encodeURIComponent(clipId)}/workspaces`)
   },
 
   /**
@@ -384,18 +421,22 @@ export const api = {
    * the invitation still exists and `acceptUrl` still works, so the link can
    * be passed along by hand instead.
    */
-  async inviteToTeam(
+  async inviteToWorkspace(
+    workspaceId: string,
     email: string,
   ): Promise<{ invite: TeamInvite; emailed: boolean; emailProblem: string | null; acceptUrl: string }> {
-    return request("/api/workspace/invites", {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/invites`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     })
   },
 
-  async revokeInvite(inviteId: string): Promise<{ inviteId: string; revoked: boolean }> {
-    return request(`/api/workspace/invites/${encodeURIComponent(inviteId)}`, { method: "DELETE" })
+  async revokeInvite(workspaceId: string, inviteId: string): Promise<{ inviteId: string; revoked: boolean }> {
+    return request(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/invites/${encodeURIComponent(inviteId)}`,
+      { method: "DELETE" },
+    )
   },
 
   /** Reads an invitation without spending it, so the /join page can explain. */
@@ -403,23 +444,9 @@ export const api = {
     return request(`/api/workspace/invites/preview?invite=${encodeURIComponent(token)}`)
   },
 
-  /** Switch the room everything else in the app reads from. */
-  async switchWorkspace(workspaceId: string): Promise<{ workspace: TeamPage["workspace"] }> {
-    return request("/api/workspace/active", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workspaceId }),
-    })
-  },
-
-  /** Leave a team. Owners cannot leave their own room. */
-  async leaveWorkspace(workspaceId: string): Promise<{ left: boolean; workspace: TeamPage["workspace"] }> {
-    return request(`/api/workspace/members/me/${encodeURIComponent(workspaceId)}`, { method: "DELETE" })
-  },
-
   async acceptInvite(
     token: string,
-  ): Promise<{ joined: boolean; alreadyMember?: boolean; workspace: TeamPage["workspace"] }> {
+  ): Promise<{ joined: boolean; alreadyMember?: boolean; workspace: { id: string; name: string } | null }> {
     return request("/api/workspace/invites/accept", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -427,7 +454,15 @@ export const api = {
     })
   },
 
-  async removeTeamMember(userId: string): Promise<{ removed: boolean }> {
-    return request(`/api/workspace/members/${encodeURIComponent(userId)}`, { method: "DELETE" })
+  async removeWorkspaceMember(workspaceId: string, userId: string): Promise<{ removed: boolean }> {
+    return request(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    )
+  },
+
+  /** Leave a room. Owners cannot leave their own. */
+  async leaveWorkspace(workspaceId: string): Promise<{ left: boolean }> {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/members/me`, { method: "DELETE" })
   },
 }

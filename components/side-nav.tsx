@@ -26,7 +26,7 @@ import {
 
 const COLLAPSED_KEY = "clipit.nav.collapsed"
 
-export type NavDestination = "home" | "start" | "clips" | "publishing" | "team"
+export type NavDestination = "home" | "start" | "clips" | "publishing" | "workspaces"
 
 /** Width/height come last so Astryx's sizing wins when it passes its own. */
 const HomeGlyph = (props: SVGProps<SVGSVGElement>) => (
@@ -78,7 +78,7 @@ export const NAV_ITEMS: Array<{
   { key: "start", label: "New clip", href: "/start", icon: ScissorsGlyph },
   { key: "clips", label: "Your clips", href: "/clips", icon: LibraryGlyph },
   { key: "publishing", label: "Publishing", href: "/publishing", icon: BroadcastGlyph },
-  { key: "team", label: "Team", href: "/team", icon: TeamGlyph },
+  { key: "workspaces", label: "Workspaces", href: "/workspaces", icon: TeamGlyph },
 ]
 
 /**

@@ -94,6 +94,57 @@ export default function ClipsPage() {
     }
   }
 
+  /**
+   * The Send-to-workspace control: per clip, a popover listing the rooms the
+   * caller is in, saying which already have it. Rooms are fetched when the
+   * popover opens — the list is tiny and always current.
+   */
+  const [sendOpenId, setSendOpenId] = useState<string | null>(null)
+  const sendOpenIdRef = useRef<string | null>(null)
+  const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
+  const [sharedWith, setSharedWith] = useState<string[]>([])
+  const [sendingTo, setSendingTo] = useState<string | null>(null)
+
+  const setSendTarget = (id: string | null) => {
+    sendOpenIdRef.current = id
+    setSendOpenId(id)
+  }
+
+  const openSend = (clipId: string) => {
+    setRooms(null)
+    setSharedWith([])
+    setSendTarget(clipId)
+    void api
+      .getClipWorkspaces(clipId)
+      .then((result) => {
+        // Still this clip's popover? Someone may have moved on mid-fetch.
+        if (sendOpenIdRef.current !== clipId) return
+        setRooms(result.workspaces)
+        setSharedWith(result.sharedWith)
+      })
+      .catch(() => {
+        if (sendOpenIdRef.current !== clipId) return
+        setRooms([])
+      })
+  }
+
+  const sendTo = async (clipId: string, workspaceId: string, name: string) => {
+    if (sendingTo) return
+    setSendingTo(workspaceId)
+    try {
+      await api.sendClipToWorkspace(workspaceId, clipId)
+      toast({ body: `Sent to ${name}. It stays in your library too.` })
+      setSharedWith((current) => (current.includes(workspaceId) ? current : [...current, workspaceId]))
+    } catch (cause) {
+      toast({
+        type: "error",
+        body: cause instanceof ApiError ? cause.message : "Couldn't send that clip. Try again.",
+      })
+    } finally {
+      setSendingTo(null)
+    }
+  }
+
   const loadOlder = async () => {
     if (!nextBefore || loadingMore) return
     setLoadingMore(true)
@@ -228,6 +279,57 @@ export default function ClipsPage() {
                             }
                           >
                             <Button label="Publish" variant="secondary" size="sm" />
+                          </Popover>
+                        )}
+                        {clip.status === "ready" && (
+                          <Popover
+                            isOpen={sendOpenId === clip.id}
+                            onOpenChange={(open) => {
+                              if (open) {
+                                openSend(clip.id)
+                              } else if (sendOpenIdRef.current === clip.id) {
+                                setSendTarget(null)
+                              }
+                            }}
+                            placement="below"
+                            width={280}
+                            label="Send this clip to a workspace"
+                            // The list is all buttons; without an input to
+                            // take auto-focus, the hidden accessibility close
+                            // button is focused first and pops visible below
+                            // the menu. Light dismiss and Escape both remain.
+                            hasCloseButton={false}
+                            content={
+                              rooms === null ? (
+                                <Skeleton height={60} radius={2} />
+                              ) : rooms.length === 0 ? (
+                                <Text as="p" type="supporting" display="block">
+                                  You're not in any shared workspace yet. Make one on the Workspaces
+                                  page, then send clips there.
+                                </Text>
+                              ) : (
+                                <VStack gap={1} align="stretch">
+                                  {rooms.map((room) =>
+                                    sharedWith.includes(room.id) ? (
+                                      <Text key={room.id} as="p" type="supporting" display="block">
+                                        ✓ Already in {room.name}
+                                      </Text>
+                                    ) : (
+                                      <Button
+                                        key={room.id}
+                                        label={`Send to ${room.name}`}
+                                        variant="secondary"
+                                        size="sm"
+                                        isLoading={sendingTo === room.id}
+                                        onClick={() => void sendTo(clip.id, room.id, room.name)}
+                                      />
+                                    ),
+                                  )}
+                                </VStack>
+                              )
+                            }
+                          >
+                            <Button label="Send to workspace" variant="secondary" size="sm" />
                           </Popover>
                         )}
                       </HStack>
