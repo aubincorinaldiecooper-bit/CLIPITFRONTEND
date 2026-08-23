@@ -33,6 +33,7 @@ function JoinBody() {
   const [joining, setJoining] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [joined, setJoined] = useState(false)
+  const [already, setAlready] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -55,12 +56,15 @@ function JoinBody() {
     setProblem(null)
     setJoining(true)
     try {
-      await api.acceptInvite(token)
+      const result = await api.acceptInvite(token)
       setJoined(true)
+      // Already a member: the invitation was not spent, and saying "you're
+      // in" would be true but confusing. Say which it was.
+      setAlready(Boolean(result.alreadyMember))
       router.push("/team")
     } catch (cause) {
       // The API's refusals are already written for people — "sign in first",
-      // "already in a workspace with other people" — so repeat them.
+      // "that invitation has expired" — so repeat them rather than rephrase.
       setProblem(cause instanceof ApiError ? cause.message : "Couldn't join just now. Try again.")
       setJoining(false)
     }
@@ -93,15 +97,23 @@ function JoinBody() {
     <VStack gap={4} align="start">
       {problem && <Banner status="error" title="Couldn't join" description={problem} />}
       {joined && (
-        <Banner status="success" title="You're in" description="Taking you to the team…" />
+        <Banner
+          status="success"
+          title={already ? "You're already in this workspace" : "You're in"}
+          description="Taking you to the team…"
+        />
       )}
       <Text as="p" type="body" display="block">
         You've been invited to join <strong>{preview.workspaceName}</strong> on CLIPIT.
       </Text>
       <Text as="p" type="supporting" display="block">
-        Joining means you share the same videos and clips, and can publish to the same connected accounts.
+        Joining means you share this workspace's videos and clips, and can publish to its connected
+        accounts. Anything you already have stays exactly where it is — you can switch back to your own
+        workspace, or any other team, whenever you like.
+      </Text>
+      <Text as="p" type="supporting" display="block">
         You'll need to be signed in as the person accepting — use Sign in at the top right first if you
-        aren't.
+        aren't. You'll come straight back here.
       </Text>
       <Button label="Join the workspace" variant="primary" isLoading={joining} onClick={() => void join()} />
     </VStack>

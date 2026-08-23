@@ -54,7 +54,7 @@ function TeamBody() {
         // A backend without this endpoint yet is "teams aren't switched on
         // here", not a loading failure.
         if (cause instanceof ApiError && cause.status === 404) {
-          setPage({ signInRequired: false, workspace: null, members: [], invites: [] })
+          setPage({ signInRequired: false, workspace: null, workspaces: [], members: [], invites: [] })
         } else {
           setFailed(true)
         }
@@ -128,6 +128,38 @@ function TeamBody() {
     }
   }
 
+  const switchTo = async (workspaceId: string, name: string) => {
+    setBusyId(workspaceId)
+    try {
+      await api.switchWorkspace(workspaceId)
+      toast({ body: `You're now working in ${name}.` })
+      // Everything else on the site reads the room from the server, so the
+      // whole app follows — a reload is the honest way to show that.
+      window.location.reload()
+    } catch (cause) {
+      toast({
+        type: "error",
+        body: cause instanceof ApiError ? cause.message : "Couldn't switch workspace.",
+      })
+      setBusyId(null)
+    }
+  }
+
+  const leave = async (workspaceId: string, name: string) => {
+    setBusyId(workspaceId)
+    try {
+      await api.leaveWorkspace(workspaceId)
+      toast({ body: `You've left ${name}.` })
+      window.location.reload()
+    } catch (cause) {
+      toast({
+        type: "error",
+        body: cause instanceof ApiError ? cause.message : "Couldn't leave that workspace.",
+      })
+      setBusyId(null)
+    }
+  }
+
   if (failed) {
     return <p className="text-sm text-error">Couldn't load your team. Refresh to try again.</p>
   }
@@ -155,8 +187,51 @@ function TeamBody() {
     <VStack gap={5} align="stretch">
       {formError && <Banner status="error" title="That didn't work" description={formError} />}
 
+      {/* Only worth showing once there is a choice to make. */}
+      {page.workspaces.length > 1 && (
+        <VStack gap={2} align="stretch">
+          <Heading level={2}>Your workspaces</Heading>
+          <Text as="p" type="supporting" display="block">
+            You work in one at a time. Switching changes which videos, clips and connected accounts you see.
+          </Text>
+          <List hasDividers>
+            {page.workspaces.map((room) => (
+              <ListItem
+                key={room.id}
+                label={room.name}
+                description={
+                  (room.isOwner ? "Yours" : "Joined") + (room.isActive ? " — you're working here" : "")
+                }
+                endContent={
+                  <HStack gap={2} align="center">
+                    {!room.isActive && (
+                      <Button
+                        label="Switch to"
+                        variant="secondary"
+                        size="sm"
+                        isLoading={busyId === room.id}
+                        onClick={() => void switchTo(room.id, room.name)}
+                      />
+                    )}
+                    {!room.isOwner && (
+                      <Button
+                        label="Leave"
+                        variant="ghost"
+                        size="sm"
+                        isLoading={busyId === room.id}
+                        onClick={() => void leave(room.id, room.name)}
+                      />
+                    )}
+                  </HStack>
+                }
+              />
+            ))}
+          </List>
+        </VStack>
+      )}
+
       <VStack gap={2} align="stretch">
-        <Heading level={2}>People</Heading>
+        <Heading level={2}>People in {page.workspace.name}</Heading>
         <List hasDividers>
           {page.members.map((member) => (
             <ListItem
@@ -194,6 +269,9 @@ function TeamBody() {
                 label="Email address"
                 isLabelHidden
                 type="email"
+                // Required so an empty Send is answered by the browser's own
+                // validation, rather than a button that appears to do nothing.
+                isRequired
                 value={email}
                 onChange={(value) => setEmail(value)}
                 placeholder="teammate@example.com"
@@ -202,14 +280,27 @@ function TeamBody() {
             </HStack>
           </form>
 
-          {linkToShare && (
-            <Banner
-              status="warning"
-              title={`Pass this link to ${linkToShare.email}`}
-              description={linkToShare.url}
-            />
-          )}
-
+          {/* Both states are the same two lines tall, so pressing Send never
+              pushes the rows below it down — and the space is never dead,
+              because the helper text lives in it until a link replaces it. */}
+          <VStack gap={0.5} align="stretch" className="min-h-[3.25rem]">
+            {linkToShare ? (
+              <>
+                <Text as="p" type="supporting" display="block" className="text-warning">
+                  Email couldn't be sent — pass this link to {linkToShare.email}:
+                </Text>
+                {/* A long URL scrolls inside its own line rather than
+                    widening the page. */}
+                <Text as="p" type="supporting" display="block" className="overflow-x-auto whitespace-nowrap">
+                  {linkToShare.url}
+                </Text>
+              </>
+            ) : (
+              <Text as="p" type="supporting" display="block">
+                They'll get an email with a link that works once and expires in seven days.
+              </Text>
+            )}
+          </VStack>
         </VStack>
       ) : (
         <Text as="p" type="supporting" display="block">

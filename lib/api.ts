@@ -403,7 +403,23 @@ export const api = {
     return request(`/api/workspace/invites/preview?invite=${encodeURIComponent(token)}`)
   },
 
-  async acceptInvite(token: string): Promise<{ joined: boolean; workspace: TeamPage["workspace"] }> {
+  /** Switch the room everything else in the app reads from. */
+  async switchWorkspace(workspaceId: string): Promise<{ workspace: TeamPage["workspace"] }> {
+    return request("/api/workspace/active", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId }),
+    })
+  },
+
+  /** Leave a team. Owners cannot leave their own room. */
+  async leaveWorkspace(workspaceId: string): Promise<{ left: boolean; workspace: TeamPage["workspace"] }> {
+    return request(`/api/workspace/members/me/${encodeURIComponent(workspaceId)}`, { method: "DELETE" })
+  },
+
+  async acceptInvite(
+    token: string,
+  ): Promise<{ joined: boolean; alreadyMember?: boolean; workspace: TeamPage["workspace"] }> {
     return request("/api/workspace/invites/accept", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

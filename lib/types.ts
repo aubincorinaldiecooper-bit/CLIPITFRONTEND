@@ -245,10 +245,21 @@ export interface TeamInvite {
   expiresAt: string
 }
 
+/** One room a person belongs to. */
+export interface WorkspaceSummary {
+  id: string
+  name: string
+  isOwner: boolean
+  isActive: boolean
+}
+
 export interface TeamPage {
   /** True for a guest: a team belongs to a person, never to a browser tab. */
   signInRequired: boolean
+  /** The room they are working in — whose library and accounts they see. */
   workspace: { id: string; name: string; isOwner: boolean } | null
+  /** Every room they belong to, so they can switch between them. */
+  workspaces: WorkspaceSummary[]
   members: TeamMember[]
   /** Only the owner sees pending invitations. */
   invites: TeamInvite[]
