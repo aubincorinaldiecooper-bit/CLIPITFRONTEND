@@ -1,8 +1,11 @@
 "use client"
 
 import { useEffect } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Text } from "@astryxdesign/core/Text"
+import { AccountControl } from "@/components/account-control"
 import { motion } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 
@@ -54,18 +57,11 @@ const RIBBON: Array<{
   fade: number
   scene: Scene
 }> = [
-  // Cropped by the top edge and washed out, as the reference's corner photo is.
+  // Four stills, like the reference's handful — the run starts below the
+  // header so nothing ever collides with Sign in, sweeps a gentle S down
+  // the right edge, and the last one is cropped by the screen's corner.
   {
-    y: "-9%", x: "58%", rotate: 5, fade: 0.45,
-    scene: {
-      sky: "linear-gradient(to bottom, #bfe3ec, #e6f1f2)",
-      horizon: 52,
-      ground: "linear-gradient(to bottom, #6fb0c2, #2f6a7d)",
-      sun: { x: 72, y: 26, size: 16, color: "rgba(255,252,230,.95)" },
-    },
-  },
-  {
-    y: "-1%", x: "46%", rotate: 3, fade: 1,
+    y: "10%", x: "48%", rotate: 3, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #6fb2dd, #bfdcee)",
       horizon: 46,
@@ -73,7 +69,7 @@ const RIBBON: Array<{
     },
   },
   {
-    y: "11.5%", x: "33%", rotate: -2, fade: 1,
+    y: "32%", x: "24%", rotate: -3, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #f9c072 0%, #ec8347 45%, #c25a5c 100%)",
       horizon: 62,
@@ -83,7 +79,7 @@ const RIBBON: Array<{
   },
   // Night street: the dark frame in the run, kept legible by its own lights.
   {
-    y: "24%", x: "20%", rotate: -5, fade: 1,
+    y: "54%", x: "38%", rotate: 2, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #2b3a52, #141b28)",
       horizon: 70,
@@ -93,38 +89,12 @@ const RIBBON: Array<{
     },
   },
   {
-    y: "36.5%", x: "14%", rotate: -3, fade: 1,
-    scene: {
-      sky: "linear-gradient(to bottom, #16323c, #0e232b)",
-      horizon: 44,
-      ground: "linear-gradient(to bottom, #3f8f6a 0%, #276a4d 60%, #17422f 100%)",
-      beam: "radial-gradient(50% 62% at 50% 0%, rgba(255,252,225,.75), transparent 70%)",
-    },
-  },
-  {
-    y: "49%", x: "25%", rotate: 2, fade: 1,
+    y: "78%", x: "58%", rotate: 5, fade: 1,
     scene: {
       sky: "linear-gradient(to bottom, #4f4d9e 0%, #8f6a9c 52%, #e79b6c 100%)",
       horizon: 74,
       ground: "linear-gradient(to bottom, #3b2a3a, #1c1419)",
       skyline: [[2, 12, 40], [16, 8, 26], [26, 14, 52], [42, 9, 32], [54, 16, 46], [72, 11, 30], [86, 13, 42]],
-    },
-  },
-  {
-    y: "61.5%", x: "45%", rotate: 5, fade: 1,
-    scene: {
-      sky: "linear-gradient(to bottom, #4a3120, #23181a)",
-      beam: "radial-gradient(42% 78% at 50% 0%, rgba(255,198,98,.9), transparent 66%)",
-      crowd: true,
-    },
-  },
-  // Cropped by the bottom edge and washed out, closing the run.
-  {
-    y: "84%", x: "70%", rotate: 7, fade: 0.35,
-    scene: {
-      sky: "linear-gradient(to bottom, #7e93a6, #35424e)",
-      horizon: 58,
-      ground: "linear-gradient(to bottom, #46586a, #1b232c)",
     },
   },
 ]
@@ -202,11 +172,17 @@ function SceneFrame({ scene }: { scene: Scene }) {
 }
 
 /**
+ * The traditional journey, on purpose: the header's right corner is where
+ * returning people sign in (the same Astryx panel the app uses, opening in
+ * place), and the hero carries exactly one call to action — Start clipping.
+ * Two buttons to the same door confused the journey; now each door appears
+ * once, where convention says it lives.
+ *
  * Sign in is offered only where it exists — a guest-only deployment renders
- * no sign-in form on /start, so a Sign in button there would be a door
- * painted on a wall. The server decides (app/page.tsx) and passes the
- * verdict down, so the button is in the very first paint or not at all —
- * never popping in after a client-side fetch.
+ * no sign-in panel, so the header simply shows nothing. The server decides
+ * (app/page.tsx) and passes the verdict down, so the control is in the very
+ * first paint or not at all. Anyone already signed in never sees this page:
+ * they are carried straight to /home.
  */
 export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
   const router = useRouter()
@@ -237,7 +213,7 @@ export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
                 initial={{ opacity: 0, y: 26, rotate: still.rotate * 1.8 }}
                 animate={{ opacity: still.fade, y: 0, rotate: still.rotate }}
                 transition={{ duration: 0.8, ease: EASE, delay: 0.12 + index * 0.075 }}
-                className="absolute w-[16rem]"
+                className="absolute w-[17rem]"
                 style={{ left: still.x, top: still.y, zIndex: index + 1 }}
               >
                 <div className="relative aspect-video w-full overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.55)] ring-1 ring-white/15">
@@ -252,12 +228,7 @@ export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
       <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-col px-6 py-7">
         <header className="flex items-center justify-between gap-4">
           <span className="font-serif text-2xl tracking-tight">CLIPIT</span>
-          <Link
-            href="/start"
-            className="whitespace-nowrap rounded-full bg-black/30 px-4 py-2 text-[13px] text-foreground/70 ring-1 ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/5 hover:text-foreground"
-          >
-            Open the app
-          </Link>
+          <AccountControl configured={signInAvailable} />
         </header>
       </div>
 
@@ -267,35 +238,20 @@ export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
       <section className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-6 pb-20 pt-6 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-8 lg:pb-0 lg:pt-0">
         <div className="relative z-10 max-w-2xl">
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
-            {/* The reference's headline is a heavy sans set very tight, and
-                that weight is most of its character — a serif reads as a
-                different page entirely. The wordmark stays serif; it's ours. */}
-            <h1 className="text-balance font-sans text-[2.6rem] font-semibold leading-[0.98] tracking-[-0.045em] sm:text-6xl lg:text-[4.25rem]">
-              Describe the moment
+            {/* The reference's headline is a heavy sans set tight — the
+                wordmark stays serif; it's ours. lg:whitespace-nowrap keeps
+                "Describe the moment" from snapping mid-phrase on screens
+                wide enough to hold it. */}
+            <Heading level={1} type="display-1" className="tracking-tighter">
+              <span className="lg:whitespace-nowrap">Describe the moment</span>
               <br />
-              <span className="text-foreground/50">get the clip</span>
-            </h1>
-            <p className="mt-7 max-w-lg text-[17px] leading-relaxed text-foreground/65">
+              <Text type="inherit" color="secondary">get the clip</Text>
+            </Heading>
+            <Text as="p" type="body" size="lg" color="secondary" display="block" className="mt-7 max-w-lg">
               The future of clipping. Ask a long video for moments the way you'd ask a person —
               CLIPIT watches it once, answers in seconds, and cuts post-ready MP4s.
-            </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link
-                href="/start"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-7 py-3.5 text-[15px] font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
-              >
-                Start clipping
-              </Link>
-              {signInAvailable && (
-                <Link
-                  href="/start#signin"
-                  className="whitespace-nowrap rounded-full px-7 py-3.5 text-[15px] text-foreground/75 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
-                >
-                  Sign in
-                </Link>
-              )}
-            </div>
-            <p className="mt-4 text-[13px] text-foreground/60">No account needed to try it.</p>
+            </Text>
+            <Button label="Start clipping" variant="primary" size="lg" href="/start" className="mt-9" />
           </motion.div>
         </div>
 
