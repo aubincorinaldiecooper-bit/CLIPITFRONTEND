@@ -129,9 +129,9 @@
     --text-supporting-size: var(--font-size-sm);
     --text-supporting-weight: var(--font-weight-normal);
     --text-supporting-leading: 1.6667;
-    --text-display-1-size: var(--font-size-5xl);
-    --text-display-1-weight: var(--font-weight-normal);
-    --text-display-1-leading: 1.2381;
+    --text-display-1-size: clamp(2.6rem, 5vw, 4.25rem);
+    --text-display-1-weight: 600;
+    --text-display-1-leading: 1.02;
     --text-display-2-size: var(--font-size-4xl);
     --text-display-2-weight: var(--font-weight-normal);
     --text-display-2-leading: 1.2571;

@@ -29,9 +29,15 @@ import { forgetApiSession } from "@/lib/api"
  *   lost, and a confirmation without a way back strands exactly the person
  *   whose email did not arrive.
  */
-export function AccountControl() {
+/**
+ * `configured` prop: a server component that already knows whether sign-in
+ * exists (the landing page does) passes the verdict down, so the button is
+ * in the very first paint. Without it, the control asks the API itself.
+ */
+export function AccountControl({ configured: configuredFromServer }: { configured?: boolean } = {}) {
   const { data: session, isPending } = authClient.useSession()
-  const [configured, setConfigured] = useState<boolean | null>(null)
+  const [fetchedConfigured, setFetchedConfigured] = useState<boolean | null>(null)
+  const configured = configuredFromServer ?? fetchedConfigured
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState("")
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle")
@@ -41,19 +47,20 @@ export function AccountControl() {
   }, [])
 
   useEffect(() => {
+    if (configuredFromServer !== undefined) return
     let cancelled = false
     void fetch("/api/auth-configured")
       .then((response) => response.json() as Promise<{ configured: boolean }>)
       .then((body) => {
-        if (!cancelled) setConfigured(body.configured)
+        if (!cancelled) setFetchedConfigured(body.configured)
       })
       .catch(() => {
-        if (!cancelled) setConfigured(false)
+        if (!cancelled) setFetchedConfigured(false)
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [configuredFromServer])
 
   // Nothing until we know sign-in exists here and whether someone is signed
   // in — flashing "Sign in" at a signed-in person is worse than a beat of

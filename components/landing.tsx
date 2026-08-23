@@ -1,8 +1,11 @@
 "use client"
 
 import { useEffect } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { Button } from "@astryxdesign/core/Button"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Text } from "@astryxdesign/core/Text"
+import { AccountControl } from "@/components/account-control"
 import { motion } from "motion/react"
 import { authClient } from "@/lib/auth-client"
 
@@ -202,11 +205,17 @@ function SceneFrame({ scene }: { scene: Scene }) {
 }
 
 /**
+ * The traditional journey, on purpose: the header's right corner is where
+ * returning people sign in (the same Astryx panel the app uses, opening in
+ * place), and the hero carries exactly one call to action — Start clipping.
+ * Two buttons to the same door confused the journey; now each door appears
+ * once, where convention says it lives.
+ *
  * Sign in is offered only where it exists — a guest-only deployment renders
- * no sign-in form on /start, so a Sign in button there would be a door
- * painted on a wall. The server decides (app/page.tsx) and passes the
- * verdict down, so the button is in the very first paint or not at all —
- * never popping in after a client-side fetch.
+ * no sign-in panel, so the header simply shows nothing. The server decides
+ * (app/page.tsx) and passes the verdict down, so the control is in the very
+ * first paint or not at all. Anyone already signed in never sees this page:
+ * they are carried straight to /home.
  */
 export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
   const router = useRouter()
@@ -252,12 +261,7 @@ export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
       <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-col px-6 py-7">
         <header className="flex items-center justify-between gap-4">
           <span className="font-serif text-2xl tracking-tight">CLIPIT</span>
-          <Link
-            href="/start"
-            className="whitespace-nowrap rounded-full bg-black/30 px-4 py-2 text-[13px] text-foreground/70 ring-1 ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/5 hover:text-foreground"
-          >
-            Open the app
-          </Link>
+          <AccountControl configured={signInAvailable} />
         </header>
       </div>
 
@@ -267,35 +271,29 @@ export function LandingPage({ signInAvailable }: { signInAvailable: boolean }) {
       <section className="relative mx-auto flex w-full max-w-6xl flex-1 items-center px-6 pb-20 pt-6 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-8 lg:pb-0 lg:pt-0">
         <div className="relative z-10 max-w-2xl">
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
-            {/* The reference's headline is a heavy sans set very tight, and
-                that weight is most of its character — a serif reads as a
-                different page entirely. The wordmark stays serif; it's ours. */}
-            <h1 className="text-balance font-sans text-[2.6rem] font-semibold leading-[0.98] tracking-[-0.045em] sm:text-6xl lg:text-[4.25rem]">
-              Describe the moment
+            {/* The reference's headline is a heavy sans set tight — the
+                wordmark stays serif; it's ours. lg:whitespace-nowrap keeps
+                "Describe the moment" from snapping mid-phrase on screens
+                wide enough to hold it. */}
+            <Heading level={1} type="display-1" className="tracking-tighter">
+              <span className="lg:whitespace-nowrap">Describe the moment</span>
               <br />
               <span className="text-foreground/50">get the clip</span>
-            </h1>
-            <p className="mt-7 max-w-lg text-[17px] leading-relaxed text-foreground/65">
-              The future of clipping. Ask a long video for moments the way you'd ask a person —
-              CLIPIT watches it once, answers in seconds, and cuts post-ready MP4s.
-            </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link
-                href="/start"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-7 py-3.5 text-[15px] font-medium text-black transition-transform active:scale-[0.97] hover:bg-white/90"
-              >
-                Start clipping
-              </Link>
-              {signInAvailable && (
-                <Link
-                  href="/start#signin"
-                  className="whitespace-nowrap rounded-full px-7 py-3.5 text-[15px] text-foreground/75 ring-1 ring-white/15 transition-colors hover:bg-white/5 hover:text-foreground"
-                >
-                  Sign in
-                </Link>
-              )}
+            </Heading>
+            <div className="mt-7 max-w-lg">
+              <Text as="p" type="body" size="lg" color="secondary">
+                The future of clipping. Ask a long video for moments the way you'd ask a person —
+                CLIPIT watches it once, answers in seconds, and cuts post-ready MP4s.
+              </Text>
             </div>
-            <p className="mt-4 text-[13px] text-foreground/60">No account needed to try it.</p>
+            <div className="mt-9">
+              <Button label="Start clipping" variant="primary" size="lg" href="/start" />
+            </div>
+            <div className="mt-4">
+              <Text as="p" type="supporting">
+                No account needed to try it.
+              </Text>
+            </div>
           </motion.div>
         </div>
 
