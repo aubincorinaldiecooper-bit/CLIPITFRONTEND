@@ -164,41 +164,41 @@
     --color-syntax-property: light-dark(#005348, #83dac9);
     --color-syntax-punctuation: light-dark(#a3a3a3, #525252);
     --color-syntax-background: light-dark(#fafafa, #0a0a0a);
-    --color-background-surface: light-dark(#ffffff, #101314);
-    --color-background-body: light-dark(#ffffff, #101314);
-    --color-background-card: light-dark(#fafafa, #1a1d20);
-    --color-background-popover: light-dark(#ffffff, #24292D);
-    --color-background-muted: light-dark(#f4f4f5, #24292D);
-    --color-accent: light-dark(#006982, #61D3FF);
+    --color-background-surface: light-dark(#ffffff, #131316);
+    --color-background-body: light-dark(#ffffff, #08080a);
+    --color-background-card: light-dark(#fafafa, #131316);
+    --color-background-popover: light-dark(#ffffff, #232327);
+    --color-background-muted: light-dark(#211A160D, #1E1B1580);
+    --color-accent: light-dark(#9F4200, #EAC33C);
     --color-accent-muted: light-dark(color-mix(in srgb, var(--color-accent) 20%, transparent), color-mix(in srgb, var(--color-accent) 25%, transparent));
-    --color-neutral: light-dark(#131D201A, #D9E4EA33);
-    --color-overlay: light-dark(#10131466, #101314CC);
-    --color-overlay-hover: light-dark(#1013140D, #E8F1F60D);
-    --color-overlay-pressed: light-dark(#1013141A, #E8F1F61A);
-    --color-text-primary: light-dark(#101314, #E8F1F6);
-    --color-text-secondary: light-dark(#495056, #96A0AB);
-    --color-text-disabled: light-dark(#96A0AB, #495056);
+    --color-neutral: light-dark(#211A161A, #E7E2D933);
+    --color-overlay: light-dark(#211A1666, #1E1B1599);
+    --color-overlay-hover: light-dark(#211A160D, #FFFFFF0D);
+    --color-overlay-pressed: light-dark(#211A161A, #FFFFFF1A);
+    --color-text-primary: light-dark(#111113, #f4f4f5);
+    --color-text-secondary: light-dark(#52525b, #a1a1aa);
+    --color-text-disabled: light-dark(#9D8E85, #645E51);
     --color-text-accent: var(--color-accent);
     --color-on-dark: #ffffff;
     --color-on-light: #171717;
-    --color-on-accent: light-dark(#FFFFFF, #003853);
+    --color-on-accent: light-dark(#FFFFFF, #422E00);
     --color-on-success: light-dark(#ffffff, #171717);
     --color-on-error: light-dark(#ffffff, #171717);
     --color-on-warning: #171717;
     --color-icon-accent: var(--color-accent);
-    --color-icon-primary: light-dark(#101314, #E8F1F6);
-    --color-icon-secondary: light-dark(#495056, #96A0AB);
-    --color-icon-disabled: light-dark(#96A0AB, #495056);
-    --color-success: light-dark(#3a5e2c, #b3c79a);
-    --color-error: light-dark(#5e3a35, #c6a6a2);
-    --color-warning: light-dark(#876515, #d3c490);
+    --color-icon-primary: light-dark(#211A16, #E7E2D9);
+    --color-icon-secondary: light-dark(#52443D, #B1AA9D);
+    --color-icon-disabled: light-dark(#9D8E85, #645E51);
+    --color-success: light-dark(#007004, #9fe59b);
+    --color-error: light-dark(#a50c25, #ffc6c1);
+    --color-warning: light-dark(#745b00, #fdcf4f);
     --color-success-muted: light-dark(#c5e5c0, #84c9803D);
     --color-error-muted: light-dark(#facecb, #ff9e973D);
     --color-warning-muted: light-dark(#f8da9d, #deb4333D);
-    --color-border: light-dark(#1013141a, #E8F1F61A);
-    --color-border-emphasized: light-dark(#96A0AB, #495056);
-    --color-skeleton: light-dark(#e4e4e7, #495056);
-    --color-shadow: light-dark(#0000002e, #0000004D);
+    --color-border: light-dark(#1113171a, #f4f4f51a);
+    --color-border-emphasized: light-dark(#8b8b93, #5d5d66);
+    --color-skeleton: light-dark(#B8A89F, #4C463A);
+    --color-shadow: light-dark(#0000001A, #0000004D);
     --color-tint-hover: light-dark(black, white);
     --color-background-red: light-dark(#facecb, #ff9e973D);
     --color-border-red: light-dark(#e6bab8, #ff6f6c);
@@ -254,8 +254,8 @@
     --shadow-inset-success: inset 0px 0px 0px 2px #1981004D;
     --shadow-inset-warning: inset 0px 0px 0px 2px #ffce2f4D;
     --shadow-inset-error: inset 0px 0px 0px 2px #e33f4a4D;
-    --color-background-inverted: light-dark(#101314, #E8F1F6);
-    --color-track: light-dark(#9BAFB5, #394951);
+    --color-background-inverted: light-dark(#18181b, #f4f4f5);
+    --color-track: light-dark(#B8A89F, #4C463A);
   }
 
   .astryx-heading.level-1 {
@@ -377,8 +377,8 @@
   }
 
   .astryx-button.primary {
-    background-color: light-dark(#101314, #E8F1F6);
-    color: light-dark(#E8F1F6, #101314);
+    background-color: light-dark(#111113, #ffffff);
+    color: light-dark(#ffffff, #0b0b0c);
   }
 
   .astryx-badge.info {
