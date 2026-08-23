@@ -1,14 +1,17 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Popover } from "@astryxdesign/core/Popover"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
-import { api } from "@/lib/api"
+import { TextInput } from "@astryxdesign/core/TextInput"
+import { useToast } from "@astryxdesign/core/Toast"
+import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 
@@ -29,6 +32,22 @@ export default function ClipsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [failed, setFailed] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
+  /**
+   * The publish form lives in a Popover over the card — the card itself
+   * never grows or reflows (the AGENTS.md no-reflow rule). One caption draft
+   * belongs to whichever popover is open; the ref mirrors the open id so a
+   * finishing request can tell whether the open panel is still its own.
+   */
+  const [publishOpenId, setPublishOpenId] = useState<string | null>(null)
+  const publishOpenIdRef = useRef<string | null>(null)
+  const [caption, setCaption] = useState("")
+  const [publishingId, setPublishingId] = useState<string | null>(null)
+  const toast = useToast()
+
+  const setPublishTarget = (id: string | null) => {
+    publishOpenIdRef.current = id
+    setPublishOpenId(id)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -46,6 +65,34 @@ export default function ClipsPage() {
       cancelled = true
     }
   }, [])
+
+  const publish = async (clipId: string) => {
+    if (publishingId) return
+    setPublishingId(clipId)
+    try {
+      await api.publishClip(clipId, { caption: caption.trim() })
+      // Transient news is transient: the confirmation appears and leaves on
+      // its own instead of becoming permanent card content.
+      toast({ body: "Sent — it's on its way to your connected accounts." })
+      // Only touch the panel if it is still this clip's — another clip's
+      // popover may have been opened while this request was in flight, and
+      // closing it (or wiping its caption draft) is not this request's call.
+      if (publishOpenIdRef.current === clipId) {
+        setPublishTarget(null)
+        setCaption("")
+      }
+    } catch (cause) {
+      // The API's refusals are already written for people ("No connected
+      // accounts. Connect one on the Publishing page first.") — repeat them.
+      // Error toasts stay until dismissed, so the message can't be missed.
+      toast({
+        type: "error",
+        body: cause instanceof ApiError ? cause.message : "Couldn't publish just now. Try again.",
+      })
+    } finally {
+      setPublishingId(null)
+    }
+  }
 
   const loadOlder = async () => {
     if (!nextBefore || loadingMore) return
@@ -129,20 +176,61 @@ export default function ClipsPage() {
                         {clip.videoTitle ? ` · ${clip.videoTitle}` : ""}
                         {` · ${new Date(clip.createdAt).toLocaleDateString()}`}
                       </p>
-                      {clip.downloadUrl && (
-                        /* A plain anchor with `download`, not a routed link:
-                           the browser must save the signed file directly. */
-                        <a
-                          href={clip.downloadUrl}
-                          download
-                          className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                            <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
-                          </svg>
-                          Download
-                        </a>
-                      )}
+                      <HStack gap={2} align="center" wrap="wrap">
+                        {clip.downloadUrl && (
+                          /* A plain anchor with `download`, not a routed link:
+                             the browser must save the signed file directly. */
+                          <a
+                            href={clip.downloadUrl}
+                            download
+                            className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                              <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
+                            </svg>
+                            Download
+                          </a>
+                        )}
+                        {clip.status === "ready" && (
+                          <Popover
+                            isOpen={publishOpenId === clip.id}
+                            onOpenChange={(open) => {
+                              if (open) {
+                                setCaption("")
+                                setPublishTarget(clip.id)
+                              } else if (publishOpenIdRef.current === clip.id) {
+                                // Only close what is ours: a light-dismiss can
+                                // fire while another card's popover is opening.
+                                setPublishTarget(null)
+                              }
+                            }}
+                            placement="below"
+                            width={320}
+                            label="Publish this clip"
+                            content={
+                              <VStack gap={2} align="stretch">
+                                <TextInput
+                                  label="Caption"
+                                  isLabelHidden
+                                  value={caption}
+                                  onChange={(value) => setCaption(value)}
+                                  placeholder="Write a caption (optional)"
+                                  hasAutoFocus
+                                />
+                                <Button
+                                  label="Post to connected accounts"
+                                  variant="primary"
+                                  size="sm"
+                                  isLoading={publishingId === clip.id}
+                                  onClick={() => void publish(clip.id)}
+                                />
+                              </VStack>
+                            }
+                          >
+                            <Button label="Publish" variant="secondary" size="sm" />
+                          </Popover>
+                        )}
+                      </HStack>
                     </div>
                   </div>
                 ))}
