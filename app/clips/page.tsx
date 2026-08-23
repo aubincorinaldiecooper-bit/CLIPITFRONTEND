@@ -104,6 +104,7 @@ export default function ClipsPage() {
   const sendOpenIdRef = useRef<string | null>(null)
   const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
   const [sharedWith, setSharedWith] = useState<string[]>([])
+  const [sendSignInRequired, setSendSignInRequired] = useState(false)
   const [sendingTo, setSendingTo] = useState<string | null>(null)
 
   const setSendTarget = (id: string | null) => {
@@ -114,6 +115,7 @@ export default function ClipsPage() {
   const openSend = (clipId: string) => {
     setRooms(null)
     setSharedWith([])
+    setSendSignInRequired(false)
     setSendTarget(clipId)
     void api
       .getClipWorkspaces(clipId)
@@ -122,6 +124,7 @@ export default function ClipsPage() {
         if (sendOpenIdRef.current !== clipId) return
         setRooms(result.workspaces)
         setSharedWith(result.sharedWith)
+        setSendSignInRequired(Boolean(result.signInRequired))
       })
       .catch(() => {
         if (sendOpenIdRef.current !== clipId) return
@@ -264,6 +267,11 @@ export default function ClipsPage() {
                             content={
                               rooms === null ? (
                                 <Skeleton height={60} radius={2} />
+                              ) : sendSignInRequired ? (
+                                <Text as="p" type="supporting" display="block">
+                                  Workspaces belong to you, not to a browser tab — sign in (top
+                                  right) to send clips to one.
+                                </Text>
                               ) : rooms.length === 0 ? (
                                 <Text as="p" type="supporting" display="block">
                                   You're not in any shared workspace yet. Make one on the Workspaces

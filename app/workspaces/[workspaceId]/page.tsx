@@ -31,7 +31,7 @@ import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 
 function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
   const [page, setPage] = useState<WorkspaceDetail | null>(null)
-  const [failed, setFailed] = useState<"missing" | "error" | null>(null)
+  const [failed, setFailed] = useState<"missing" | "signin" | "error" | null>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [email, setEmail] = useState("")
   const [inviting, setInviting] = useState(false)
@@ -49,7 +49,11 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
       .getWorkspace(workspaceId)
       .then(setPage)
       .catch((cause) => {
-        setFailed(cause instanceof ApiError && cause.status === 404 ? "missing" : "error")
+        if (cause instanceof ApiError && cause.status === 404) setFailed("missing")
+        // Signed out: telling someone to refresh would be a lie — no number
+        // of refreshes signs them in.
+        else if (cause instanceof ApiError && (cause.status === 401 || cause.status === 403)) setFailed("signin")
+        else setFailed("error")
       })
 
   useEffect(() => {
@@ -155,6 +159,13 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     return (
       <Text as="p" type="body" color="secondary" display="block">
         This workspace doesn't exist, or you're not in it. Sign in (top right) if you haven't.
+      </Text>
+    )
+  }
+  if (failed === "signin") {
+    return (
+      <Text as="p" type="body" color="secondary" display="block">
+        Workspaces belong to you, not to a browser tab — sign in (top right) and this page will open.
       </Text>
     )
   }
@@ -307,6 +318,14 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
         </HStack>
         )}
       </HStack>
+
+      {page.hasMoreClips && (
+        <Text as="p" type="supporting" display="block">
+          {page.workspace.isPersonal
+            ? "Showing the newest 60 — your full library is in Your clips."
+            : "Showing the newest 60 clips sent here."}
+        </Text>
+      )}
 
       {page.clips.length === 0 ? (
         <Text as="p" type="supporting" display="block">

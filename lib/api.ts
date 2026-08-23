@@ -426,10 +426,10 @@ export const api = {
     )
   },
 
-  /** Where a clip can be sent, and where it already is. */
+  /** Where a clip can be sent (shared rooms only), and where it already is. */
   async getClipWorkspaces(
     clipId: string,
-  ): Promise<{ workspaces: Array<{ id: string; name: string }>; sharedWith: string[] }> {
+  ): Promise<{ signInRequired?: boolean; workspaces: Array<{ id: string; name: string }>; sharedWith: string[] }> {
     return request(`/api/clips/${encodeURIComponent(clipId)}/workspaces`)
   },
 

@@ -285,6 +285,8 @@ export interface WorkspacesPage {
 
 /** One room: what is in it and who is in it. */
 export interface WorkspaceDetail {
+  /** True when the room holds more clips than one page shows. */
+  hasMoreClips?: boolean
   workspace: { id: string; name: string; isOwner: boolean; isPersonal?: boolean }
   members: TeamMember[]
   clips: LibraryClip[]
