@@ -227,3 +227,55 @@ export interface SocialAccountsPage {
   signInRequired: boolean
   accounts: SocialAccount[]
 }
+
+/** A person in the caller's workspace. */
+export interface TeamMember {
+  userId: string
+  email: string | null
+  role: "owner" | "member"
+  joinedAt: string
+  isYou: boolean
+}
+
+/** An invitation that has been sent and not yet accepted. */
+export interface TeamInvite {
+  id: string
+  email: string
+  invitedAt: string
+  expiresAt: string
+}
+
+/** One shared room a person belongs to, as the Workspaces list shows it. */
+export interface WorkspaceSummary {
+  id: string
+  name: string
+  isOwner: boolean
+  memberCount: number
+  clipCount: number
+}
+
+/** The rooms a person is in. */
+export interface WorkspacesPage {
+  /** True for a guest: a workspace belongs to a person, never to a tab. */
+  signInRequired: boolean
+  workspaces: WorkspaceSummary[]
+  /** False when no email service is configured: links must be copied by hand. */
+  emailConfigured?: boolean
+}
+
+/** One room: what is in it and who is in it. */
+export interface WorkspaceDetail {
+  workspace: { id: string; name: string; isOwner: boolean }
+  members: TeamMember[]
+  clips: LibraryClip[]
+  /** Only the owner sees pending invitations. */
+  invites: TeamInvite[]
+  emailConfigured?: boolean
+}
+
+/** What an invitation link is for, read without spending it. */
+export interface InvitePreview {
+  valid: boolean
+  workspaceName: string | null
+  email: string | null
+}

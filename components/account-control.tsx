@@ -34,6 +34,18 @@ import { forgetApiSession } from "@/lib/api"
  * exists (the landing page does) passes the verdict down, so the button is
  * in the very first paint. Without it, the control asks the API itself.
  */
+/**
+ * Where a sign-in link should land: back here, with the query string intact,
+ * unless "here" is a page that means nothing signed in. Built from
+ * window.location alone, so it can only ever be a path on this site.
+ */
+function returnTo(): string {
+  if (typeof window === "undefined") return "/start"
+  const { pathname, search } = window.location
+  if (pathname === "/" || pathname.startsWith("/api/")) return "/start"
+  return `${pathname}${search}`
+}
+
 export function AccountControl({ configured: configuredFromServer }: { configured?: boolean } = {}) {
   const { data: session, isPending } = authClient.useSession()
   const [fetchedConfigured, setFetchedConfigured] = useState<boolean | null>(null)
@@ -92,7 +104,12 @@ export function AccountControl({ configured: configuredFromServer }: { configure
     const address = email.trim()
     if (!address || state === "sending") return
     setState("sending")
-    const { error } = await authClient.signIn.magicLink({ email: address, callbackURL: "/start" })
+    // Come back to where they were, not to a fixed page. Someone following
+    // an invitation signs in from /join?invite=... and must land back on
+    // that exact URL — a sign-in that drops the invitation leaves them with
+    // no way to accept it short of digging the email out again. Only
+    // same-origin paths are ever used as the destination.
+    const { error } = await authClient.signIn.magicLink({ email: address, callbackURL: returnTo() })
     setState(error ? "failed" : "sent")
   }
 

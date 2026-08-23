@@ -4,10 +4,15 @@ import type {
   Clip,
   ClipMatch,
   ClipRequest,
+  InvitePreview,
   LibraryClip,
   MatchFeedback,
   SocialAccount,
   SocialAccountsPage,
+  TeamInvite,
+  WorkspaceDetail,
+  WorkspaceSummary,
+  WorkspacesPage,
   UploadTarget,
   Video,
 } from "./types"
@@ -368,5 +373,96 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     })
+  },
+
+  // --- Workspaces -----------------------------------------------------------
+
+  async listWorkspaces(): Promise<WorkspacesPage> {
+    return request("/api/workspaces")
+  },
+
+  async createWorkspace(name: string): Promise<{ workspace: WorkspaceSummary }> {
+    return request("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+  },
+
+  async getWorkspace(workspaceId: string): Promise<WorkspaceDetail> {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}`)
+  },
+
+  /** Send a clip to a room. It stays in the library too — a share, not a move. */
+  async sendClipToWorkspace(workspaceId: string, clipId: string): Promise<{ shared: boolean }> {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/clips`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipId }),
+    })
+  },
+
+  async removeClipFromWorkspace(workspaceId: string, clipId: string): Promise<{ removed: boolean }> {
+    return request(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/clips/${encodeURIComponent(clipId)}`,
+      { method: "DELETE" },
+    )
+  },
+
+  /** Where a clip can be sent, and where it already is. */
+  async getClipWorkspaces(
+    clipId: string,
+  ): Promise<{ workspaces: Array<{ id: string; name: string }>; sharedWith: string[] }> {
+    return request(`/api/clips/${encodeURIComponent(clipId)}/workspaces`)
+  },
+
+  /**
+   * Invite someone. `emailed` is the truth about delivery — when it is false
+   * the invitation still exists and `acceptUrl` still works, so the link can
+   * be passed along by hand instead.
+   */
+  async inviteToWorkspace(
+    workspaceId: string,
+    email: string,
+  ): Promise<{ invite: TeamInvite; emailed: boolean; emailProblem: string | null; acceptUrl: string }> {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/invites`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    })
+  },
+
+  async revokeInvite(workspaceId: string, inviteId: string): Promise<{ inviteId: string; revoked: boolean }> {
+    return request(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/invites/${encodeURIComponent(inviteId)}`,
+      { method: "DELETE" },
+    )
+  },
+
+  /** Reads an invitation without spending it, so the /join page can explain. */
+  async previewInvite(token: string): Promise<InvitePreview> {
+    return request(`/api/workspace/invites/preview?invite=${encodeURIComponent(token)}`)
+  },
+
+  async acceptInvite(
+    token: string,
+  ): Promise<{ joined: boolean; alreadyMember?: boolean; workspace: { id: string; name: string } | null }> {
+    return request("/api/workspace/invites/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invite: token }),
+    })
+  },
+
+  async removeWorkspaceMember(workspaceId: string, userId: string): Promise<{ removed: boolean }> {
+    return request(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    )
+  },
+
+  /** Leave a room. Owners cannot leave their own. */
+  async leaveWorkspace(workspaceId: string): Promise<{ left: boolean }> {
+    return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/members/me`, { method: "DELETE" })
   },
 }

@@ -19,15 +19,18 @@ import { NAV_ITEMS, SideNav, type NavDestination } from "@/components/side-nav"
  */
 export function AppShell({
   active,
+  activeWorkspaceId,
   headerExtra,
   children,
 }: {
   active: NavDestination
+  /** The open room, when a workspace page is showing — selects its tree entry. */
+  activeWorkspaceId?: string
   headerExtra?: ReactNode
   children: ReactNode
 }) {
   return (
-    <AstryxAppShell height="auto" variant="section" contentPadding={0} mobileNav={false} sideNav={<SideNav active={active} />}>
+    <AstryxAppShell height="auto" variant="section" contentPadding={0} mobileNav={false} sideNav={<SideNav active={active} activeWorkspaceId={activeWorkspaceId} />}>
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
         {/* The shell no longer pads the content area: each page's Layout owns
             its own inset now, and double horizontal padding pushed content

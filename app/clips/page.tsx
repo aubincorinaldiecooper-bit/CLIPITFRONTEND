@@ -14,6 +14,7 @@ import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 
 /**
  * Everything you have cut, newest first — chrome on Astryx, clips
@@ -94,6 +95,57 @@ export default function ClipsPage() {
     }
   }
 
+  /**
+   * The Send-to-workspace control: per clip, a popover listing the rooms the
+   * caller is in, saying which already have it. Rooms are fetched when the
+   * popover opens — the list is tiny and always current.
+   */
+  const [sendOpenId, setSendOpenId] = useState<string | null>(null)
+  const sendOpenIdRef = useRef<string | null>(null)
+  const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
+  const [sharedWith, setSharedWith] = useState<string[]>([])
+  const [sendingTo, setSendingTo] = useState<string | null>(null)
+
+  const setSendTarget = (id: string | null) => {
+    sendOpenIdRef.current = id
+    setSendOpenId(id)
+  }
+
+  const openSend = (clipId: string) => {
+    setRooms(null)
+    setSharedWith([])
+    setSendTarget(clipId)
+    void api
+      .getClipWorkspaces(clipId)
+      .then((result) => {
+        // Still this clip's popover? Someone may have moved on mid-fetch.
+        if (sendOpenIdRef.current !== clipId) return
+        setRooms(result.workspaces)
+        setSharedWith(result.sharedWith)
+      })
+      .catch(() => {
+        if (sendOpenIdRef.current !== clipId) return
+        setRooms([])
+      })
+  }
+
+  const sendTo = async (clipId: string, workspaceId: string, name: string) => {
+    if (sendingTo) return
+    setSendingTo(workspaceId)
+    try {
+      await api.sendClipToWorkspace(workspaceId, clipId)
+      toast({ body: `Sent to ${name}. It stays in your library too.` })
+      setSharedWith((current) => (current.includes(workspaceId) ? current : [...current, workspaceId]))
+    } catch (cause) {
+      toast({
+        type: "error",
+        body: cause instanceof ApiError ? cause.message : "Couldn't send that clip. Try again.",
+      })
+    } finally {
+      setSendingTo(null)
+    }
+  }
+
   const loadOlder = async () => {
     if (!nextBefore || loadingMore) return
     setLoadingMore(true)
@@ -140,57 +192,15 @@ export default function ClipsPage() {
               <VStack gap={4} align="stretch">
                 <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
                 {clips.map((clip) => (
-                  <div key={clip.id} className="overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10">
-                    {playingId === clip.id && clip.url ? (
-                      <video src={clip.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setPlayingId(clip.id)}
-                        disabled={!clip.url}
-                        aria-label={`Play: ${clip.description}`}
-                        className="group relative block aspect-video w-full bg-black/60 disabled:cursor-default"
-                      >
-                        {clip.thumbnailUrl && (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img src={clip.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                        )}
-                        {clip.url && (
-                          <span className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/25 transition-transform group-hover:scale-105">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                              <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
-                            </svg>
-                          </span>
-                        )}
-                      </button>
-                    )}
-
-                    <div className="flex flex-col gap-2 p-3">
-                      <p className="line-clamp-2 min-h-[2.5rem] text-[13.5px] leading-snug text-foreground/85">
-                        {clip.description || "A moment from your video"}
-                      </p>
-                      <p className="truncate text-[12px] text-foreground/40">
-                        <span className="font-mono tabular-nums">
-                          {clip.startTimecode} – {clip.endTimecode}
-                        </span>
-                        {clip.videoTitle ? ` · ${clip.videoTitle}` : ""}
-                        {` · ${new Date(clip.createdAt).toLocaleDateString()}`}
-                      </p>
-                      <HStack gap={2} align="center" wrap="wrap">
-                        {clip.downloadUrl && (
-                          /* A plain anchor with `download`, not a routed link:
-                             the browser must save the signed file directly. */
-                          <a
-                            href={clip.downloadUrl}
-                            download
-                            className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                              <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
-                            </svg>
-                            Download
-                          </a>
-                        )}
+                  <ClipCard
+                    key={clip.id}
+                    clip={clip}
+                    isPlaying={playingId === clip.id}
+                    onPlay={() => setPlayingId(clip.id)}
+                    showDate
+                    actions={
+                      <>
+                        {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
                         {clip.status === "ready" && (
                           <Popover
                             isOpen={publishOpenId === clip.id}
@@ -230,9 +240,60 @@ export default function ClipsPage() {
                             <Button label="Publish" variant="secondary" size="sm" />
                           </Popover>
                         )}
-                      </HStack>
-                    </div>
-                  </div>
+                        {clip.status === "ready" && (
+                          <Popover
+                            isOpen={sendOpenId === clip.id}
+                            onOpenChange={(open) => {
+                              if (open) {
+                                openSend(clip.id)
+                              } else if (sendOpenIdRef.current === clip.id) {
+                                setSendTarget(null)
+                              }
+                            }}
+                            placement="below"
+                            width={280}
+                            label="Send this clip to a workspace"
+                            // The list is all buttons; without an input to
+                            // take auto-focus, the hidden accessibility close
+                            // button is focused first and pops visible below
+                            // the menu. Light dismiss and Escape both remain.
+                            hasCloseButton={false}
+                            content={
+                              rooms === null ? (
+                                <Skeleton height={60} radius={2} />
+                              ) : rooms.length === 0 ? (
+                                <Text as="p" type="supporting" display="block">
+                                  You're not in any shared workspace yet. Make one on the Workspaces
+                                  page, then send clips there.
+                                </Text>
+                              ) : (
+                                <VStack gap={1} align="stretch">
+                                  {rooms.map((room) =>
+                                    sharedWith.includes(room.id) ? (
+                                      <Text key={room.id} as="p" type="supporting" display="block">
+                                        ✓ Already in {room.name}
+                                      </Text>
+                                    ) : (
+                                      <Button
+                                        key={room.id}
+                                        label={`Send to ${room.name}`}
+                                        variant="secondary"
+                                        size="sm"
+                                        isLoading={sendingTo === room.id}
+                                        onClick={() => void sendTo(clip.id, room.id, room.name)}
+                                      />
+                                    ),
+                                  )}
+                                </VStack>
+                              )
+                            }
+                          >
+                            <Button label="Send to workspace" variant="secondary" size="sm" />
+                          </Popover>
+                        )}
+                      </>
+                    }
+                  />
                 ))}
                 </Grid>
                 {nextBefore && (

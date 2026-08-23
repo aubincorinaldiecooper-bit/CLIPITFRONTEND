@@ -2,17 +2,22 @@ import { defineTheme } from "@astryxdesign/core/theme"
 import { neutralTheme } from "@astryxdesign/theme-neutral"
 
 /**
- * CLIPIT's voice on Astryx's component system.
+ * CLIPIT's voice on Astryx's component system — CLIPIT's colour, gothic's
+ * structure.
  *
- * The product is a dark, cinematic surface (see globals.css) — footage is lit
- * imagery on a near-black ground, and the app is forced to dark mode at the
- * provider. Light values are still defined so nothing breaks if a region ever
- * opts into light.
+ * The colours are ours and unchanged: the near-black cinematic ground, zinc
+ * structural surfaces, amber as the one accent (it is the colour of
+ * timecodes, so it reads as "a moment in time" rather than decoration).
+ * The serif (Instrument Serif) is the wordmark's voice only.
  *
- * Amber is the one accent: it is already the colour of timecodes everywhere
- * in the product, so the accent reads as "a moment in time" rather than
- * decoration. The serif (Instrument Serif) is deliberately NOT a theme token:
- * it is the wordmark's voice only — interface text is Geist.
+ * What is borrowed from Astryx's maintained GOTHIC theme is exactly its
+ * STRUCTURE — the parts of a theme that carry polish without touching
+ * identity:
+ * - the radius ladder (subtle rounding, tuned steps),
+ * - the shadow set (restrained, atmospheric),
+ * - the motion pacing (slower, theatrical; reduced motion stays honoured).
+ * Its colours were tried and rolled back by the owner's call: structure we
+ * change, everything else we keep.
  */
 export const clipitTheme = defineTheme({
   name: "clipit",
@@ -22,6 +27,8 @@ export const clipitTheme = defineTheme({
     accent: ["#b45309", "#fcd34d"],
     neutralStyle: "cool",
   },
+  // Gothic's pacing: slower, theatrical. Reduced motion is honoured globally.
+  motion: { fast: 150, medium: 350, slow: 800, ratio: 0.75 },
   tokens: {
     "--color-background-body": ["#ffffff", "#08080a"],
     // The amber accent seed tints the generated neutral ramp warm — the
@@ -38,6 +45,16 @@ export const clipitTheme = defineTheme({
     // and secondary text came out beige on our cool near-black. Pinned to
     // the zinc family so quiet text is gray, not tan.
     "--color-text-secondary": ["#52525b", "#a1a1aa"],
+
+    // === Structure, from gothic ==========================================
+    "--radius-inner": "0.25rem",
+    "--radius-element": "0.5rem",
+    "--radius-container": "0.75rem",
+    "--radius-page": "1.5rem",
+    "--shadow-low": "0 2px 4px #00000033, 0 4px 8px #00000040",
+    "--shadow-med": "0 2px 4px #00000033, 0 4px 12px #00000040",
+    "--shadow-high": "0 4px 6px #00000040, 0 12px 24px #0000004D",
+
     // Interface type is Geist, loaded by next/font in the root layout.
     "--font-family-body": "var(--font-geist-sans), system-ui, sans-serif",
     "--font-family-heading": "var(--font-geist-sans), system-ui, sans-serif",
