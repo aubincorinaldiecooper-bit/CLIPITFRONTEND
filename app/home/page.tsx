@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Button } from "@astryxdesign/core/Button"
+import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Card } from "@astryxdesign/core/Card"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
@@ -76,8 +77,10 @@ export default function HomePage() {
 
   return (
     <AppShell active="home">
-      <div className="mx-auto w-full max-w-6xl flex-1 py-8">
-        <HStack justify="between" align="end" gap={4} wrap="wrap">
+      <Layout height="auto" contentWidth={1152}>
+        <LayoutContent padding={6}>
+          <VStack gap={6} align="stretch">
+            <HStack justify="between" align="end" gap={4} wrap="wrap">
           <VStack gap={1.5}>
             <Heading level={1}>
               {firstName ? `Welcome back, ${firstName}` : "Welcome"}
@@ -89,10 +92,9 @@ export default function HomePage() {
           <Button label="Start clipping" variant="primary" icon={ScissorsGlyph} href="/start" />
         </HStack>
 
-        {/* Counted from this caller's rows; a dash means "not loaded", never
-            a fake zero. */}
-        <div className="mt-8">
-          <Grid columns={{ minWidth: 150, max: 4 }} gap={2}>
+            {/* Counted from this caller's rows; a dash means "not loaded",
+                never a fake zero. */}
+            <Grid columns={{ minWidth: 150, max: 4 }} gap={2}>
             {(
               [
                 { label: "Videos", value: stats?.videos },
@@ -110,39 +112,32 @@ export default function HomePage() {
                 </VStack>
               </Card>
             ))}
-          </Grid>
-        </div>
-
-        <div className="mt-10">
-          <HStack justify="between" align="center" gap={4}>
-            <Heading level={2}>
-              Recent clips
-            </Heading>
-            <Link href="/clips" className="whitespace-nowrap text-[13px] text-foreground/50 transition-colors hover:text-foreground">
-              All clips →
-            </Link>
-          </HStack>
-        </div>
-
-        {recentFailed ? (
-          <p className="mt-4 text-sm text-error">Couldn't load your clips just now — refresh to try again.</p>
-        ) : recent === null ? (
-          <div className="mt-4">
-            <Grid columns={{ minWidth: 150, max: 6 }} gap={2}>
-              {[0, 1, 2, 3, 4, 5].map((index) => (
-                <Skeleton key={index} height={110} radius={2} index={index} />
-              ))}
             </Grid>
-          </div>
-        ) : recent.length === 0 ? (
-          <div className="mt-4">
-            <Text as="p" type="supporting">
-              Nothing yet — cut a moment from a video and it lands here.
-            </Text>
-          </div>
-        ) : (
-          <div className="mt-4">
-            <Grid columns={{ minWidth: 150, max: 6 }} gap={2}>
+
+            <VStack gap={3} align="stretch">
+              <HStack justify="between" align="center" gap={4}>
+                <Heading level={2}>
+                  Recent clips
+                </Heading>
+                <Link href="/clips" className="whitespace-nowrap text-[13px] text-foreground/50 transition-colors hover:text-foreground">
+                  All clips →
+                </Link>
+              </HStack>
+
+              {recentFailed ? (
+                <p className="text-sm text-error">Couldn't load your clips just now — refresh to try again.</p>
+              ) : recent === null ? (
+                <Grid columns={{ minWidth: 150, max: 6 }} gap={2}>
+                  {[0, 1, 2, 3, 4, 5].map((index) => (
+                    <Skeleton key={index} height={110} radius={2} index={index} />
+                  ))}
+                </Grid>
+              ) : recent.length === 0 ? (
+                <Text as="p" type="supporting">
+                  Nothing yet — cut a moment from a video and it lands here.
+                </Text>
+              ) : (
+                <Grid columns={{ minWidth: 150, max: 6 }} gap={2}>
               {recent.map((clip) => (
                 <div key={clip.id} className="overflow-hidden rounded-lg bg-black/35 ring-1 ring-white/10">
                   {playingId === clip.id && clip.url ? (
@@ -171,16 +166,16 @@ export default function HomePage() {
                   <p className="truncate px-2 py-1.5 text-[11.5px] text-foreground/60">{clip.description}</p>
                 </div>
               ))}
-            </Grid>
-          </div>
-        )}
+                </Grid>
+              )}
+            </VStack>
 
-        {/* The section that cannot be real yet, saying so plainly. Dashes are
+            {/* The section that cannot be real yet, saying so plainly. Dashes are
             "no data exists", which is true; zeros would claim a measurement
             that never happened. */}
-        <div className="mt-10">
-          <Card variant="muted" padding={4}>
-            <HStack justify="between" align="center" gap={4} wrap="wrap">
+            <Card variant="muted" padding={4}>
+              <VStack gap={4} align="stretch">
+                <HStack justify="between" align="center" gap={4} wrap="wrap">
               <VStack gap={1}>
                 <Heading level={2}>
                   Post performance
@@ -189,10 +184,9 @@ export default function HomePage() {
                   Views, likes and shares appear here once you connect the accounts you post to.
                 </Text>
               </VStack>
-              <Button label="Connect accounts" variant="secondary" size="sm" href="/publishing" />
-            </HStack>
-            <div className="mt-4">
-              <Grid columns={3} gap={2}>
+                  <Button label="Connect accounts" variant="secondary" size="sm" href="/publishing" />
+                </HStack>
+                <Grid columns={3} gap={2}>
                 {["Views", "Likes", "Shares"].map((label) => (
                   <Card key={label} variant="transparent" padding={3}>
                     <VStack gap={0.5}>
@@ -205,11 +199,12 @@ export default function HomePage() {
                     </VStack>
                   </Card>
                 ))}
-              </Grid>
-            </div>
-          </Card>
-        </div>
-      </div>
+                </Grid>
+              </VStack>
+            </Card>
+          </VStack>
+        </LayoutContent>
+      </Layout>
     </AppShell>
   )
 }
