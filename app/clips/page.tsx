@@ -202,6 +202,9 @@ export default function ClipsPage() {
                       <>
                         {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
                         {clip.status === "ready" && (
+                          <Button label="Captions" variant="secondary" size="sm" href={`/clips/${clip.id}/captions`} />
+                        )}
+                        {clip.status === "ready" && (
                           <Popover
                             isOpen={publishOpenId === clip.id}
                             onOpenChange={(open) => {

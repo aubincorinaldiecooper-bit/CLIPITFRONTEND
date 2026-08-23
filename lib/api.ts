@@ -2,6 +2,7 @@ import type {
   ActivityStats,
   ApiErrorBody,
   Clip,
+  ClipCaption,
   ClipMatch,
   ClipRequest,
   InvitePreview,
@@ -369,6 +370,22 @@ export const api = {
     input: { caption: string; accountIds?: string[] },
   ): Promise<{ post: { id: string; clipId: string; status: string } }> {
     return request(`/api/clips/${clipId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
+  },
+
+  /**
+   * Burn captions into a clip. mode 'new' answers with the derived clip;
+   * 'replace' answers with the same clip back in 'pending'. Either way the
+   * render happens in the background — poll getClip until ready.
+   */
+  async captionClip(
+    clipId: string,
+    input: { mode: "new" | "replace"; captions: ClipCaption[] },
+  ): Promise<{ clip: Clip }> {
+    return request(`/api/clips/${clipId}/captions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
