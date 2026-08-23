@@ -8,7 +8,8 @@ import { Heading } from "@astryxdesign/core/Heading"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
-import { api } from "@/lib/api"
+import { TextInput } from "@astryxdesign/core/TextInput"
+import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 
@@ -29,6 +30,11 @@ export default function ClipsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [failed, setFailed] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
+  /** Which clip's publish panel is open, its caption, and per-clip outcomes. */
+  const [publishOpenId, setPublishOpenId] = useState<string | null>(null)
+  const [caption, setCaption] = useState("")
+  const [publishing, setPublishing] = useState(false)
+  const [outcomes, setOutcomes] = useState<Record<string, { kind: "sent" | "failed"; message: string }>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -46,6 +52,32 @@ export default function ClipsPage() {
       cancelled = true
     }
   }, [])
+
+  const publish = async (clipId: string) => {
+    if (publishing) return
+    setPublishing(true)
+    try {
+      await api.publishClip(clipId, { caption: caption.trim() })
+      setOutcomes((current) => ({
+        ...current,
+        [clipId]: { kind: "sent", message: "Sent — it's on its way to your connected accounts." },
+      }))
+      setPublishOpenId(null)
+      setCaption("")
+    } catch (cause) {
+      // The API's refusals are already written for people ("No connected
+      // accounts. Connect one on the Publishing page first.") — repeat them.
+      setOutcomes((current) => ({
+        ...current,
+        [clipId]: {
+          kind: "failed",
+          message: cause instanceof ApiError ? cause.message : "Couldn't publish just now. Try again.",
+        },
+      }))
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   const loadOlder = async () => {
     if (!nextBefore || loadingMore) return
@@ -129,19 +161,61 @@ export default function ClipsPage() {
                         {clip.videoTitle ? ` · ${clip.videoTitle}` : ""}
                         {` · ${new Date(clip.createdAt).toLocaleDateString()}`}
                       </p>
-                      {clip.downloadUrl && (
-                        /* A plain anchor with `download`, not a routed link:
-                           the browser must save the signed file directly. */
-                        <a
-                          href={clip.downloadUrl}
-                          download
-                          className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
+                      <HStack gap={2} align="center" wrap="wrap">
+                        {clip.downloadUrl && (
+                          /* A plain anchor with `download`, not a routed link:
+                             the browser must save the signed file directly. */
+                          <a
+                            href={clip.downloadUrl}
+                            download
+                            className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                              <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
+                            </svg>
+                            Download
+                          </a>
+                        )}
+                        {clip.status === "ready" && (
+                          <Button
+                            label={publishOpenId === clip.id ? "Close" : "Publish"}
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setCaption("")
+                              setPublishOpenId((current) => (current === clip.id ? null : clip.id))
+                            }}
+                          />
+                        )}
+                      </HStack>
+                      {publishOpenId === clip.id && (
+                        <VStack gap={2} align="stretch">
+                          <TextInput
+                            label="Caption"
+                            isLabelHidden
+                            value={caption}
+                            onChange={(value) => setCaption(value)}
+                            placeholder="Write a caption (optional)"
+                            hasAutoFocus
+                          />
+                          <Button
+                            label="Post to connected accounts"
+                            variant="primary"
+                            size="sm"
+                            isLoading={publishing}
+                            onClick={() => void publish(clip.id)}
+                          />
+                        </VStack>
+                      )}
+                      {outcomes[clip.id] && (
+                        <Text
+                          as="p"
+                          type="supporting"
+                          display="block"
+                          className={outcomes[clip.id].kind === "failed" ? "text-error" : undefined}
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                            <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
-                          </svg>
-                          Download
-                        </a>
+                          {outcomes[clip.id].message}
+                        </Text>
                       )}
                     </div>
                   </div>

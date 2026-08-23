@@ -211,3 +211,19 @@ export interface ActivityStats {
 export interface ApiErrorBody {
   error: { code: string; message: string; details?: unknown }
 }
+
+/** A social account connected through Zernio, as the API mirrors it. */
+export interface SocialAccount {
+  id: string
+  platform: "tiktok" | "youtube" | "instagram"
+  displayName: string | null
+  status: "connected" | "disconnected" | "reconnect_required"
+}
+
+export interface SocialAccountsPage {
+  /** False when the deployment has no Zernio configured — publishing is honestly absent. */
+  configured: boolean
+  /** True when the caller is a guest: accounts exist only for signed-in people. */
+  signInRequired: boolean
+  accounts: SocialAccount[]
+}

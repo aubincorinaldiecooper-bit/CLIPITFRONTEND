@@ -6,6 +6,8 @@ import type {
   ClipRequest,
   LibraryClip,
   MatchFeedback,
+  SocialAccount,
+  SocialAccountsPage,
   UploadTarget,
   Video,
 } from "./types"
@@ -340,5 +342,31 @@ export const api = {
    */
   async listClips(before?: string): Promise<{ clips: LibraryClip[]; nextBefore: string | null }> {
     return request(`/api/clips${before ? `?before=${encodeURIComponent(before)}` : ""}`)
+  },
+
+  // --- Social publishing (Zernio) ------------------------------------------
+
+  async listSocialAccounts(): Promise<SocialAccountsPage> {
+    return request("/api/social-accounts")
+  },
+
+  /** Returns the hosted-OAuth URL for the platform; the caller redirects to it. */
+  async getConnectUrl(platform: string): Promise<{ platform: string; url: string }> {
+    return request(`/api/connect/${encodeURIComponent(platform)}`)
+  },
+
+  async disconnectSocialAccount(accountId: string): Promise<{ account: SocialAccount }> {
+    return request(`/api/social-accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" })
+  },
+
+  async publishClip(
+    clipId: string,
+    input: { caption: string; accountIds?: string[] },
+  ): Promise<{ post: { id: string; clipId: string; status: string } }> {
+    return request(`/api/clips/${clipId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
   },
 }
