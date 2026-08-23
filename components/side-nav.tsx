@@ -1,12 +1,13 @@
 "use client"
 
-import { useLayoutEffect, useState, type ComponentProps, type SVGProps } from "react"
+import { useEffect, useLayoutEffect, useState, type ComponentProps, type SVGProps } from "react"
 import {
   SideNav as AstryxSideNav,
   SideNavHeading,
   SideNavItem,
   SideNavSection,
 } from "@astryxdesign/core/SideNav"
+import { api } from "@/lib/api"
 
 /**
  * The left rail: where you are in CLIPIT, and the way to everywhere else.
@@ -25,6 +26,14 @@ import {
  */
 
 const COLLAPSED_KEY = "clipit.nav.collapsed"
+const WORKSPACES_OPEN_KEY = "clipit.nav.workspaces.open"
+
+/**
+ * Fired by any page that changes which rooms exist for this person —
+ * creating one, accepting an invitation, leaving. The rail listens and
+ * refetches, so the tree is never a stale list of doors.
+ */
+export const WORKSPACES_CHANGED_EVENT = "clipit:workspaces-changed"
 
 export type NavDestination = "home" | "start" | "clips" | "publishing" | "workspaces"
 
@@ -68,6 +77,12 @@ const TeamGlyph = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
+const FolderGlyph = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden width={18} height={18} {...props}>
+    <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4.2l2 2.4H19a1.5 1.5 0 0 1 1.5 1.5v9.1A1.5 1.5 0 0 1 19 19.5H5a1.5 1.5 0 0 1-1.5-1.5V6.5Z" />
+  </svg>
+)
+
 export const NAV_ITEMS: Array<{
   key: NavDestination
   label: string
@@ -87,18 +102,61 @@ export const NAV_ITEMS: Array<{
  */
 const FullNavigationLink = (props: ComponentProps<"a">) => <a {...props} />
 
-export function SideNav({ active }: { active: NavDestination }) {
+export function SideNav({
+  active,
+  activeWorkspaceId,
+}: {
+  active: NavDestination
+  /** When a room's own page is open, its entry in the tree is the selection. */
+  activeWorkspaceId?: string
+}) {
   const [collapsed, setCollapsed] = useState(false)
+  /**
+   * The rooms in the tree. Null while unknown so nothing flashes; a guest or
+   * a failed fetch settles on [] and the rail shows a plain Workspaces link —
+   * never an error, the rail is not the place to report one.
+   */
+  const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
+  const [workspacesOpen, setWorkspacesOpen] = useState(true)
   // Transitions must not play while the saved state is being applied: the
   // restore happens in useLayoutEffect, before the browser ever paints the
   // default, so the rail simply appears the way its owner left it.
   useLayoutEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "true")
+      setWorkspacesOpen(window.localStorage.getItem(WORKSPACES_OPEN_KEY) !== "false")
     } catch {
       // Blocked storage just means the rail starts open. Nothing to do.
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = () =>
+      void api
+        .listWorkspaces()
+        .then((page) => {
+          if (!cancelled) setRooms(page.signInRequired ? [] : page.workspaces.map(({ id, name }) => ({ id, name })))
+        })
+        .catch(() => {
+          if (!cancelled) setRooms([])
+        })
+    load()
+    window.addEventListener(WORKSPACES_CHANGED_EVENT, load)
+    return () => {
+      cancelled = true
+      window.removeEventListener(WORKSPACES_CHANGED_EVENT, load)
+    }
+  }, [])
+
+  const handleWorkspacesOpenChange = (isCollapsed: boolean) => {
+    setWorkspacesOpen(!isCollapsed)
+    try {
+      window.localStorage.setItem(WORKSPACES_OPEN_KEY, String(!isCollapsed))
+    } catch {
+      // Not remembering the fold is fine; refusing to fold would not be.
+    }
+  }
 
   const handleCollapsedChange = (next: boolean) => {
     setCollapsed(next)
@@ -115,26 +173,55 @@ export function SideNav({ active }: { active: NavDestination }) {
       header={<SideNavHeading heading="CLIPIT" headingHref="/" />}
     >
       <SideNavSection title="Navigate" isHeaderHidden>
-        {NAV_ITEMS.map((item) =>
-          item.key === "start" ? (
+        {NAV_ITEMS.map((item) => {
+          if (item.key === "start") {
+            return (
+              <SideNavItem
+                key={item.key}
+                label={item.label}
+                href={item.href}
+                icon={item.icon}
+                isSelected={active === item.key}
+                as={FullNavigationLink}
+              />
+            )
+          }
+          if (item.key === "workspaces" && rooms && rooms.length > 0) {
+            // The file tree: rooms revealed right here, one click from
+            // anywhere. The label still navigates to the overview (create,
+            // invitations); the disclosure toggles the branch.
+            return (
+              <SideNavItem
+                key={item.key}
+                label={item.label}
+                href={item.href}
+                icon={item.icon}
+                isSelected={active === item.key && !activeWorkspaceId}
+                collapsible={{ isCollapsed: !workspacesOpen, onCollapsedChange: handleWorkspacesOpenChange }}
+              >
+                {rooms.map((room) => (
+                  <SideNavItem
+                    key={room.id}
+                    label={room.name}
+                    href={`/workspaces/${room.id}`}
+                    icon={FolderGlyph}
+                    isSelected={activeWorkspaceId === room.id}
+                    size="sm"
+                  />
+                ))}
+              </SideNavItem>
+            )
+          }
+          return (
             <SideNavItem
               key={item.key}
               label={item.label}
               href={item.href}
               icon={item.icon}
               isSelected={active === item.key}
-              as={FullNavigationLink}
             />
-          ) : (
-            <SideNavItem
-              key={item.key}
-              label={item.label}
-              href={item.href}
-              icon={item.icon}
-              isSelected={active === item.key}
-            />
-          ),
-        )}
+          )
+        })}
       </SideNavSection>
     </AstryxSideNav>
   )

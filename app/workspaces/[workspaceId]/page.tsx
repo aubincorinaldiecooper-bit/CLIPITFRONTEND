@@ -16,6 +16,7 @@ import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import type { WorkspaceDetail } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 
 /**
@@ -136,6 +137,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     setBusyId("leave")
     try {
       await api.leaveWorkspace(workspaceId)
+      window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
       router.push("/workspaces")
     } catch (cause) {
       toast({
@@ -308,7 +310,7 @@ export default function WorkspaceScreen({ params }: { params: Promise<{ workspac
   const { workspaceId } = use(params)
 
   return (
-    <AppShell active="workspaces">
+    <AppShell active="workspaces" activeWorkspaceId={workspaceId}>
       <Layout height="auto" contentWidth={1152}>
         <LayoutContent padding={6}>
           {/* The heading lives inside the body: one fetch names the room and

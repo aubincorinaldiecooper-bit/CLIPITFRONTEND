@@ -12,6 +12,7 @@ import { Text } from "@astryxdesign/core/Text"
 import { api, ApiError } from "@/lib/api"
 import type { InvitePreview } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 
 /**
  * Where an invitation link lands.
@@ -57,6 +58,7 @@ function JoinBody() {
     setJoining(true)
     try {
       const result = await api.acceptInvite(token)
+      window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
       setJoined(true)
       // Already a member: the invitation was not spent, and saying "you're
       // in" would be true but confusing. Say which it was.

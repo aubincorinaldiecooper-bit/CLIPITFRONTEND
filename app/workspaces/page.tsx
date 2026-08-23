@@ -13,6 +13,7 @@ import { TextInput } from "@astryxdesign/core/TextInput"
 import { api, ApiError } from "@/lib/api"
 import type { WorkspacesPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 
 /**
  * The rooms you share with people. Your own library is not one of them —
@@ -55,6 +56,7 @@ function WorkspacesBody() {
     setCreating(true)
     try {
       await api.createWorkspace(trimmed)
+      window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
       setName("")
       await load()
     } catch (cause) {
