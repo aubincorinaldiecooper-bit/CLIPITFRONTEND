@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
+import { Center } from "@astryxdesign/core/Center"
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Grid } from "@astryxdesign/core/Grid"
@@ -15,6 +17,7 @@ import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { GhostCards } from "@/components/empty-illustrations"
 
@@ -45,6 +48,8 @@ export default function ClipsPage() {
   const publishOpenIdRef = useRef<string | null>(null)
   const [caption, setCaption] = useState("")
   const [publishingId, setPublishingId] = useState<string | null>(null)
+  /** Which clip's caption editor is open — a modal visit, not a page. */
+  const [captionClipId, setCaptionClipId] = useState<string | null>(null)
   const toast = useToast()
 
   const setPublishTarget = (id: string | null) => {
@@ -187,12 +192,17 @@ export default function ClipsPage() {
                 ))}
               </Grid>
             ) : clips.length === 0 ? (
-              <EmptyState
-                icon={<GhostCards />}
-                title="No clips yet"
-                description="Cut a moment from any video and it lands here — ready to play, download, caption, and publish."
-                actions={<Button label="Clip a video" variant="primary" href="/start" />}
-              />
+              // Centred in the space the grid would fill, like the reference:
+              // an empty page should hold its room, not huddle under the
+              // heading.
+              <Center minHeight="55vh">
+                <EmptyState
+                  icon={<GhostCards />}
+                  title="No clips yet"
+                  description="Cut a moment from any video and it lands here — ready to play, download, caption, and publish."
+                  actions={<Button label="Clip a video" variant="primary" href="/start" />}
+                />
+              </Center>
             ) : (
               <VStack gap={4} align="stretch">
                 <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
@@ -207,7 +217,12 @@ export default function ClipsPage() {
                       <>
                         {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
                         {clip.status === "ready" && (
-                          <Button label="Captions" variant="secondary" size="sm" href={`/clips/${clip.id}/captions`} />
+                          <Button
+                            label="Captions"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setCaptionClipId(clip.id)}
+                          />
                         )}
                         {clip.status === "ready" && (
                           <Popover
@@ -325,6 +340,30 @@ export default function ClipsPage() {
           </VStack>
         </LayoutContent>
       </Layout>
+      <Dialog
+        isOpen={captionClipId !== null}
+        onOpenChange={(open) => {
+          if (!open) setCaptionClipId(null)
+        }}
+        purpose="form"
+        width="min(1100px, 94vw)"
+        maxHeight="92vh"
+      >
+        <DialogHeader title="Captions" />
+        {captionClipId && (
+          <CaptionEditor
+            clipId={captionClipId}
+            onDone={() => {
+              setCaptionClipId(null)
+              // A save-as-new put a clip in the library; show it.
+              void api.listClips().then((page) => {
+                setClips(page.clips)
+                setNextBefore(page.nextBefore)
+              }).catch(() => {})
+            }}
+          />
+        )}
+      </Dialog>
     </AppShell>
   )
 }

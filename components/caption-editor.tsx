@@ -1,11 +1,8 @@
 "use client"
 
-import { use, useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useRef, useState } from "react"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
-import { Heading } from "@astryxdesign/core/Heading"
-import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
@@ -18,7 +15,6 @@ import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import { maxCharsPerLine, wrapCaptionText } from "@/lib/captions"
 import type { Clip, ClipCaption } from "@/lib/types"
-import { AppShell } from "@/components/app-shell"
 
 /**
  * The caption editor: put styled text on a clip and render it in.
@@ -58,7 +54,7 @@ function freshCaption(): ClipCaption {
   return { text: "Your caption", font: "bold", sizePct: 6, color: "#ffffff", yPct: 85, outline: true }
 }
 
-function CaptionEditor({ clipId }: { clipId: string }) {
+export function CaptionEditor({ clipId, onDone }: { clipId: string; onDone: () => void }) {
   const [clip, setClip] = useState<Clip | null>(null)
   const [failed, setFailed] = useState(false)
   const [captions, setCaptions] = useState<ClipCaption[]>([])
@@ -68,10 +64,9 @@ function CaptionEditor({ clipId }: { clipId: string }) {
   /** The source's real shape, learned from the video itself; 16:9 until known. */
   const [aspectRatio, setAspectRatio] = useState<number | null>(null)
   const previewRef = useRef<HTMLDivElement | null>(null)
-  /** True while the editor is on screen; the render poll checks it so a
-   *  finished render never yanks someone off whatever page they went to. */
+  /** True while the editor is open; the render poll checks it so a finished
+   *  render never acts on a modal that was closed mid-wait. */
   const aliveRef = useRef(true)
-  const router = useRouter()
   const toast = useToast()
 
   useEffect(() => {
@@ -118,7 +113,7 @@ function CaptionEditor({ clipId }: { clipId: string }) {
           toast({
             body: mode === "new" ? "Saved — the captioned clip is in your library." : "Replaced — the clip now carries these captions.",
           })
-          router.push("/clips")
+          onDone()
           return
         }
         if (current.status === "failed") {
@@ -187,13 +182,12 @@ function CaptionEditor({ clipId }: { clipId: string }) {
 
   return (
     <VStack gap={4} align="stretch">
-      <HStack justify="between" align="start" gap={4} wrap="wrap">
-        <VStack gap={1.5}>
-          <Heading level={1}>Captions</Heading>
-          <Text as="p" type="supporting" display="block">
-            Drag text where it should sit; what you see is what gets burned in.
-          </Text>
-        </VStack>
+      {/* The Dialog's own header carries the title; this row holds the
+          working subtitle and the two ways out. */}
+      <HStack justify="between" align="center" gap={4} wrap="wrap">
+        <Text as="p" type="supporting" display="block">
+          Drag text where it should sit; what you see is what gets burned in.
+        </Text>
         <HStack gap={2} align="center">
           <Button
             label="Save as new clip"
@@ -337,6 +331,13 @@ function CaptionEditor({ clipId }: { clipId: string }) {
                 onChange={(value) => update({ text: value.slice(0, 200) })}
                 placeholder="What should it say?"
               />
+              <VStack gap={1} align="stretch">
+                {/* SegmentedControl's own label is aria-only — without a
+                    visible one, the owner literally could not find the font
+                    choice. Same for colour below. */}
+                <Text as="p" type="supporting" display="block" weight="medium">
+                  Font
+                </Text>
               <SegmentedControl
                 label="Font"
                 value={current.font}
@@ -349,6 +350,11 @@ function CaptionEditor({ clipId }: { clipId: string }) {
                 <SegmentedControlItem value="serif" label="Serif" />
                 <SegmentedControlItem value="mono" label="Mono" />
               </SegmentedControl>
+              </VStack>
+              <VStack gap={1} align="stretch">
+                <Text as="p" type="supporting" display="block" weight="medium">
+                  Colour
+                </Text>
               <SegmentedControl
                 label="Colour"
                 value={current.color}
@@ -360,6 +366,7 @@ function CaptionEditor({ clipId }: { clipId: string }) {
                   <SegmentedControlItem key={color.value} value={color.value} label={color.label} />
                 ))}
               </SegmentedControl>
+              </VStack>
               <Slider
                 label="Size"
                 value={current.sizePct}
@@ -389,18 +396,5 @@ function CaptionEditor({ clipId }: { clipId: string }) {
         </VStack>
       </HStack>
     </VStack>
-  )
-}
-
-export default function CaptionScreen({ params }: { params: Promise<{ clipId: string }> }) {
-  const { clipId } = use(params)
-  return (
-    <AppShell active="clips">
-      <Layout height="auto" contentWidth={1152}>
-        <LayoutContent padding={6}>
-          <CaptionEditor clipId={clipId} />
-        </LayoutContent>
-      </Layout>
-    </AppShell>
   )
 }
