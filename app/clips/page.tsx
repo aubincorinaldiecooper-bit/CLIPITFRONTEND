@@ -12,13 +12,13 @@ import { Popover } from "@astryxdesign/core/Popover"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
+import { TextArea } from "@astryxdesign/core/TextArea"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { CaptionEditor } from "@/components/caption-editor"
-import { PublishPreview } from "@/components/publish-preview"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { GhostCards } from "@/components/empty-illustrations"
 
@@ -448,57 +448,49 @@ export default function ClipsPage() {
           </VStack>
         </LayoutContent>
       </Layout>
-      {/* Approve before the world sees it: every platform's actual cut,
-          played at its true shape, and nothing posted until the button. */}
+      {/* Type a caption, send it. The cut each platform receives is made
+          server-side at publish time; this used to show every one of them
+          back for approval first, and that screen was removed — it was more
+          screen than the moment warranted. */}
       <Dialog
         isOpen={publishOpenId !== null}
         onOpenChange={(open) => {
           if (!open) setPublishTarget(null)
         }}
         purpose="form"
-        width="min(980px, 94vw)"
-        maxHeight="92vh"
+        width="min(520px, 94vw)"
       >
         <DialogHeader
-          title="Check before you post"
+          title="Post this clip"
           onOpenChange={(open) => !open && setPublishTarget(null)}
         />
         {publishOpenId && (
-          <PublishPreview
-            clipId={publishOpenId}
-            caption={drafts[publishOpenId] ?? ""}
-            // The guard lives HERE, not in the dialog: closing the dialog
-            // unmounts it, and a flag that resets would let a second Post
-            // start a publish of a clip already on its way out.
-            isPublishing={publishingIds.includes(publishOpenId)}
-            onPublishStart={() => setPublishingIds((current) => [...current, publishOpenId])}
-            onPublishSettled={() =>
-              setPublishingIds((current) => current.filter((id) => id !== publishOpenId))
-            }
-            onCaptionChange={(value) =>
-              setDrafts((current) => ({ ...current, [publishOpenId]: value }))
-            }
-            onPublished={({ posts }) => {
-              const target = publishOpenId
-              // Close only OUR dialog. A slow publish finishing after
-              // someone moved on to another clip must not dismiss the
-              // preview they are now looking at.
-              if (publishOpenIdRef.current === target) setPublishTarget(null)
-              if (target) {
-                setDrafts((current) => {
-                  const { [target]: _sent, ...rest } = current
-                  return rest
-                })
+          <VStack gap={4} align="stretch">
+            <TextArea
+              label="Caption"
+              rows={4}
+              value={drafts[publishOpenId] ?? ""}
+              onChange={(value) =>
+                setDrafts((current) => ({ ...current, [publishOpenId]: value }))
               }
-              const shaping = posts?.filter((entry) => entry.status === "rendering") ?? []
-              toast({
-                body:
-                  shaping.length > 0
-                    ? "Posted — one cut is still rendering and goes out on its own when it's done."
-                    : "Posted — it's on its way to your connected accounts.",
-              })
-            }}
-          />
+              placeholder="Say something about this clip (optional)"
+            />
+            <HStack gap={3} justify="between" align="center">
+              <Text as="p" type="supporting" display="block">
+                Goes to every account you have connected.
+              </Text>
+              <Button
+                label="Post it"
+                variant="primary"
+                // The guard stays on the page, not in the dialog: closing
+                // this unmounts it, and a flag that reset would let a second
+                // Post start a publish of a clip already on its way out.
+                isLoading={publishingIds.includes(publishOpenId)}
+                isDisabled={publishingIds.includes(publishOpenId)}
+                onClick={() => void publish(publishOpenId)}
+              />
+            </HStack>
+          </VStack>
         )}
       </Dialog>
 
