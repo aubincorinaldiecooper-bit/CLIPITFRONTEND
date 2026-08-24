@@ -56,17 +56,30 @@ type Preview = Awaited<ReturnType<typeof api.previewPublish>>["previews"][number
 export function PublishPreview({
   clipId,
   caption,
+  isPublishing,
   onCaptionChange,
+  onPublishStart,
+  onPublishSettled,
   onPublished,
 }: {
   clipId: string
   caption: string
+  /**
+   * Whether a publish for THIS clip is already in flight. It is the page's
+   * to know, not this component's: closing the dialog unmounts everything
+   * here, and a local flag would reset — so reopening and pressing Post
+   * again would start a second publish of a clip already going out.
+   */
+  isPublishing: boolean
   onCaptionChange: (value: string) => void
+  onPublishStart: () => void
+  onPublishSettled: () => void
   onPublished: (result: Awaited<ReturnType<typeof api.publishClip>>) => void
 }) {
   const [previews, setPreviews] = useState<Preview[] | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
-  const [publishing, setPublishing] = useState(false)
+  /** Bumped to re-run the preview poll after a failure, without reopening. */
+  const [attempt, setAttempt] = useState(0)
   const aliveRef = useRef(true)
 
   useEffect(() => {
@@ -101,26 +114,41 @@ export function PublishPreview({
     return () => {
       if (timer) window.clearTimeout(timer)
     }
-  }, [clipId])
+    // `attempt` is what Try again turns, so the poll restarts in place.
+  }, [clipId, attempt])
 
   const publish = async () => {
-    if (publishing) return
-    setPublishing(true)
+    if (isPublishing) return
+    onPublishStart()
     try {
       const result = await api.publishClip(clipId, { caption: caption.trim() })
       onPublished(result)
     } catch (cause) {
       setFailed(cause instanceof ApiError ? cause.message : "Couldn't publish just now. Try again.")
     } finally {
-      if (aliveRef.current) setPublishing(false)
+      onPublishSettled()
     }
   }
 
-  if (failed) {
-    return <Banner status="error" title="That didn't work" description={failed} />
+  const retry = () => {
+    setFailed(null)
+    setAttempt((value) => value + 1)
   }
+
+  // A first load that failed has nothing to show yet — but it still offers
+  // the way forward in place, rather than making someone close the dialog
+  // and open it again to retry.
   if (previews === null) {
-    return <Skeleton height={220} radius={3} />
+    return failed ? (
+      <VStack gap={2} align="stretch">
+        <Banner status="error" title="That didn't work" description={failed} />
+        <HStack justify="end">
+          <Button label="Try again" variant="secondary" onClick={retry} />
+        </HStack>
+      </VStack>
+    ) : (
+      <Skeleton height={220} radius={3} />
+    )
   }
 
   const preparing = previews.filter((preview) => preview.status === "preparing")
@@ -133,54 +161,73 @@ export function PublishPreview({
         This is exactly what each account receives. Nothing is posted until you say so.
       </Text>
 
-      {/* One row, however many platforms. A grid of panes ate the panel
-          alive at four shapes — and four is not the ceiling. The carousel
-          keeps the panel one height forever: the cuts scroll, the caption
-          and the Post button stay where they were. */}
-      <Carousel gap={3} hasSnap hasEdgeFade aria-label="What each platform receives">
-        {previews.map((preview) => {
-          const ratio = ASPECT_RATIO[preview.aspect] ?? 16 / 9
-          return (
-            <VStack
-              key={`${preview.aspect}-${preview.targets[0]?.accountId ?? ""}`}
-              gap={1.5}
-              align="center"
-            >
-              <div
-                className="relative overflow-hidden rounded-xl bg-black ring-1 ring-white/[0.07]"
-                style={{
-                  // One height for every card, so the row never jumps as it
-                  // scrolls; the WIDTH is what carries the shape.
-                  height: 260,
-                  aspectRatio: ratio,
-                  flexShrink: 0,
-                }}
+      {/* A failure that arrives once the cuts are on screen belongs BESIDE
+          them, not instead of them: a brief polling blip must not take away
+          the videos, the caption and the button. */}
+      {failed && (
+        <Banner
+          status="error"
+          title="That didn't work"
+          description={failed}
+          endContent={<Button label="Try again" variant="secondary" size="sm" onClick={retry} />}
+        />
+      )}
+
+      {/* One cut at a time. The arrow moves to the next: a person checking
+          what goes out should be looking at ONE post, the way their
+          audience will, not scanning a shelf of them. Each slide fills the
+          carousel's width and centres its card, so the snap lands on
+          exactly one — and the stage is a fixed height, so the panel never
+          moves as you step through shapes. */}
+      <div style={{ containerType: "inline-size" }}>
+        <Carousel gap={0} hasSnap padding={0} aria-label="What each platform receives">
+          {previews.map((preview, index) => {
+            const ratio = ASPECT_RATIO[preview.aspect] ?? 16 / 9
+            return (
+              <VStack
+                key={`${preview.aspect}-${preview.targets[0]?.accountId ?? ""}`}
+                gap={1.5}
+                align="center"
+                // One slide = one carousel width, so a snap can only ever
+                // rest on a single cut.
+                style={{ width: "100cqw", flexShrink: 0 }}
               >
-                {preview.status === "ready" && preview.url ? (
-                  <video src={preview.url} controls playsInline className="h-full w-full object-contain" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center px-4 text-center">
-                    <Text as="p" type="supporting" display="block">
-                      {preview.status === "failed"
-                        ? preview.error ?? "This cut couldn't be made."
-                        : "Preparing this cut…"}
-                    </Text>
-                  </div>
-                )}
-              </div>
-              <VStack gap={0.5} align="center">
-                <Text as="p" type="supporting" display="block" weight="medium">
-                  {describeTargets(preview.targets)}
-                </Text>
-                <Text as="p" type="supporting" display="block">
-                  {preview.aspect === "source" ? "As you cut it" : `${preview.aspect} cut`}
-                  {preview.width && preview.height ? ` · ${preview.width}×${preview.height}` : ""}
-                </Text>
+                <div
+                  className="relative overflow-hidden rounded-xl bg-black ring-1 ring-white/[0.07]"
+                  style={{
+                    height: 300,
+                    aspectRatio: ratio,
+                    maxWidth: "100%",
+                    flexShrink: 0,
+                  }}
+                >
+                  {preview.status === "ready" && preview.url ? (
+                    <video src={preview.url} controls playsInline className="h-full w-full object-contain" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center px-4 text-center">
+                      <Text as="p" type="supporting" display="block">
+                        {preview.status === "failed"
+                          ? preview.error ?? "This cut couldn't be made."
+                          : "Preparing this cut…"}
+                      </Text>
+                    </div>
+                  )}
+                </div>
+                <VStack gap={0.5} align="center">
+                  <Text as="p" type="supporting" display="block" weight="medium">
+                    {describeTargets(preview.targets)}
+                  </Text>
+                  <Text as="p" type="supporting" display="block">
+                    {preview.aspect === "source" ? "As you cut it" : `${preview.aspect} cut`}
+                    {preview.width && preview.height ? ` · ${preview.width}×${preview.height}` : ""}
+                    {previews.length > 1 ? ` · ${index + 1} of ${previews.length}` : ""}
+                  </Text>
+                </VStack>
               </VStack>
-            </VStack>
-          )
-        })}
-      </Carousel>
+            )
+          })}
+        </Carousel>
+      </div>
 
       <TextArea
         label="Caption"
@@ -207,7 +254,7 @@ export function PublishPreview({
         <Button
           label={ready.length > 1 ? `Post all ${ready.length}` : "Post it"}
           variant="primary"
-          isLoading={publishing}
+          isLoading={isPublishing}
           // Approving something you cannot see is the one thing this panel
           // exists to prevent.
           isDisabled={ready.length === 0 || preparing.length > 0}

@@ -467,12 +467,23 @@ export default function ClipsPage() {
           <PublishPreview
             clipId={publishOpenId}
             caption={drafts[publishOpenId] ?? ""}
+            // The guard lives HERE, not in the dialog: closing the dialog
+            // unmounts it, and a flag that resets would let a second Post
+            // start a publish of a clip already on its way out.
+            isPublishing={publishingIds.includes(publishOpenId)}
+            onPublishStart={() => setPublishingIds((current) => [...current, publishOpenId])}
+            onPublishSettled={() =>
+              setPublishingIds((current) => current.filter((id) => id !== publishOpenId))
+            }
             onCaptionChange={(value) =>
               setDrafts((current) => ({ ...current, [publishOpenId]: value }))
             }
             onPublished={({ posts }) => {
               const target = publishOpenId
-              setPublishTarget(null)
+              // Close only OUR dialog. A slow publish finishing after
+              // someone moved on to another clip must not dismiss the
+              // preview they are now looking at.
+              if (publishOpenIdRef.current === target) setPublishTarget(null)
               if (target) {
                 setDrafts((current) => {
                   const { [target]: _sent, ...rest } = current
