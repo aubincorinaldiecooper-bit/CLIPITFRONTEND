@@ -213,7 +213,12 @@ function PublishingBody() {
   if (connectedAccounts.length === 0) {
     return (
       <VStack gap={4} align="stretch">
-        {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
+        {/* Not while the connect dialog is open: it reports the same failure,
+            and one problem shown twice on one screen reads as two problems.
+            The dialog owns it, because that is where the action was taken. */}
+        {actionError && !connectTarget && (
+          <Banner status="error" title="That didn't work" description={actionError} />
+        )}
         <Center minHeight="55vh">
         <EmptyState
           icon={<GhostRows />}
@@ -246,7 +251,7 @@ function PublishingBody() {
 
   return (
     <VStack gap={5} align="stretch">
-      {actionError && (
+      {actionError && !connectTarget && (
         <Banner status="error" title="That didn't work" description={actionError} />
       )}
 
