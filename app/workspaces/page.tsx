@@ -18,6 +18,7 @@ import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import type { WorkspacesPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { personName } from "@/components/side-nav"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { GhostRoom } from "@/components/empty-illustrations"
 
@@ -136,7 +137,7 @@ function WorkspacesBody() {
     <VStack gap={1.5}>
       <Heading level={1}>Workspaces</Heading>
       <Text as="p" type="supporting" display="block">
-        Your first workspace is where your clips live. Create another to share clips with people.
+        Rooms you share with other people. Your own clips live under Your clips.
       </Text>
     </VStack>
   )
@@ -168,52 +169,48 @@ function WorkspacesBody() {
     )
   }
 
+  // The rooms this page is about. The personal one is deliberately excluded:
+  // it is the same place "Your clips" opens, and listing it here as well made
+  // one room look like two.
+  const shared = page.workspaces.filter((room) => !room.isPersonal)
+
   return (
     <VStack gap={5} align="stretch">
       <HStack justify="between" align="start" gap={4} wrap="wrap">
         <VStack gap={1.5}>
           <Heading level={1}>Workspaces</Heading>
           <Text as="p" type="supporting" display="block">
-            Your first workspace is where your clips live. Create another to share clips with people.
+            Rooms you share with other people. Your own clips live under Your clips.
           </Text>
         </VStack>
         {/* While the no-shared-workspaces empty state is on the page it owns
             this action; two identical primary buttons is one too many. */}
-        {page.workspaces.some((room) => !room.isPersonal) && (
+        {shared.length > 0 && (
           <Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />
         )}
       </HStack>
 
-      {page.workspaces.length === 0 ? (
-        // The backend without workspaces yet: an intentional room, not a
-        // page that trails off into nothing.
-        <Center minHeight="50vh">
-          <EmptyState
-            icon={<GhostRoom />}
-            title="Workspaces aren't switched on here yet"
-            description="Once they are, your first workspace — where every clip you cut lives — appears here, and you can create shared ones to send clips to people."
-          />
-        </Center>
-      ) : (
+      {/* The personal room is not listed. It is the same place "Your clips"
+          already opens, and showing it here as well made one room look like
+          two. This page is the shared ones. */}
+      {shared.length > 0 && (
         <List hasDividers>
-          {page.workspaces.map((room) => (
+          {shared.map((room) => (
             <ListItem
               key={room.id}
-              label={room.name}
+              label={room.isOwner ? room.name : `${personName(room.ownerEmail) ?? "Shared"} · ${room.name}`}
               href={`/workspaces/${room.id}`}
               description={
-                room.isPersonal
-                  ? `Your workspace — every clip you cut lives here · ${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"}`
-                  : `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
-                    `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
-                    (room.isOwner ? " · yours" : "")
+                `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
+                `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
+                (room.isOwner ? " · yours" : "")
               }
             />
           ))}
         </List>
       )}
 
-      {page.workspaces.length > 0 && !page.workspaces.some((room) => !room.isPersonal) && (
+      {shared.length === 0 && (
         // The library row exists above; what is missing is the SHARED kind,
         // so the empty state sells exactly that and its action opens the
         // create dialog.

@@ -26,6 +26,17 @@ import { api } from "@/lib/api"
  */
 
 const COLLAPSED_KEY = "clipit.nav.collapsed"
+/**
+ * A person's name from their address. Not clever — the part before the @ is
+ * what people recognise each other by in a small team, and it is the only
+ * name this app is ever given.
+ */
+export function personName(email: string | null | undefined): string | null {
+  if (!email) return null
+  const local = email.split("@")[0]?.trim()
+  return local ? local : null
+}
+
 const WORKSPACES_OPEN_KEY = "clipit.nav.workspaces.open"
 
 /**
@@ -148,7 +159,7 @@ export function SideNav({
    * a failed fetch settles on [] and the rail shows a plain Workspaces link —
    * never an error, the rail is not the place to report one.
    */
-  const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
+  const [rooms, setRooms] = useState<Array<{ id: string; name: string; label: string }> | null>(null)
   const [workspacesOpen, setWorkspacesOpen] = useState(true)
   // Transitions must not play while the saved state is being applied: the
   // restore happens in useLayoutEffect, before the browser ever paints the
@@ -168,7 +179,24 @@ export function SideNav({
       void api
         .listWorkspaces()
         .then((page) => {
-          if (!cancelled) setRooms(page.signInRequired ? [] : page.workspaces.map(({ id, name }) => ({ id, name })))
+          if (cancelled) return
+          // The personal workspace is deliberately NOT listed here. It is the
+          // same room "Your clips" already links to, and showing one place
+          // twice under two names — once as a page, once as a room — was the
+          // thing that made the rail confusing. Workspaces means the rooms
+          // you share with other people.
+          setRooms(
+            page.signInRequired
+              ? []
+              : page.workspaces
+                  .filter((room) => !room.isPersonal)
+                  .map(({ id, name, isOwner, ownerEmail }) => ({
+                    id,
+                    name,
+                    // A room someone invited you to reads as theirs.
+                    label: isOwner ? name : `${personName(ownerEmail) ?? "Shared"} · ${name}`,
+                  })),
+          )
         })
         .catch(() => {
           if (!cancelled) setRooms([])
@@ -234,7 +262,7 @@ export function SideNav({
                 {rooms.map((room) => (
                   <SideNavItem
                     key={room.id}
-                    label={room.name}
+                    label={room.label}
                     href={`/workspaces/${room.id}`}
                     icon={FolderGlyph}
                     isSelected={activeWorkspaceId === room.id}

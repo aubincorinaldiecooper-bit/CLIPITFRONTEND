@@ -285,6 +285,11 @@ export interface WorkspaceSummary {
   isOwner: boolean
   /** True for the first workspace: the one where all your clips live. */
   isPersonal?: boolean
+  /**
+   * Whose room this is. A room you were invited to is theirs before it is
+   * anything else, and the name they gave it does not say that on its own.
+   */
+  ownerEmail?: string | null
   memberCount: number
   clipCount: number
 }
