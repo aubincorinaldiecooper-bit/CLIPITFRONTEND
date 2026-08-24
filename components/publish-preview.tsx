@@ -28,7 +28,13 @@ const PLATFORM_LABELS: Record<string, string> = {
   instagram: "Instagram",
 }
 
-const platformName = (platform: string) => PLATFORM_LABELS[platform] ?? platform
+/**
+ * A platform's name as its own users write it. The map holds the ones whose
+ * capitalisation is not guessable; anything else is at least given a capital
+ * rather than shown to a person as "linkedin".
+ */
+const platformName = (platform: string) =>
+  PLATFORM_LABELS[platform] ?? platform.charAt(0).toUpperCase() + platform.slice(1)
 
 /** "TikTok and Instagram" — each service named once, however many accounts. */
 function describeTargets(targets: Array<{ platform: string }>): string {
@@ -126,7 +132,12 @@ export function PublishPreview({
         This is exactly what each account receives. Nothing is posted until you say so.
       </Text>
 
-      {/* Every shape side by side, each at its own true proportions. */}
+      {/* Every shape side by side, each at its own true proportions — and
+          each one able to SHRINK, because a pane sized only by height makes
+          a 16:9 cut 498px wide, which walks off the edge of a phone. The
+          container query is what lets the height fall back to whatever the
+          panel's real width allows. */}
+      <div style={{ containerType: "inline-size" }}>
       <HStack gap={3} align="start" wrap="wrap" justify="center">
         {previews.map((preview) => {
           const ratio = ASPECT_RATIO[preview.aspect] ?? 16 / 9
@@ -134,7 +145,13 @@ export function PublishPreview({
             <VStack key={`${preview.aspect}-${preview.targets[0]?.accountId ?? ""}`} gap={1.5} align="center">
               <div
                 className="relative overflow-hidden rounded-xl bg-black ring-1 ring-white/[0.07]"
-                style={{ aspectRatio: ratio, height: 280 }}
+                style={{
+                  aspectRatio: ratio,
+                  // Whichever is smaller: the comfortable height, or the
+                  // height at which this shape still fits the panel's width.
+                  height: `min(280px, calc(100cqw / ${ratio}))`,
+                  maxWidth: "100%",
+                }}
               >
                 {preview.status === "ready" && preview.url ? (
                   <video src={preview.url} controls playsInline className="h-full w-full object-contain" />
@@ -161,6 +178,7 @@ export function PublishPreview({
           )
         })}
       </HStack>
+      </div>
 
       <TextArea
         label="Caption"
