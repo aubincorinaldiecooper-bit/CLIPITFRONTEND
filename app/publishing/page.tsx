@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Center } from "@astryxdesign/core/Center"
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
@@ -89,6 +90,9 @@ function PublishingBody() {
   const [page, setPage] = useState<SocialAccountsPage | null>(null)
   const [failed, setFailed] = useState(false)
   const [connecting, setConnecting] = useState<string | null>(null)
+  /** The platform whose connect modal is open, and whether this is a
+   *  fresh connection or a reconnect of a flagged account. */
+  const [connectTarget, setConnectTarget] = useState<{ platform: string; reconnect: boolean } | null>(null)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -115,6 +119,12 @@ function PublishingBody() {
     }
   }, [])
 
+  /** Open the modal that explains the journey before starting it. */
+  const askToConnect = (platform: string, reconnect = false) => {
+    setActionError(null)
+    setConnectTarget({ platform, reconnect })
+  }
+
   const connect = async (platform: string) => {
     setActionError(null)
     setConnecting(platform)
@@ -123,6 +133,7 @@ function PublishingBody() {
       window.location.assign(url)
     } catch (cause) {
       setConnecting(null)
+      // The modal stays open with the reason, so trying again is one click.
       setActionError(
         cause instanceof ApiError ? cause.message : "Couldn't start the connection. Try again.",
       )
@@ -198,14 +209,20 @@ function PublishingBody() {
                   key={platform}
                   label={`Connect ${PLATFORM_LABELS[platform]}`}
                   variant="secondary"
-                  isLoading={connecting === platform}
-                  onClick={() => void connect(platform)}
+                  onClick={() => askToConnect(platform)}
                 />
               ))}
             </>
           }
         />
         </Center>
+        <ConnectDialog
+          target={connectTarget}
+          connecting={connecting}
+          actionError={actionError}
+          onClose={() => setConnectTarget(null)}
+          onContinue={(platform) => void connect(platform)}
+        />
       </VStack>
     )
   }
@@ -240,8 +257,7 @@ function PublishingBody() {
                       label="Reconnect"
                       variant="primary"
                       size="sm"
-                      isLoading={connecting === account.platform}
-                      onClick={() => void connect(account.platform)}
+                      onClick={() => askToConnect(account.platform, true)}
                     />
                   ) : (
                     <Button
@@ -270,8 +286,7 @@ function PublishingBody() {
               key={platform}
               label={`Connect ${PLATFORM_LABELS[platform]}`}
               variant="secondary"
-              isLoading={connecting === platform}
-              onClick={() => void connect(platform)}
+              onClick={() => askToConnect(platform)}
             />
           ))}
         </HStack>
@@ -281,7 +296,88 @@ function PublishingBody() {
         Publishing happens from your library: every ready clip has a Publish button that posts it
         to the accounts you pick.
       </Text>
+
+      <ConnectDialog
+        target={connectTarget}
+        connecting={connecting}
+        actionError={actionError}
+        onClose={() => setConnectTarget(null)}
+        onContinue={(platform) => void connect(platform)}
+      />
     </VStack>
+  )
+}
+
+/**
+ * The moment before leaving CLIPIT: a modal that says what happens next —
+ * a secure approval page, the platform's own sign-in, then straight back —
+ * and starts the journey only from its Continue button.
+ *
+ * Deliberately provider-anonymous: the publishing service CLIPIT uses is
+ * an implementation detail, and the owner asked for it scrubbed from
+ * every user-facing surface.
+ */
+function ConnectDialog({
+  target,
+  connecting,
+  actionError,
+  onClose,
+  onContinue,
+}: {
+  target: { platform: string; reconnect: boolean } | null
+  connecting: string | null
+  actionError: string | null
+  onClose: () => void
+  onContinue: (platform: string) => void
+}) {
+  const label = target ? PLATFORM_LABELS[target.platform] ?? target.platform : ""
+  return (
+    <Dialog
+      isOpen={target !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      purpose="info"
+      width={460}
+    >
+      <DialogHeader
+        title={target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`}
+        onOpenChange={(open) => {
+          if (!open) onClose()
+        }}
+      />
+      {target && (
+        <VStack gap={3} align="stretch">
+          {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
+          {target.reconnect && (
+            <Text as="p" type="body" color="secondary" display="block">
+              This account needs a fresh sign-in — posts can't go out until it's reconnected.
+            </Text>
+          )}
+          <VStack gap={2} align="stretch">
+            <Text as="p" type="body" display="block">
+              1. You'll be taken to a secure page to approve the connection.
+            </Text>
+            <Text as="p" type="body" display="block">
+              2. You sign in with {label} itself — CLIPIT never sees that password.
+            </Text>
+            <Text as="p" type="body" display="block">
+              3. You land back here, connected — and every ready clip in your library can
+              publish straight to it.
+            </Text>
+          </VStack>
+          <HStack gap={2} justify="end">
+            <Button label="Cancel" variant="ghost" onClick={onClose} />
+            <Button
+              label="Continue"
+              variant="primary"
+              isLoading={connecting === target.platform}
+              onClick={() => onContinue(target.platform)}
+            />
+          </HStack>
+        </VStack>
+      )}
+    </Dialog>
   )
 }
 
