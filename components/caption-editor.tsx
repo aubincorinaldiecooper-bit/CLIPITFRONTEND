@@ -15,7 +15,7 @@ import { ToggleButton } from "@astryxdesign/core/ToggleButton"
 import { Toolbar } from "@astryxdesign/core/Toolbar"
 import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
-import { LINE_HEIGHT_RATIO, maxCharsPerLine, usableWidthFraction, wrapCaptionText } from "@/lib/captions"
+import { charWidthFactor, LINE_HEIGHT_RATIO, maxCharsPerLine, usableWidthFraction, wrapCaptionText } from "@/lib/captions"
 import type { Clip, ClipCaption } from "@/lib/types"
 
 /**
@@ -93,9 +93,13 @@ function measure(caption: ClipCaption, aspectRatio: number) {
   const column = caption.widthPct ?? MAX_COLUMN_PCT
   const maxChars = maxCharsPerLine(caption.font, caption.sizePct, aspectRatio, xPct, column)
   const lines = wrapCaptionText(caption.text, maxChars)
-  // The box IS the text column: the same width the renderer wraps to, so
-  // what the user drags is the shape that gets drawn.
-  const widthPct = Math.min(column, usableWidthFraction(xPct) * 100)
+  // The box IS the column, full stop. It does NOT narrow near the frame's
+  // edge: position clamping keeps the whole box inside instead, the way a
+  // design tool stops a box at the canvas edge. (Narrowing here once made
+  // the edge stop collapse — text could slide to the very edge, re-wrapped
+  // into a sliver of vertical words.) A box wider than the frame allows
+  // simply cannot leave the middle; narrow it with a side handle to move it.
+  const widthPct = column
   const heightPct = Math.min(98, lines.length * caption.sizePct * LINE_HEIGHT_RATIO)
   return { lines, widthPct, heightPct, xPct, column }
 }
@@ -106,15 +110,41 @@ function measure(caption: ClipCaption, aspectRatio: number) {
  * never shows a position the render would quietly correct.
  */
 function clampIntoFrame(caption: ClipCaption, aspectRatio: number): ClipCaption {
-  const { widthPct, heightPct, xPct } = measure(caption, aspectRatio)
-  const halfWidth = widthPct / 2
-  const halfHeight = heightPct / 2
   const bound = (value: number, half: number) =>
     half >= 48 ? 50 : Math.min(98, Math.max(2, Math.min(99 - half, Math.max(1 + half, value))))
-  return { ...caption, xPct: bound(xPct, halfWidth), yPct: bound(caption.yPct, halfHeight) }
+  // The column alone decides how far sideways the box can go — bound x
+  // FIRST, then measure the wrapped height at that legal x. Measuring at
+  // the requested x instead let a far-off-frame drag shrink the wrap budget
+  // to a sliver for one frame, so the block's height ballooned and the
+  // vertical clamp yanked the caption to the middle.
+  const halfWidth = (caption.widthPct ?? MAX_COLUMN_PCT) / 2
+  const xPct = bound(caption.xPct ?? 50, halfWidth)
+  const { heightPct } = measure({ ...caption, xPct }, aspectRatio)
+  return { ...caption, xPct, yPct: bound(caption.yPct, heightPct / 2) }
 }
 
 const round1 = (value: number) => Math.round(value * 10) / 10
+
+/**
+ * A caption saved before boxes had a width arrives with none. Give it the
+ * width its text actually uses — the box hugs the words, Canva's shape — so
+ * it can be dragged sideways. Renders identically: the budget covers the
+ * widest line it already wraps to, with a whisker of margin so rounding
+ * can't cut a character.
+ */
+function withNaturalColumn(caption: ClipCaption, aspectRatio: number): ClipCaption {
+  if (caption.widthPct !== undefined) return caption
+  const lines = wrapCaptionText(
+    caption.text,
+    maxCharsPerLine(caption.font, caption.sizePct, aspectRatio, caption.xPct ?? 50, MAX_COLUMN_PCT),
+  )
+  const widest = Math.max(1, ...lines.map((line) => line.length))
+  const natural = (widest * charWidthFactor(caption.font) * caption.sizePct) / aspectRatio
+  return {
+    ...caption,
+    widthPct: Math.min(MAX_COLUMN_PCT, Math.max(MIN_COLUMN_PCT, Math.ceil(natural * 10) / 10 + 0.1)),
+  }
+}
 
 export function CaptionEditor({
   clipId,
@@ -132,6 +162,8 @@ export function CaptionEditor({
   const [clip, setClip] = useState<Clip | null>(null)
   const [failed, setFailed] = useState(false)
   const [captions, setCaptions] = useState<ClipCaption[]>([])
+  const captionsRef = useRef<ClipCaption[]>([])
+  captionsRef.current = captions
   const [selected, setSelected] = useState<number | null>(0)
   const [editing, setEditing] = useState<number | null>(null)
   const [guides, setGuides] = useState<{ x: boolean; y: boolean }>({ x: false, y: false })
@@ -156,6 +188,24 @@ export function CaptionEditor({
       const box = canvasRef.current?.querySelector<HTMLElement>(`[data-caption="${index}"]`)
       box?.focus()
     })
+  }
+  /**
+   * Undo (Cmd/Ctrl+Z): snapshots of the caption list, taken at the start of
+   * every gesture that changes it — a drag, a resize, a delete, an add, a
+   * style change, entering typing. Direct manipulation without undo means
+   * one slip of Backspace destroys a caption someone placed and styled.
+   */
+  const historyRef = useRef<ClipCaption[][]>([])
+  const pushHistory = () => {
+    historyRef.current.push(captionsRef.current.map((caption) => ({ ...caption })))
+    if (historyRef.current.length > 50) historyRef.current.shift()
+  }
+  const undo = () => {
+    const previous = historyRef.current.pop()
+    if (!previous) return
+    setCaptions(previous)
+    setEditing(null)
+    setSelected((index) => (index !== null && index < previous.length ? index : previous.length ? 0 : null))
   }
   /** True while the editor is open; the render poll checks it so a finished
    *  render never acts on a modal that was closed mid-wait. */
@@ -182,6 +232,16 @@ export function CaptionEditor({
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Cmd/Ctrl+Z: put back what the last gesture changed. While typing,
+      // the browser's own text undo applies instead.
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+        if (editing !== null || document.activeElement instanceof HTMLTextAreaElement) return
+        if (document.activeElement instanceof HTMLInputElement) return
+        event.preventDefault()
+        event.stopPropagation()
+        undo()
+        return
+      }
       // Canva's T: add a text box, as long as nothing is being typed into.
       if (
         (event.key === "t" || event.key === "T") &&
@@ -228,8 +288,12 @@ export function CaptionEditor({
         }
         // Start from what the clip already carries, so "change the colour"
         // of an existing caption is editing, not retyping.
+        const shape =
+          loaded.sourceWidth && loaded.sourceHeight ? loaded.sourceWidth / loaded.sourceHeight : 16 / 9
         setCaptions(
-          Array.isArray(loaded.captions) && loaded.captions.length > 0 ? loaded.captions : [freshCaption()],
+          Array.isArray(loaded.captions) && loaded.captions.length > 0
+            ? loaded.captions.map((caption) => withNaturalColumn(caption, shape))
+            : [freshCaption()],
         )
       })
       .catch(() => {
@@ -300,6 +364,12 @@ export function CaptionEditor({
     }
   }
 
+  /** A toolbar change is its own gesture: snapshot, then apply. */
+  const styleUpdate = (index: number, change: Partial<ClipCaption>) => {
+    pushHistory()
+    update(index, change)
+  }
+
   const update = (index: number, change: Partial<ClipCaption>) => {
     setCaptions((current) =>
       current.map((caption, i) => (i === index ? clampIntoFrame({ ...caption, ...change }, frame) : caption)),
@@ -309,6 +379,7 @@ export function CaptionEditor({
   const duplicate = (index: number) => {
     const caption = captions[index]
     if (!caption || captions.length >= 6) return
+    pushHistory()
     // The copy lands slightly below, so it is visibly its own thing.
     const copy = clampIntoFrame({ ...caption, yPct: caption.yPct + 6 }, frame)
     setCaptions((current) => [...current, copy])
@@ -317,6 +388,7 @@ export function CaptionEditor({
   }
 
   const remove = (index: number) => {
+    pushHistory()
     setCaptions((current) => current.filter((_, i) => i !== index))
     setSelected(null)
     setEditing(null)
@@ -333,7 +405,18 @@ export function CaptionEditor({
       toast({ body: "Six pieces of text is the most one clip can carry." })
       return
     }
-    const next = clampIntoFrame({ ...freshCaption(), text: "", xPct: round1(xPct), yPct: round1(yPct) }, frame)
+    pushHistory()
+    let next = clampIntoFrame({ ...freshCaption(), text: "", xPct: round1(xPct), yPct: round1(yPct) }, frame)
+    // Never land exactly on an existing box (pressing T twice would stack
+    // twins) — step down until the spot is free.
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const covered = captions.some(
+        (existing) =>
+          Math.abs((existing.xPct ?? 50) - (next.xPct ?? 50)) < 3 && Math.abs(existing.yPct - next.yPct) < 3,
+      )
+      if (!covered) break
+      next = clampIntoFrame({ ...next, yPct: next.yPct + 7 }, frame)
+    }
     setCaptions((current) => [...current, next])
     setSelected(captions.length)
     setEditing(captions.length)
@@ -371,9 +454,14 @@ export function CaptionEditor({
     const move = (pointer: PointerEvent) => {
       const dx = pointer.clientX - startX
       const dy = pointer.clientY - startY
-      if (!moving && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
-      moving = true
-      setInteracting(true)
+      if (!moving) {
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
+        // The drag is real, starting now: one snapshot for the whole
+        // gesture (per-move snapshots made undo pop invisible micro-steps).
+        moving = true
+        setInteracting(true)
+        pushHistory()
+      }
       // Shift locks the drag to whichever axis it has travelled furthest on.
       const lockY = pointer.shiftKey && Math.abs(dx) < Math.abs(dy)
       const lockX = pointer.shiftKey && !lockY
@@ -395,7 +483,10 @@ export function CaptionEditor({
       setInteracting(false)
       // A click on a caption that was ALREADY selected puts the caret in it,
       // the way a second click does in a design tool.
-      if (!moving && wasSelected) setEditing(index)
+      if (!moving && wasSelected) {
+        pushHistory()
+        setEditing(index)
+      }
     }
     element.addEventListener("pointermove", move)
     element.addEventListener("pointerup", stop)
@@ -437,6 +528,7 @@ export function CaptionEditor({
       const element = event.currentTarget
       element.setPointerCapture(event.pointerId)
       setInteracting(true)
+      pushHistory()
 
       const move = (pointer: PointerEvent) => {
         const distance =
@@ -498,6 +590,7 @@ export function CaptionEditor({
       remove(index)
     } else if (event.key === "Enter") {
       event.preventDefault()
+      pushHistory()
       setEditing(index)
     } else if (event.key === "Escape") {
       setSelected(null)
@@ -583,7 +676,7 @@ export function CaptionEditor({
                   size="sm"
                   width={124}
                   value={current.font}
-                  onChange={(value) => selected !== null && update(selected, { font: value as ClipCaption["font"] })}
+                  onChange={(value) => selected !== null && styleUpdate(selected, { font: value as ClipCaption["font"] })}
                   options={FONT_CHOICES.map((choice) => ({ value: choice.value, label: choice.label }))}
                   renderOption={(option) => (
                     <span
@@ -602,12 +695,13 @@ export function CaptionEditor({
                   isLabelHidden
                   size="sm"
                   width={104}
+                  isWheelEnabled={false}
                   hasNumberSteppers
                   min={2}
                   max={15}
                   step={0.5}
                   value={current.sizePct}
-                  onChange={(value) => selected !== null && update(selected, { sizePct: value })}
+                  onChange={(value) => selected !== null && styleUpdate(selected, { sizePct: value })}
                 />
                 <Popover
                   content={
@@ -620,7 +714,7 @@ export function CaptionEditor({
                           variant="ghost"
                           size="sm"
                           icon={<ColorChip color={color.value} isSelected={current.color === color.value} />}
-                          onClick={() => selected !== null && update(selected, { color: color.value })}
+                          onClick={() => selected !== null && styleUpdate(selected, { color: color.value })}
                         />
                       ))}
                     </HStack>
@@ -638,7 +732,7 @@ export function CaptionEditor({
                   label="Outline"
                   size="sm"
                   isPressed={current.outline}
-                  onPressedChange={(isPressed) => selected !== null && update(selected, { outline: isPressed })}
+                  onPressedChange={(isPressed) => selected !== null && styleUpdate(selected, { outline: isPressed })}
                 />
               </HStack>
             ) : (
@@ -717,6 +811,7 @@ export function CaptionEditor({
               onPointerDown={beginDrag(index)}
               onDoubleClick={() => {
                 setSelected(index)
+                pushHistory()
                 setEditing(index)
               }}
               onKeyDown={onCaptionKeyDown(index)}

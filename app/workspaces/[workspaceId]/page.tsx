@@ -59,6 +59,21 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
         else setFailed("error")
       })
 
+  /**
+   * Refresh AFTER an action that already succeeded. A blip here must not
+   * replace the whole page with a failure screen — the action worked, and
+   * the page may be holding something unrecoverable (the one-time invite
+   * link shown when email couldn't be sent). Keep what's on screen and say
+   * the refresh missed.
+   */
+  const refresh = () =>
+    api
+      .getWorkspace(workspaceId)
+      .then(setPage)
+      .catch(() => {
+        toast({ type: "error", body: "Couldn't refresh the room — showing the last loaded view." })
+      })
+
   useEffect(() => {
     void load()
     // Loaded once per room; every mutation below refreshes it explicitly.
@@ -88,7 +103,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
         })
         setLinkToShare({ email: address, url: result.acceptUrl })
       }
-      await load()
+      await refresh()
     } catch (cause) {
       setFormError(cause instanceof ApiError ? cause.message : "Couldn't send that invitation. Try again.")
     } finally {
@@ -101,7 +116,12 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     try {
       await api.removeClipFromWorkspace(workspaceId, clipId)
       toast({ body: "Taken out of this workspace. The clip itself is untouched." })
-      await load()
+      // Drop the card in place rather than refetching: a refetch re-signs
+      // every clip's URL, which reloads — and restarts — whatever video the
+      // person is watching in this room right now.
+      setPage((current) =>
+        current ? { ...current, clips: current.clips.filter((clip) => clip.id !== clipId) } : current,
+      )
     } catch (cause) {
       toast({
         type: "error",
@@ -116,7 +136,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     setBusyId(inviteId)
     try {
       await api.revokeInvite(workspaceId, inviteId)
-      await load()
+      await refresh()
     } catch (cause) {
       toast({
         type: "error",
@@ -132,7 +152,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     try {
       await api.removeWorkspaceMember(workspaceId, userId)
       toast({ body: `${label} no longer has access.` })
-      await load()
+      await refresh()
     } catch (cause) {
       toast({
         type: "error",

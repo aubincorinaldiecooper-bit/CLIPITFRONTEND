@@ -55,8 +55,13 @@ export default function ClipsPage() {
    */
   const [publishOpenId, setPublishOpenId] = useState<string | null>(null)
   const publishOpenIdRef = useRef<string | null>(null)
-  const [caption, setCaption] = useState("")
-  const [publishingId, setPublishingId] = useState<string | null>(null)
+  /**
+   * Caption drafts, one per clip. A draft survives its popover closing —
+   * clicking a pixel outside the panel must not erase a paragraph someone
+   * typed — and is dropped only when the publish it was written for lands.
+   */
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [publishingIds, setPublishingIds] = useState<string[]>([])
   /** Which clip's caption editor is open — a modal visit, not a page. */
   const [captionClipId, setCaptionClipId] = useState<string | null>(null)
   /**
@@ -91,19 +96,21 @@ export default function ClipsPage() {
   }, [])
 
   const publish = async (clipId: string) => {
-    if (publishingId) return
-    setPublishingId(clipId)
+    if (publishingIds.includes(clipId)) return
+    setPublishingIds((current) => [...current, clipId])
     try {
-      await api.publishClip(clipId, { caption: caption.trim() })
+      await api.publishClip(clipId, { caption: (drafts[clipId] ?? "").trim() })
       // Transient news is transient: the confirmation appears and leaves on
       // its own instead of becoming permanent card content.
       toast({ body: "Sent — it's on its way to your connected accounts." })
-      // Only touch the panel if it is still this clip's — another clip's
-      // popover may have been opened while this request was in flight, and
-      // closing it (or wiping its caption draft) is not this request's call.
+      // The draft did its job; the panel closes only if it is still this
+      // clip's — another clip's popover may have opened mid-flight.
+      setDrafts((current) => {
+        const { [clipId]: _sent, ...rest } = current
+        return rest
+      })
       if (publishOpenIdRef.current === clipId) {
         setPublishTarget(null)
-        setCaption("")
       }
     } catch (cause) {
       // The API's refusals are already written for people ("No connected
@@ -114,7 +121,7 @@ export default function ClipsPage() {
         body: cause instanceof ApiError ? cause.message : "Couldn't publish just now. Try again.",
       })
     } finally {
-      setPublishingId(null)
+      setPublishingIds((current) => current.filter((id) => id !== clipId))
     }
   }
 
@@ -126,6 +133,8 @@ export default function ClipsPage() {
   const [sendOpenId, setSendOpenId] = useState<string | null>(null)
   const sendOpenIdRef = useRef<string | null>(null)
   const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
+  /** The fetch failed — different answer from "you have no rooms". */
+  const [sendFailed, setSendFailed] = useState(false)
   const [sharedWith, setSharedWith] = useState<string[]>([])
   const [sendSignInRequired, setSendSignInRequired] = useState(false)
   const [sendingTo, setSendingTo] = useState<string | null>(null)
@@ -139,6 +148,7 @@ export default function ClipsPage() {
     setRooms(null)
     setSharedWith([])
     setSendSignInRequired(false)
+    setSendFailed(false)
     setSendTarget(clipId)
     void api
       .getClipWorkspaces(clipId)
@@ -151,7 +161,9 @@ export default function ClipsPage() {
       })
       .catch(() => {
         if (sendOpenIdRef.current !== clipId) return
-        setRooms([])
+        // "The request failed" and "you are in no workspace" are different
+        // answers, and this popover must never return them as the same one.
+        setSendFailed(true)
       })
   }
 
@@ -330,7 +342,6 @@ export default function ClipsPage() {
                             isOpen={publishOpenId === clip.id}
                             onOpenChange={(open) => {
                               if (open) {
-                                setCaption("")
                                 setPublishTarget(clip.id)
                               } else if (publishOpenIdRef.current === clip.id) {
                                 // Only close what is ours: a light-dismiss can
@@ -346,8 +357,10 @@ export default function ClipsPage() {
                                 <TextInput
                                   label="Caption"
                                   isLabelHidden
-                                  value={caption}
-                                  onChange={(value) => setCaption(value)}
+                                  value={drafts[clip.id] ?? ""}
+                                  onChange={(value) =>
+                                    setDrafts((current) => ({ ...current, [clip.id]: value }))
+                                  }
                                   placeholder="Write a caption (optional)"
                                   hasAutoFocus
                                 />
@@ -355,7 +368,7 @@ export default function ClipsPage() {
                                   label="Post to connected accounts"
                                   variant="primary"
                                   size="sm"
-                                  isLoading={publishingId === clip.id}
+                                  isLoading={publishingIds.includes(clip.id)}
                                   onClick={() => void publish(clip.id)}
                                 />
                               </VStack>
@@ -383,7 +396,19 @@ export default function ClipsPage() {
                             // the menu. Light dismiss and Escape both remain.
                             hasCloseButton={false}
                             content={
-                              rooms === null ? (
+                              sendFailed ? (
+                                <VStack gap={2} align="stretch">
+                                  <Text as="p" type="supporting" display="block">
+                                    Couldn't load your workspaces just now.
+                                  </Text>
+                                  <Button
+                                    label="Try again"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => openSend(clip.id)}
+                                  />
+                                </VStack>
+                              ) : rooms === null ? (
                                 <Skeleton height={60} radius={2} />
                               ) : sendSignInRequired ? (
                                 <Text as="p" type="supporting" display="block">
