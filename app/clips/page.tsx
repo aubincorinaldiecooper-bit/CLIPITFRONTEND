@@ -99,10 +99,23 @@ export default function ClipsPage() {
     if (publishingIds.includes(clipId)) return
     setPublishingIds((current) => [...current, clipId])
     try {
-      await api.publishClip(clipId, { caption: (drafts[clipId] ?? "").trim() })
+      const { posts } = await api.publishClip(clipId, { caption: (drafts[clipId] ?? "").trim() })
       // Transient news is transient: the confirmation appears and leaves on
-      // its own instead of becoming permanent card content.
-      toast({ body: "Sent — it's on its way to your connected accounts." })
+      // its own instead of becoming permanent card content. When a platform
+      // needs a different shape than the clip was shot in, the file is cut
+      // first — say so, so a short delay reads as work, not silence.
+      const shaping = posts?.filter((entry) => entry.status === "rendering") ?? []
+      toast({
+        body:
+          shaping.length > 0
+            ? `Sent — ${shaping
+                .flatMap((entry) => entry.targets.map((target) => target.platform))
+                .map((platform) => platform.charAt(0).toUpperCase() + platform.slice(1))
+                .join(" and ")} ${shaping.length === 1 && shaping[0]!.targets.length === 1 ? "gets" : "get"} a ${shaping
+                .map((entry) => entry.aspect)
+                .join(" and ")} cut first; it posts automatically when ready.`
+            : "Sent — it's on its way to your connected accounts.",
+      })
       // The draft did its job; the panel closes only if it is still this
       // clip's — another clip's popover may have opened mid-flight.
       setDrafts((current) => {

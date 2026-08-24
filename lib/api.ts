@@ -368,7 +368,12 @@ export const api = {
   async publishClip(
     clipId: string,
     input: { caption: string; accountIds?: string[] },
-  ): Promise<{ post: { id: string; clipId: string; status: string } }> {
+  ): Promise<{
+    post: { id: string; clipId: string; status: string }
+    /** One entry per platform SHAPE — a clip going to TikTok and YouTube is
+     *  two posts, each carrying its own correctly-cut file. */
+    posts?: Array<{ id: string; status: string; aspect: string; targets: Array<{ platform: string }> }>
+  }> {
     return request(`/api/clips/${clipId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
