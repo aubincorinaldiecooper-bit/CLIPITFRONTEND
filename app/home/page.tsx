@@ -1,34 +1,31 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
 import { Button } from "@astryxdesign/core/Button"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Card } from "@astryxdesign/core/Card"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
-import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { api } from "@/lib/api"
-import type { ActivityStats, LibraryClip } from "@/lib/types"
+import type { ActivityStats } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { authClient } from "@/lib/auth-client"
 
 /**
- * Home: what you have done here, what you cut most recently, and the one
- * button that matters — now on Astryx's Card/Grid/Heading/Text, which also
- * settles an old debt: the page heading was serif, and serif is the
- * wordmark's voice only. Headings here are Geist like the rest of the
- * interface.
+ * Home: the numbers, and the one button that matters.
+ *
+ * It used to carry a strip of recent clips as well. That was a second copy of
+ * the library sitting on the way to the library — the owner's call is that
+ * this page is for how things are doing, and browsing clips belongs on the
+ * clips page.
  *
  * Every number on this screen is a count of the caller's own rows. The one
  * section that cannot be real yet — how clips perform once posted — says so
  * in a sentence instead of wearing invented zeros as if they were data.
  * A dash means "not loaded", never a fake zero.
  *
- * The clip cards stay hand-built: they play footage in place, and media
- * surfaces are the owner's carve-out from the Astryx rework.
  */
 
 const ScissorsGlyph = (
@@ -44,9 +41,6 @@ const ScissorsGlyph = (
 export default function HomePage() {
   const { data: session } = authClient.useSession()
   const [stats, setStats] = useState<ActivityStats | null>(null)
-  const [recent, setRecent] = useState<LibraryClip[] | null>(null)
-  const [recentFailed, setRecentFailed] = useState(false)
-  const [playingId, setPlayingId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -57,16 +51,6 @@ export default function HomePage() {
       })
       .catch(() => {
         // A home page without numbers is still a home page.
-      })
-    void api
-      .listClips()
-      .then((page) => {
-        if (!cancelled) setRecent(page.clips.slice(0, 6))
-      })
-      .catch(() => {
-        // A failed load is not an empty library. "Nothing yet" over an outage
-        // tells someone their clips are gone when they are not.
-        if (!cancelled) setRecentFailed(true)
       })
     return () => {
       cancelled = true
@@ -113,76 +97,6 @@ export default function HomePage() {
               </Card>
             ))}
             </Grid>
-
-            <VStack gap={3} align="stretch">
-              <HStack justify="between" align="center" gap={4}>
-                <Heading level={2}>
-                  Recent clips
-                </Heading>
-                <Link href="/clips" className="whitespace-nowrap text-[13px] text-foreground/50 transition-colors hover:text-foreground">
-                  All clips →
-                </Link>
-              </HStack>
-
-              {recentFailed ? (
-                <p className="text-sm text-error">Couldn't load your clips just now — refresh to try again.</p>
-              ) : recent === null ? (
-                <Grid columns={{ minWidth: 260, max: 4 }} gap={3}>
-                  {[0, 1, 2, 3, 4, 5].map((index) => (
-                    <Skeleton key={index} height={110} radius={2} index={index} />
-                  ))}
-                </Grid>
-              ) : recent.length === 0 ? (
-                <Text as="p" type="supporting">
-                  Nothing yet — cut a moment from a video and it lands here.
-                </Text>
-              ) : (
-                <Grid columns={{ minWidth: 260, max: 4 }} gap={3}>
-              {recent.map((clip) => (
-                <div key={clip.id} className="overflow-hidden rounded-xl bg-surface ring-1 ring-white/[0.07]">
-                  {playingId === clip.id && clip.url ? (
-                    <video src={clip.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPlayingId(clip.id)}
-                      disabled={!clip.url}
-                      aria-label={`Play: ${clip.description}`}
-                      className="group relative block aspect-video w-full bg-black disabled:cursor-default"
-                    >
-                      {clip.thumbnailUrl && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={clip.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                      )}
-                      {clip.url && (
-                        <span className="absolute inset-0 m-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover:scale-105">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                            <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
-                          </svg>
-                        </span>
-                      )}
-                      {/* Same duration badge as the library's cards — one
-                          card language across the app. */}
-                      {(() => {
-                        // Same rule as the library's cards: fall back to the
-                        // span the clip was cut from when a render never
-                        // reported its duration.
-                        const seconds = Math.round(clip.durationSeconds ?? clip.endSeconds - clip.startSeconds)
-                        if (!Number.isFinite(seconds) || seconds <= 0) return null
-                        return (
-                          <span className="absolute bottom-1.5 right-1.5 rounded-[4px] bg-black/80 px-1 py-px font-mono text-[10px] font-medium tabular-nums text-white">
-                            {`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}
-                          </span>
-                        )
-                      })()}
-                    </button>
-                  )}
-                  <p className="truncate px-2.5 py-2 text-[11.5px] text-foreground/70">{clip.description}</p>
-                </div>
-              ))}
-                </Grid>
-              )}
-            </VStack>
 
             {/* The section that cannot be real yet, saying so plainly. Dashes are
             "no data exists", which is true; zeros would claim a measurement
