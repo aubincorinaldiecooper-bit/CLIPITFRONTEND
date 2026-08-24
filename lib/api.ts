@@ -365,6 +365,32 @@ export const api = {
     return request(`/api/social-accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" })
   },
 
+  /**
+   * The files a publish WOULD send, without sending them. Poll until every
+   * entry is 'ready' — a shape that does not exist yet is rendered on the
+   * first call.
+   */
+  async previewPublish(
+    clipId: string,
+    input: { accountIds?: string[] } = {},
+  ): Promise<{
+    clipId: string
+    previews: Array<{
+      aspect: string
+      targets: Array<{ platform: string; accountId: string }>
+      status: "ready" | "preparing" | "failed"
+      url: string | null
+      width: number | null
+      height: number | null
+      error?: string
+    }>
+  }> {
+    return request(`/api/clips/${clipId}/publish/preview`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    })
+  },
+
   async publishClip(
     clipId: string,
     input: { caption: string; accountIds?: string[] },

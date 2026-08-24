@@ -18,6 +18,7 @@ import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { CaptionEditor } from "@/components/caption-editor"
+import { PublishPreview } from "@/components/publish-preview"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { GhostCards } from "@/components/empty-illustrations"
 
@@ -351,44 +352,12 @@ export default function ClipsPage() {
                           />
                         )}
                         {clip.status === "ready" && (
-                          <Popover
-                            isOpen={publishOpenId === clip.id}
-                            onOpenChange={(open) => {
-                              if (open) {
-                                setPublishTarget(clip.id)
-                              } else if (publishOpenIdRef.current === clip.id) {
-                                // Only close what is ours: a light-dismiss can
-                                // fire while another card's popover is opening.
-                                setPublishTarget(null)
-                              }
-                            }}
-                            placement="below"
-                            width={320}
-                            label="Publish this clip"
-                            content={
-                              <VStack gap={2} align="stretch">
-                                <TextInput
-                                  label="Caption"
-                                  isLabelHidden
-                                  value={drafts[clip.id] ?? ""}
-                                  onChange={(value) =>
-                                    setDrafts((current) => ({ ...current, [clip.id]: value }))
-                                  }
-                                  placeholder="Write a caption (optional)"
-                                  hasAutoFocus
-                                />
-                                <Button
-                                  label="Post to connected accounts"
-                                  variant="primary"
-                                  size="sm"
-                                  isLoading={publishingIds.includes(clip.id)}
-                                  onClick={() => void publish(clip.id)}
-                                />
-                              </VStack>
-                            }
-                          >
-                            <Button label="Publish" variant="secondary" size="sm" />
-                          </Popover>
+                          <Button
+                            label="Publish"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setPublishTarget(clip.id)}
+                          />
                         )}
                         {clip.status === "ready" && (
                           <Popover
@@ -479,6 +448,49 @@ export default function ClipsPage() {
           </VStack>
         </LayoutContent>
       </Layout>
+      {/* Approve before the world sees it: every platform's actual cut,
+          played at its true shape, and nothing posted until the button. */}
+      <Dialog
+        isOpen={publishOpenId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPublishTarget(null)
+        }}
+        purpose="form"
+        width="min(980px, 94vw)"
+        maxHeight="92vh"
+      >
+        <DialogHeader
+          title="Check before you post"
+          onOpenChange={(open) => !open && setPublishTarget(null)}
+        />
+        {publishOpenId && (
+          <PublishPreview
+            clipId={publishOpenId}
+            caption={drafts[publishOpenId] ?? ""}
+            onCaptionChange={(value) =>
+              setDrafts((current) => ({ ...current, [publishOpenId]: value }))
+            }
+            onPublished={({ posts }) => {
+              const target = publishOpenId
+              setPublishTarget(null)
+              if (target) {
+                setDrafts((current) => {
+                  const { [target]: _sent, ...rest } = current
+                  return rest
+                })
+              }
+              const shaping = posts?.filter((entry) => entry.status === "rendering") ?? []
+              toast({
+                body:
+                  shaping.length > 0
+                    ? "Posted — one cut is still rendering and goes out on its own when it's done."
+                    : "Posted — it's on its way to your connected accounts.",
+              })
+            }}
+          />
+        )}
+      </Dialog>
+
       <Dialog
         isOpen={captionClipId !== null}
         onOpenChange={(open) => {
