@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
+import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
@@ -13,6 +14,7 @@ import { Text } from "@astryxdesign/core/Text"
 import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
+import { GhostRows } from "@/components/empty-illustrations"
 
 /**
  * Publishing, now real: connect the accounts you post to, see them plainly,
@@ -175,6 +177,35 @@ function PublishingBody() {
   }
 
   const connectedAccounts = page.accounts.filter((account) => account.status !== "disconnected")
+
+  // The first-account moment gets the whole stage: one empty state whose
+  // actions ARE the connect buttons, instead of a bare sentence floating
+  // above a distant section.
+  if (connectedAccounts.length === 0) {
+    return (
+      <VStack gap={4} align="stretch">
+        {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
+        <EmptyState
+          icon={<GhostRows />}
+          title="Connect your first account"
+          description="You'll sign in with the platform itself — CLIPIT never sees that password. Once connected, every ready clip in your library can publish straight to it."
+          actions={
+            <>
+              {PLATFORMS.map((platform) => (
+                <Button
+                  key={platform}
+                  label={`Connect ${PLATFORM_LABELS[platform]}`}
+                  variant="secondary"
+                  isLoading={connecting === platform}
+                  onClick={() => void connect(platform)}
+                />
+              ))}
+            </>
+          }
+        />
+      </VStack>
+    )
+  }
 
   return (
     <VStack gap={5} align="stretch">
