@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
+import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
@@ -17,6 +18,7 @@ import { api, ApiError } from "@/lib/api"
 import type { WorkspacesPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
+import { GhostRoom } from "@/components/empty-illustrations"
 
 /**
  * Your workspaces, the traditional shape: the first one is where all your
@@ -174,25 +176,51 @@ function WorkspacesBody() {
             Your first workspace is where your clips live. Create another to share clips with people.
           </Text>
         </VStack>
-        <Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />
+        {/* While the no-shared-workspaces empty state is on the page it owns
+            this action; two identical primary buttons is one too many. */}
+        {page.workspaces.some((room) => !room.isPersonal) && (
+          <Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />
+        )}
       </HStack>
 
-      <List hasDividers>
-        {page.workspaces.map((room) => (
-          <ListItem
-            key={room.id}
-            label={room.name}
-            href={`/workspaces/${room.id}`}
-            description={
-              room.isPersonal
-                ? `Your workspace — every clip you cut lives here · ${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"}`
-                : `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
-                  `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
-                  (room.isOwner ? " · yours" : "")
-            }
-          />
-        ))}
-      </List>
+      {page.workspaces.length === 0 ? (
+        // The backend without workspaces yet: an intentional room, not a
+        // page that trails off into nothing.
+        <EmptyState
+          icon={<GhostRoom />}
+          title="Workspaces aren't switched on here yet"
+          description="Once they are, your first workspace — where every clip you cut lives — appears here, and you can create shared ones to send clips to people."
+        />
+      ) : (
+        <List hasDividers>
+          {page.workspaces.map((room) => (
+            <ListItem
+              key={room.id}
+              label={room.name}
+              href={`/workspaces/${room.id}`}
+              description={
+                room.isPersonal
+                  ? `Your workspace — every clip you cut lives here · ${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"}`
+                  : `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
+                    `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
+                    (room.isOwner ? " · yours" : "")
+              }
+            />
+          ))}
+        </List>
+      )}
+
+      {page.workspaces.length > 0 && !page.workspaces.some((room) => !room.isPersonal) && (
+        // The library row exists above; what is missing is the SHARED kind,
+        // so the empty state sells exactly that and its action opens the
+        // create dialog.
+        <EmptyState
+          icon={<GhostRoom />}
+          title="No shared workspaces yet"
+          description="Create one, invite people into it, and send clips there from your library — everyone in the workspace sees what's sent."
+          actions={<Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />}
+        />
+      )}
 
       <Dialog
         isOpen={createOpen}

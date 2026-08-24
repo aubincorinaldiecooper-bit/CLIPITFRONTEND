@@ -6,6 +6,7 @@ import { Button } from "@astryxdesign/core/Button"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
+import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Popover } from "@astryxdesign/core/Popover"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
@@ -18,6 +19,7 @@ import type { WorkspaceDetail } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
+import { GhostCards } from "@/components/empty-illustrations"
 
 /**
  * One workspace: the clips people have sent here.
@@ -328,11 +330,21 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
       )}
 
       {page.clips.length === 0 ? (
-        <Text as="p" type="supporting" display="block">
-          {page.workspace.isPersonal
-            ? "Nothing here yet — cut a moment from a video and it lands here."
-            : 'Nothing here yet. In Your clips, every ready clip has a "Send to workspace" option — what you send lands here for everyone in the room.'}
-        </Text>
+        page.workspace.isPersonal ? (
+          <EmptyState
+            icon={<GhostCards />}
+            title="No clips yet"
+            description="Cut a moment from any video and it lands here — this workspace is your library."
+            actions={<Button label="Clip a video" variant="primary" href="/start" />}
+          />
+        ) : (
+          <EmptyState
+            icon={<GhostCards />}
+            title="Nothing sent here yet"
+            description='In Your clips, every ready clip has a "Send to workspace" option — what you send lands here for everyone in the workspace.'
+            actions={<Button label="Open Your clips" variant="secondary" href="/clips" />}
+          />
+        )
       ) : (
         <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
           {page.clips.map((clip) => (
