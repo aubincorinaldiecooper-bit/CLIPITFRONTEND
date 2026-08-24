@@ -135,6 +135,8 @@ export function CaptionEditor({
   const [selected, setSelected] = useState<number | null>(0)
   const [editing, setEditing] = useState<number | null>(null)
   const [guides, setGuides] = useState<{ x: boolean; y: boolean }>({ x: false, y: false })
+  /** True mid-drag/mid-resize; the selection's action pill hides then. */
+  const [interacting, setInteracting] = useState(false)
   const [saving, setSaving] = useState<"new" | "replace" | null>(null)
   const [rendering, setRendering] = useState<string | null>(null)
   /** The source's real shape, learned from the video itself; 16:9 until known. */
@@ -180,6 +182,19 @@ export function CaptionEditor({
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Canva's T: add a text box, as long as nothing is being typed into.
+      if (
+        (event.key === "t" || event.key === "T") &&
+        !event.metaKey && !event.ctrlKey && !event.altKey &&
+        editing === null &&
+        !(document.activeElement instanceof HTMLInputElement) &&
+        !(document.activeElement instanceof HTMLTextAreaElement) &&
+        !(document.activeElement instanceof HTMLSelectElement)
+      ) {
+        event.preventDefault()
+        addCaptionAt(50, 50)
+        return
+      }
       if (event.key !== "Escape") return
       if (editing !== null) {
         event.preventDefault()
@@ -291,14 +306,34 @@ export function CaptionEditor({
     )
   }
 
+  const duplicate = (index: number) => {
+    const caption = captions[index]
+    if (!caption || captions.length >= 6) return
+    // The copy lands slightly below, so it is visibly its own thing.
+    const copy = clampIntoFrame({ ...caption, yPct: caption.yPct + 6 }, frame)
+    setCaptions((current) => [...current, copy])
+    setSelected(captions.length)
+    focusCaption(captions.length)
+  }
+
   const remove = (index: number) => {
     setCaptions((current) => current.filter((_, i) => i !== index))
     setSelected(null)
     setEditing(null)
   }
 
-  const addCaption = () => {
-    const next = { ...freshCaption(), text: "New caption", yPct: 50 }
+  /**
+   * Double-clicking empty frame adds text right there — the canvas is the
+   * "add" affordance, since a modal has no side panel to offer one. The new
+   * box opens straight into typing; abandoning it empty removes it again
+   * (commitEdit), so a stray double-click costs nothing.
+   */
+  const addCaptionAt = (xPct: number, yPct: number) => {
+    if (captions.length >= 6) {
+      toast({ body: "Six pieces of text is the most one clip can carry." })
+      return
+    }
+    const next = clampIntoFrame({ ...freshCaption(), text: "", xPct: round1(xPct), yPct: round1(yPct) }, frame)
     setCaptions((current) => [...current, next])
     setSelected(captions.length)
     setEditing(captions.length)
@@ -338,6 +373,7 @@ export function CaptionEditor({
       const dy = pointer.clientY - startY
       if (!moving && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
       moving = true
+      setInteracting(true)
       // Shift locks the drag to whichever axis it has travelled furthest on.
       const lockY = pointer.shiftKey && Math.abs(dx) < Math.abs(dy)
       const lockX = pointer.shiftKey && !lockY
@@ -356,6 +392,7 @@ export function CaptionEditor({
       element.removeEventListener("pointerup", stop)
       element.removeEventListener("pointercancel", stop)
       setGuides({ x: false, y: false })
+      setInteracting(false)
       // A click on a caption that was ALREADY selected puts the caret in it,
       // the way a second click does in a design tool.
       if (!moving && wasSelected) setEditing(index)
@@ -399,6 +436,7 @@ export function CaptionEditor({
       )
       const element = event.currentTarget
       element.setPointerCapture(event.pointerId)
+      setInteracting(true)
 
       const move = (pointer: PointerEvent) => {
         const distance =
@@ -434,6 +472,7 @@ export function CaptionEditor({
         element.removeEventListener("pointermove", move)
         element.removeEventListener("pointerup", stop)
         element.removeEventListener("pointercancel", stop)
+        setInteracting(false)
       }
       element.addEventListener("pointermove", move)
       element.addEventListener("pointerup", stop)
@@ -463,12 +502,8 @@ export function CaptionEditor({
     } else if (event.key === "Escape") {
       setSelected(null)
     } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d") {
-      // Duplicate, offset a little so the copy is visibly its own thing.
       event.preventDefault()
-      if (captions.length >= 6) return
-      const copy = clampIntoFrame({ ...caption, yPct: caption.yPct + 6 }, frame)
-      setCaptions((current) => [...current, copy])
-      setSelected(captions.length)
+      duplicate(index)
     }
   }
 
@@ -496,7 +531,7 @@ export function CaptionEditor({
         <Text as="p" type="supporting" display="block">
           {isBusyElsewhere
             ? "A render from this clip is still running — it'll land in your library when it's done."
-            : "Drag the text where it should sit. Double-click it to type."}
+            : "Drag text to place it. Double-click to type — on empty space to add more."}
         </Text>
         <HStack gap={2} align="center">
           <Button
@@ -609,24 +644,10 @@ export function CaptionEditor({
             ) : (
               <Text as="p" type="supporting" display="block">
                 {captions.length === 0
-                  ? "No text on this clip yet — add some."
-                  : "Click the text on the clip to restyle it."}
+                  ? "Double-click the clip to add text."
+                  : "Click text on the clip to restyle it — double-click empty space to add more."}
               </Text>
             )
-          }
-          endContent={
-            <HStack gap={1} align="center">
-              {current && selected !== null && (
-                <Button label="Delete" variant="ghost" size="sm" onClick={() => remove(selected)} />
-              )}
-              <Button
-                label="Add text"
-                variant="secondary"
-                size="sm"
-                isDisabled={captions.length >= 6}
-                onClick={addCaption}
-              />
-            </HStack>
           }
         />
       </Card>
@@ -641,6 +662,17 @@ export function CaptionEditor({
             setSelected(null)
             setEditing(null)
           }
+        }}
+        onDoubleClick={(event) => {
+          // Double-click on empty frame (anywhere that is not a caption —
+          // the footage counts as empty) drops a new text box at that spot.
+          if ((event.target as HTMLElement).closest?.("[data-caption]")) return
+          const box = canvasRef.current?.getBoundingClientRect()
+          if (!box || box.width === 0) return
+          addCaptionAt(
+            ((event.clientX - box.left) / box.width) * 100,
+            ((event.clientY - box.top) / box.height) * 100,
+          )
         }}
         className="relative w-full touch-none select-none overflow-hidden rounded-xl bg-black ring-1 ring-white/10"
         style={{ containerType: "size", aspectRatio: frame }}
@@ -690,7 +722,7 @@ export function CaptionEditor({
               onKeyDown={onCaptionKeyDown(index)}
               className={`absolute -translate-x-1/2 -translate-y-1/2 ${
                 isEditing ? "cursor-text" : "cursor-grab active:cursor-grabbing"
-              } ${isSelected ? "outline outline-1 outline-accent" : ""}`}
+              } ${isSelected ? "outline outline-1 outline-accent" : "hover:outline hover:outline-1 hover:outline-accent/50"}`}
               style={{
                 left: `${xPct}%`,
                 top: `${caption.yPct}%`,
@@ -741,6 +773,51 @@ export function CaptionEditor({
                       {line}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {/* Canva's per-element actions ride WITH the selection: a
+                  small floating pill above the box (below it when the box
+                  is near the top), hidden while dragging so it never covers
+                  the frame being aimed at. The style controls stay in the
+                  toolbar; actions on the element live at the element. */}
+              {isSelected && !isEditing && !interacting && (
+                <div
+                  className="absolute left-1/2 z-10 -translate-x-1/2"
+                  style={caption.yPct - heightPct / 2 < 14 ? { top: "calc(100% + 8px)" } : { bottom: "calc(100% + 8px)" }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                >
+                  <Card elevation="high" padding={0.5}>
+                    <HStack gap={0.5} align="center">
+                      <IconButton
+                        label="Duplicate"
+                        tooltip="Duplicate (Ctrl+D)"
+                        variant="ghost"
+                        size="sm"
+                        isDisabled={captions.length >= 6}
+                        icon={
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <rect x="9" y="9" width="12" height="12" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                        }
+                        onClick={() => duplicate(index)}
+                      />
+                      <IconButton
+                        label="Delete"
+                        tooltip="Delete"
+                        variant="ghost"
+                        size="sm"
+                        icon={
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          </svg>
+                        }
+                        onClick={() => remove(index)}
+                      />
+                    </HStack>
+                  </Card>
                 </div>
               )}
 
