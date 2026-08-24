@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
+import { Center } from "@astryxdesign/core/Center"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
@@ -186,11 +187,13 @@ function WorkspacesBody() {
       {page.workspaces.length === 0 ? (
         // The backend without workspaces yet: an intentional room, not a
         // page that trails off into nothing.
-        <EmptyState
-          icon={<GhostRoom />}
-          title="Workspaces aren't switched on here yet"
-          description="Once they are, your first workspace — where every clip you cut lives — appears here, and you can create shared ones to send clips to people."
-        />
+        <Center minHeight="50vh">
+          <EmptyState
+            icon={<GhostRoom />}
+            title="Workspaces aren't switched on here yet"
+            description="Once they are, your first workspace — where every clip you cut lives — appears here, and you can create shared ones to send clips to people."
+          />
+        </Center>
       ) : (
         <List hasDividers>
           {page.workspaces.map((room) => (
@@ -214,12 +217,14 @@ function WorkspacesBody() {
         // The library row exists above; what is missing is the SHARED kind,
         // so the empty state sells exactly that and its action opens the
         // create dialog.
-        <EmptyState
-          icon={<GhostRoom />}
-          title="No shared workspaces yet"
-          description="Create one, invite people into it, and send clips there from your library — everyone in the workspace sees what's sent."
-          actions={<Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />}
-        />
+        <Center minHeight="45vh">
+          <EmptyState
+            icon={<GhostRoom />}
+            title="No shared workspaces yet"
+            description="Create one, invite people into it, and send clips there from your library — everyone in the workspace sees what's sent."
+            actions={<Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />}
+          />
+        </Center>
       )}
 
       <Dialog

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
+import { Center } from "@astryxdesign/core/Center"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
@@ -185,6 +186,7 @@ function PublishingBody() {
     return (
       <VStack gap={4} align="stretch">
         {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
+        <Center minHeight="55vh">
         <EmptyState
           icon={<GhostRows />}
           title="Connect your first account"
@@ -203,6 +205,7 @@ function PublishingBody() {
             </>
           }
         />
+        </Center>
       </VStack>
     )
   }

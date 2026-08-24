@@ -191,6 +191,18 @@ export interface ClipCaption {
   color: string
   /** Vertical centre as % of the video's height. */
   yPct: number
+  /**
+   * Horizontal centre as % of the video's width. Optional because clips
+   * captioned before text could be dragged sideways carry no value, and both
+   * the renderer and the editor read a missing one as the middle.
+   */
+  xPct?: number
+  /**
+   * The text column's width as % of the video's width — the box the editor
+   * draws, which decides where lines break. Optional for the same reason as
+   * xPct; a missing one means the full width a caption always had.
+   */
+  widthPct?: number
   outline: boolean
 }
 
