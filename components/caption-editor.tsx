@@ -41,6 +41,14 @@ const FONT_STACKS: Record<ClipCaption["font"], { family: string; weight: number 
   mono: { family: "'Courier New', Courier, monospace", weight: 400 },
 }
 
+/** The four faces the renderer can burn, named for what they look like. */
+const FONT_CHOICES: Array<{ value: ClipCaption["font"]; label: string }> = [
+  { value: "sans", label: "Clean" },
+  { value: "bold", label: "Bold" },
+  { value: "serif", label: "Serif" },
+  { value: "mono", label: "Mono" },
+]
+
 const COLORS: Array<{ value: string; label: string }> = [
   { value: "#ffffff", label: "White" },
   { value: "#111113", label: "Black" },
@@ -216,13 +224,25 @@ export function CaptionEditor({ clipId, onDone }: { clipId: string; onDone: () =
         />
       )}
 
-      <HStack gap={6} align="start" wrap="wrap">
+      <HStack gap={5} align="start" wrap="wrap">
         {/* The preview: the media carve-out. Dynamic styles are the data —
-            the user's own colour, size and position choices. */}
+            the user's own colour, size and position choices.
+
+            It shares the row rather than owning it: at 768px fixed it pushed
+            the controls below the fold, so the font choice was a scroll away
+            from a person who had come to change the font. Width is capped by
+            HEIGHT (46vh × the frame's own shape) so a portrait clip can't do
+            the same thing vertically, and the aspect box stays exact — the
+            drag positions are percentages of it. */}
+        <div className="min-w-0 flex-1 basis-[420px]">
         <div
           ref={previewRef}
-          className="relative w-full max-w-3xl shrink-0 overflow-hidden rounded-xl bg-black ring-1 ring-white/10"
-          style={{ containerType: "size", aspectRatio: aspectRatio ?? 16 / 9 }}
+          className="relative mx-auto overflow-hidden rounded-xl bg-black ring-1 ring-white/10"
+          style={{
+            containerType: "size",
+            aspectRatio: aspectRatio ?? 16 / 9,
+            width: `min(100%, calc(46vh * ${aspectRatio ?? 16 / 9}))`,
+          }}
         >
           {!clip.url && (
             <Text as="p" type="supporting" display="block" className="absolute inset-x-0 top-3 text-center">
@@ -286,8 +306,9 @@ export function CaptionEditor({ clipId, onDone }: { clipId: string; onDone: () =
             </button>
           ))}
         </div>
+        </div>
 
-        <VStack gap={3} align="stretch" className="min-w-72 flex-1">
+        <VStack gap={3} align="stretch" className="min-w-0 flex-1 basis-[320px]">
           <List hasDividers density="compact">
             {captions.map((caption, index) => (
               <ListItem
@@ -345,10 +366,32 @@ export function CaptionEditor({ clipId, onDone }: { clipId: string; onDone: () =
                 size="sm"
                 layout="fill"
               >
-                <SegmentedControlItem value="sans" label="Clean" />
-                <SegmentedControlItem value="bold" label="Bold" />
-                <SegmentedControlItem value="serif" label="Serif" />
-                <SegmentedControlItem value="mono" label="Mono" />
+                {/* Each choice wears its own face: "Aa" drawn in the very
+                    font it selects, so the row reads as fonts at a glance
+                    instead of four same-looking words. The specimen is the
+                    media carve-out's logic — it is a sample of the output,
+                    not interface text. */}
+                {FONT_CHOICES.map((choice) => (
+                  <SegmentedControlItem
+                    key={choice.value}
+                    value={choice.value}
+                    label={choice.label}
+                    icon={
+                      <span
+                        aria-hidden
+                        style={{
+                          fontFamily: FONT_STACKS[choice.value].family,
+                          fontWeight: FONT_STACKS[choice.value].weight,
+                          fontSize: "15px",
+                          lineHeight: 1,
+                          marginInlineEnd: "0.35em",
+                        }}
+                      >
+                        Aa
+                      </span>
+                    }
+                  />
+                ))}
               </SegmentedControl>
               </VStack>
               <VStack gap={1} align="stretch">
