@@ -79,9 +79,35 @@ export const clipitTheme = defineTheme({
     },
     // The one place serif is allowed: the wordmark. The rail's heading IS
     // the wordmark, so it carries the brand voice; every other heading is
-    // Geist via the heading font token above.
+    // Geist via the heading font token above. Sized to anchor the roomier
+    // rail below it.
     "side-nav-heading": {
-      base: { fontFamily: "var(--font-instrument-serif), ui-serif, Georgia, serif" },
+      base: {
+        fontFamily: "var(--font-instrument-serif), ui-serif, Georgia, serif",
+        fontSize: "1.5rem",
+        paddingBlock: "0.5rem",
+      },
+    },
+    // The rail rows, at the proportions of the reference (Instagram's rail):
+    // 24px icons, ~48px rows, a real gap between icon and label, and a label
+    // you don't have to squint at. Structure and behaviour stay Astryx's —
+    // only the scale changes. The icon half lives in components/side-nav.tsx
+    // (the glyphs are drawn at 24px); the two move together.
+    "side-nav-item": {
+      base: {
+        fontSize: "0.9375rem",
+        // Taller rows and a wider gutter: the reference's rail breathes,
+        // and its icons sit on one axis well clear of the labels.
+        minHeight: "3.25rem",
+        gap: "1rem",
+        paddingInline: "0.875rem",
+        borderRadius: "0.75rem",
+      },
+      "size:sm": {
+        fontSize: "0.84375rem",
+        minHeight: "2.375rem",
+        gap: "0.75rem",
+      },
     },
   },
 })
