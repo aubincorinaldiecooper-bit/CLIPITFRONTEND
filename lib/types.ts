@@ -212,6 +212,9 @@ export interface Clip {
   derivedFromClipId?: string | null
   /** Only the person who cut a clip may replace it in place. */
   canReplace?: boolean
+  /** The source video's true dimensions, when its probe knew them. */
+  sourceWidth?: number | null
+  sourceHeight?: number | null
   /** Signed with an attachment disposition so the browser saves rather than plays. */
   downloadUrl: string | null
   urlExpiresAt: string | null

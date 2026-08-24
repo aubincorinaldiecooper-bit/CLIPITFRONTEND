@@ -88,6 +88,12 @@ function CaptionEditor({ clipId }: { clipId: string }) {
       .then(({ clip: loaded }) => {
         if (cancelled) return
         setClip(loaded)
+        // The source's true shape, from the backend's probe: the layout is
+        // right from the first paint, file loaded or not. onLoadedMetadata
+        // below stays as the fallback for older rows without a probe.
+        if (loaded.sourceWidth && loaded.sourceHeight) {
+          setAspectRatio(loaded.sourceWidth / loaded.sourceHeight)
+        }
         // Start from what the clip already carries, so "change the colour"
         // of an existing caption is editing, not retyping.
         setCaptions(Array.isArray(loaded.captions) && loaded.captions.length > 0 ? loaded.captions : [freshCaption()])
@@ -226,8 +232,9 @@ function CaptionEditor({ clipId }: { clipId: string }) {
         >
           {!clip.url && (
             <Text as="p" type="supporting" display="block" className="absolute inset-x-0 top-3 text-center">
-              The clip file isn't available to preview right now — the captions below still show where
-              text will sit.
+              {aspectRatio
+                ? "The clip file isn't available to preview right now — the captions below still show where text will sit."
+                : "The clip file isn't available to preview right now — caption positions are approximate until it is."}
             </Text>
           )}
           {clip.url && (
