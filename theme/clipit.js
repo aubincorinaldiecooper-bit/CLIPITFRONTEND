@@ -432,7 +432,23 @@ export const clipitTheme = {
     },
     "side-nav-heading": {
       "base": {
-        "fontFamily": "var(--font-instrument-serif), ui-serif, Georgia, serif"
+        "fontFamily": "var(--font-instrument-serif), ui-serif, Georgia, serif",
+        "fontSize": "1.5rem",
+        "paddingBlock": "0.5rem"
+      }
+    },
+    "side-nav-item": {
+      "base": {
+        "fontSize": "0.9375rem",
+        "minHeight": "3rem",
+        "gap": "0.875rem",
+        "paddingInline": "0.75rem",
+        "borderRadius": "0.75rem"
+      },
+      "size:sm": {
+        "fontSize": "0.84375rem",
+        "minHeight": "2.375rem",
+        "gap": "0.75rem"
       }
     }
   },
