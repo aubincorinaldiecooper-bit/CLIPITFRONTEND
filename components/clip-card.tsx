@@ -32,10 +32,16 @@ export function ClipCard({
   /** Anything below the actions (the library has nothing today). */
   children?: ReactNode
 }) {
-  // m:ss, the way every video surface writes a runtime.
-  const seconds = Math.round(clip.durationSeconds ?? 0)
+  // m:ss, the way every video surface writes a runtime. A clip whose render
+  // never reported a duration still knows the span it was cut from, so the
+  // badge falls back to that rather than leaving the card with no timing at
+  // all — the timecode range it used to print is gone from the caption line.
+  const measured = clip.durationSeconds ?? clip.endSeconds - clip.startSeconds
+  const seconds = Math.round(measured)
   const duration =
-    seconds > 0 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : null
+    Number.isFinite(seconds) && seconds > 0
+      ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+      : null
 
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl bg-surface ring-1 ring-white/[0.07]">
@@ -76,7 +82,7 @@ export function ClipCard({
           <p className="line-clamp-2 min-h-[2.5rem] text-[13.5px] leading-snug text-foreground/90">
             {clip.description || "A moment from your video"}
           </p>
-          <p className="truncate text-[12px] text-foreground/50">
+          <p className="truncate text-[12px] text-foreground/60">
             {clip.videoTitle ?? "Your video"}
             {showDate ? ` · ${new Date(clip.createdAt).toLocaleDateString()}` : ""}
           </p>

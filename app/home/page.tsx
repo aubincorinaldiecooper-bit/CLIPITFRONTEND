@@ -163,13 +163,18 @@ export default function HomePage() {
                       )}
                       {/* Same duration badge as the library's cards — one
                           card language across the app. */}
-                      {clip.durationSeconds ? (
-                        <span className="absolute bottom-1.5 right-1.5 rounded-[4px] bg-black/80 px-1 py-px font-mono text-[10px] font-medium tabular-nums text-white">
-                          {`${Math.floor(Math.round(clip.durationSeconds) / 60)}:${String(
-                            Math.round(clip.durationSeconds) % 60,
-                          ).padStart(2, "0")}`}
-                        </span>
-                      ) : null}
+                      {(() => {
+                        // Same rule as the library's cards: fall back to the
+                        // span the clip was cut from when a render never
+                        // reported its duration.
+                        const seconds = Math.round(clip.durationSeconds ?? clip.endSeconds - clip.startSeconds)
+                        if (!Number.isFinite(seconds) || seconds <= 0) return null
+                        return (
+                          <span className="absolute bottom-1.5 right-1.5 rounded-[4px] bg-black/80 px-1 py-px font-mono text-[10px] font-medium tabular-nums text-white">
+                            {`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}
+                          </span>
+                        )
+                      })()}
                     </button>
                   )}
                   <p className="truncate px-2.5 py-2 text-[11.5px] text-foreground/70">{clip.description}</p>
