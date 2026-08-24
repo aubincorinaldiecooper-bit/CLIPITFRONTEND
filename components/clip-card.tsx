@@ -62,7 +62,7 @@ export function ClipCard({
         <p className="line-clamp-2 min-h-[2.5rem] text-[13.5px] leading-snug text-foreground/85">
           {clip.description || "A moment from your video"}
         </p>
-        <p className="truncate text-[12px] text-foreground/40">
+        <p className="truncate text-[12px] text-foreground/60">
           <span className="font-mono tabular-nums">
             {clip.startTimecode} – {clip.endTimecode}
           </span>

@@ -16,6 +16,7 @@ import { Text } from "@astryxdesign/core/Text"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
+import { maxCharsPerLine, wrapCaptionText } from "@/lib/captions"
 import type { Clip, ClipCaption } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 
@@ -87,6 +88,12 @@ function CaptionEditor({ clipId }: { clipId: string }) {
       .then(({ clip: loaded }) => {
         if (cancelled) return
         setClip(loaded)
+        // The source's true shape, from the backend's probe: the layout is
+        // right from the first paint, file loaded or not. onLoadedMetadata
+        // below stays as the fallback for older rows without a probe.
+        if (loaded.sourceWidth && loaded.sourceHeight) {
+          setAspectRatio(loaded.sourceWidth / loaded.sourceHeight)
+        }
         // Start from what the clip already carries, so "change the colour"
         // of an existing caption is editing, not retyping.
         setCaptions(Array.isArray(loaded.captions) && loaded.captions.length > 0 ? loaded.captions : [freshCaption()])
@@ -223,6 +230,13 @@ function CaptionEditor({ clipId }: { clipId: string }) {
           className="relative w-full max-w-3xl shrink-0 overflow-hidden rounded-xl bg-black ring-1 ring-white/10"
           style={{ containerType: "size", aspectRatio: aspectRatio ?? 16 / 9 }}
         >
+          {!clip.url && (
+            <Text as="p" type="supporting" display="block" className="absolute inset-x-0 top-3 text-center">
+              {aspectRatio
+                ? "The clip file isn't available to preview right now — the captions below still show where text will sit."
+                : "The clip file isn't available to preview right now — caption positions are approximate until it is."}
+            </Text>
+          )}
           {clip.url && (
             <video
               src={clip.url}
@@ -247,7 +261,7 @@ function CaptionEditor({ clipId }: { clipId: string }) {
               onPointerDown={beginDrag(index)}
               onClick={() => setSelected(index)}
               aria-label={`Caption: ${caption.text}. Drag to move.`}
-              className={`absolute left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab select-none whitespace-pre-wrap text-center leading-tight ${
+              className={`absolute left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab select-none text-center ${
                 index === selected ? "outline-dashed outline-1 outline-white/50" : ""
               }`}
               style={{
@@ -256,11 +270,25 @@ function CaptionEditor({ clipId }: { clipId: string }) {
                 fontFamily: FONT_STACKS[caption.font].family,
                 fontWeight: FONT_STACKS[caption.font].weight,
                 fontSize: `${caption.sizePct}cqh`,
+                lineHeight: 1.15,
                 WebkitTextStroke: caption.outline ? "0.04em rgba(0,0,0,0.85)" : undefined,
                 paintOrder: "stroke fill",
               }}
             >
-              {caption.text}
+              {/* The SAME wrap the renderer uses (lib/captions.ts mirrors the
+                  backend), so the lines on screen are the lines burned in.
+                  These spans are the media carve-out, not interface
+                  furniture: they ARE the burned pixels being previewed,
+                  wearing the user's own font/size/colour choices — an
+                  Astryx Text here would fight those with theme typography
+                  tokens, which is exactly what this surface must not wear. */}
+              {wrapCaptionText(caption.text, maxCharsPerLine(caption.font, caption.sizePct, aspectRatio ?? 16 / 9)).map(
+                (line, lineIndex) => (
+                  <span key={lineIndex} className="block whitespace-pre">
+                    {line}
+                  </span>
+                ),
+              )}
             </button>
           ))}
         </div>

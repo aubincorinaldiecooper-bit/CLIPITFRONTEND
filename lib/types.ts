@@ -212,6 +212,9 @@ export interface Clip {
   derivedFromClipId?: string | null
   /** Only the person who cut a clip may replace it in place. */
   canReplace?: boolean
+  /** The source video's true dimensions, when its probe knew them. */
+  sourceWidth?: number | null
+  sourceHeight?: number | null
   /** Signed with an attachment disposition so the browser saves rather than plays. */
   downloadUrl: string | null
   urlExpiresAt: string | null
@@ -285,6 +288,8 @@ export interface WorkspacesPage {
 
 /** One room: what is in it and who is in it. */
 export interface WorkspaceDetail {
+  /** True when the room holds more clips than one page shows. */
+  hasMoreClips?: boolean
   workspace: { id: string; name: string; isOwner: boolean; isPersonal?: boolean }
   members: TeamMember[]
   clips: LibraryClip[]

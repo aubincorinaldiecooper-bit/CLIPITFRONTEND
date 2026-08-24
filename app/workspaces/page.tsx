@@ -230,11 +230,16 @@ function WorkspacesBody() {
                   label="Copy link"
                   variant="secondary"
                   onClick={() => {
+                    // Optional chaining short-circuits the WHOLE chain when
+                    // the clipboard API is absent (plain-HTTP origins), so
+                    // the guard must be explicit or the button does nothing.
+                    if (!navigator.clipboard) {
+                      toast({ type: "error", body: "Couldn't copy here — select the link and copy it." })
+                      return
+                    }
                     void navigator.clipboard
-                      ?.writeText(handoff.url)
+                      .writeText(handoff.url)
                       .then(() => toast({ body: "Link copied." }))
-                      // A blocked clipboard is not a failure worth stopping
-                      // for: the link is on screen and selectable.
                       .catch(() => toast({ type: "error", body: "Couldn't copy — select the link and copy it." }))
                   }}
                 />
