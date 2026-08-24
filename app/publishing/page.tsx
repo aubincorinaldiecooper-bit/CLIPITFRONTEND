@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
@@ -125,13 +125,30 @@ function PublishingBody() {
     setConnectTarget({ platform, reconnect })
   }
 
+  /**
+   * Which connect attempt is the live one. Closing the modal, or starting a
+   * different platform, retires whatever was in flight: a connect URL that
+   * arrives afterwards must not seize the browser and send someone into a
+   * journey they cancelled — or worse, into the wrong platform's.
+   */
+  const attemptRef = useRef(0)
+
+  const closeConnect = () => {
+    attemptRef.current += 1
+    setConnecting(null)
+    setConnectTarget(null)
+  }
+
   const connect = async (platform: string) => {
     setActionError(null)
     setConnecting(platform)
+    const attempt = (attemptRef.current += 1)
     try {
       const { url } = await api.getConnectUrl(platform)
+      if (attemptRef.current !== attempt) return
       window.location.assign(url)
     } catch (cause) {
+      if (attemptRef.current !== attempt) return
       setConnecting(null)
       // The modal stays open with the reason, so trying again is one click.
       setActionError(
@@ -220,7 +237,7 @@ function PublishingBody() {
           target={connectTarget}
           connecting={connecting}
           actionError={actionError}
-          onClose={() => setConnectTarget(null)}
+          onClose={closeConnect}
           onContinue={(platform) => void connect(platform)}
         />
       </VStack>
@@ -301,7 +318,7 @@ function PublishingBody() {
         target={connectTarget}
         connecting={connecting}
         actionError={actionError}
-        onClose={() => setConnectTarget(null)}
+        onClose={closeConnect}
         onContinue={(platform) => void connect(platform)}
       />
     </VStack>
