@@ -139,7 +139,7 @@ export default function HomePage() {
               ) : (
                 <Grid columns={{ minWidth: 150, max: 6 }} gap={2}>
               {recent.map((clip) => (
-                <div key={clip.id} className="overflow-hidden rounded-lg bg-black/35 ring-1 ring-white/10">
+                <div key={clip.id} className="overflow-hidden rounded-xl bg-surface ring-1 ring-white/[0.07]">
                   {playingId === clip.id && clip.url ? (
                     <video src={clip.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
                   ) : (
@@ -148,22 +148,31 @@ export default function HomePage() {
                       onClick={() => setPlayingId(clip.id)}
                       disabled={!clip.url}
                       aria-label={`Play: ${clip.description}`}
-                      className="group relative block aspect-video w-full bg-black/60 disabled:cursor-default"
+                      className="group relative block aspect-video w-full bg-black disabled:cursor-default"
                     >
                       {clip.thumbnailUrl && (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={clip.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
                       )}
                       {clip.url && (
-                        <span className="absolute inset-0 m-auto flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/25 transition-transform group-hover:scale-105">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <span className="absolute inset-0 m-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover:scale-105">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                             <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
                           </svg>
                         </span>
                       )}
+                      {/* Same duration badge as the library's cards — one
+                          card language across the app. */}
+                      {clip.durationSeconds ? (
+                        <span className="absolute bottom-1.5 right-1.5 rounded-[4px] bg-black/80 px-1 py-px font-mono text-[10px] font-medium tabular-nums text-white">
+                          {`${Math.floor(Math.round(clip.durationSeconds) / 60)}:${String(
+                            Math.round(clip.durationSeconds) % 60,
+                          ).padStart(2, "0")}`}
+                        </span>
+                      ) : null}
                     </button>
                   )}
-                  <p className="truncate px-2 py-1.5 text-[11.5px] text-foreground/60">{clip.description}</p>
+                  <p className="truncate px-2.5 py-2 text-[11.5px] text-foreground/70">{clip.description}</p>
                 </div>
               ))}
                 </Grid>

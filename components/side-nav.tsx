@@ -39,14 +39,14 @@ export type NavDestination = "home" | "start" | "clips" | "publishing" | "worksp
 
 /** Width/height come last so Astryx's sizing wins when it passes its own. */
 const HomeGlyph = (props: SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24 }} {...props}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24, flexShrink: 0, display: "block" }} {...props}>
     <path d="M3 10.5 12 3l9 7.5" />
     <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
   </svg>
 )
 
 const ScissorsGlyph = (props: SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24 }} {...props}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24, flexShrink: 0, display: "block" }} {...props}>
     <circle cx="6" cy="6" r="3" />
     <circle cx="6" cy="18" r="3" />
     <line x1="20" y1="4" x2="8.12" y2="15.88" />
@@ -56,21 +56,21 @@ const ScissorsGlyph = (props: SVGProps<SVGSVGElement>) => (
 )
 
 const LibraryGlyph = (props: SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24 }} {...props}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24, flexShrink: 0, display: "block" }} {...props}>
     <rect x="3" y="5" width="18" height="14" rx="2" />
     <path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4" />
   </svg>
 )
 
 const BroadcastGlyph = (props: SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24 }} {...props}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24, flexShrink: 0, display: "block" }} {...props}>
     <circle cx="12" cy="12" r="2" />
     <path d="M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M4.93 19.07a10 10 0 0 1 0-14.14M19.07 4.93a10 10 0 0 1 0 14.14" />
   </svg>
 )
 
 const TeamGlyph = (props: SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24 }} {...props}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 24, height: 24, flexShrink: 0, display: "block" }} {...props}>
     <path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19" />
     <circle cx="10" cy="8" r="3.2" />
     <path d="M20 19v-1.5a3.5 3.5 0 0 0-2.6-3.38M15.6 5.2a3.2 3.2 0 0 1 0 5.6" />
@@ -78,7 +78,7 @@ const TeamGlyph = (props: SVGProps<SVGSVGElement>) => (
 )
 
 const FolderGlyph = (props: SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 20, height: 20 }} {...props}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ width: 20, height: 20, flexShrink: 0, display: "block" }} {...props}>
     <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4.2l2 2.4H19a1.5 1.5 0 0 1 1.5 1.5v9.1A1.5 1.5 0 0 1 19 19.5H5a1.5 1.5 0 0 1-1.5-1.5V6.5Z" />
   </svg>
 )

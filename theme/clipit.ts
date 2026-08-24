@@ -96,9 +96,11 @@ export const clipitTheme = defineTheme({
     "side-nav-item": {
       base: {
         fontSize: "0.9375rem",
-        minHeight: "3rem",
-        gap: "0.875rem",
-        paddingInline: "0.75rem",
+        // Taller rows and a wider gutter: the reference's rail breathes,
+        // and its icons sit on one axis well clear of the labels.
+        minHeight: "3.25rem",
+        gap: "1rem",
+        paddingInline: "0.875rem",
         borderRadius: "0.75rem",
       },
       "size:sm": {
