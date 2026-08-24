@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Banner } from "@astryxdesign/core/Banner"
+import { Carousel } from "@astryxdesign/core/Carousel"
 import { Button } from "@astryxdesign/core/Button"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
@@ -132,25 +133,27 @@ export function PublishPreview({
         This is exactly what each account receives. Nothing is posted until you say so.
       </Text>
 
-      {/* Every shape side by side, each at its own true proportions — and
-          each one able to SHRINK, because a pane sized only by height makes
-          a 16:9 cut 498px wide, which walks off the edge of a phone. The
-          container query is what lets the height fall back to whatever the
-          panel's real width allows. */}
-      <div style={{ containerType: "inline-size" }}>
-      <HStack gap={3} align="start" wrap="wrap" justify="center">
+      {/* One row, however many platforms. A grid of panes ate the panel
+          alive at four shapes — and four is not the ceiling. The carousel
+          keeps the panel one height forever: the cuts scroll, the caption
+          and the Post button stay where they were. */}
+      <Carousel gap={3} hasSnap hasEdgeFade aria-label="What each platform receives">
         {previews.map((preview) => {
           const ratio = ASPECT_RATIO[preview.aspect] ?? 16 / 9
           return (
-            <VStack key={`${preview.aspect}-${preview.targets[0]?.accountId ?? ""}`} gap={1.5} align="center">
+            <VStack
+              key={`${preview.aspect}-${preview.targets[0]?.accountId ?? ""}`}
+              gap={1.5}
+              align="center"
+            >
               <div
                 className="relative overflow-hidden rounded-xl bg-black ring-1 ring-white/[0.07]"
                 style={{
+                  // One height for every card, so the row never jumps as it
+                  // scrolls; the WIDTH is what carries the shape.
+                  height: 260,
                   aspectRatio: ratio,
-                  // Whichever is smaller: the comfortable height, or the
-                  // height at which this shape still fits the panel's width.
-                  height: `min(280px, calc(100cqw / ${ratio}))`,
-                  maxWidth: "100%",
+                  flexShrink: 0,
                 }}
               >
                 {preview.status === "ready" && preview.url ? (
@@ -177,8 +180,7 @@ export function PublishPreview({
             </VStack>
           )
         })}
-      </HStack>
-      </div>
+      </Carousel>
 
       <TextArea
         label="Caption"
