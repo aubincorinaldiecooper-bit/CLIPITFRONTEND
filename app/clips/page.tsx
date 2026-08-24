@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
+import { IconButton } from "@astryxdesign/core/IconButton"
 import { Center } from "@astryxdesign/core/Center"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
@@ -12,14 +13,16 @@ import { Popover } from "@astryxdesign/core/Popover"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
+import { ToggleButton } from "@astryxdesign/core/ToggleButton"
 import { TextArea } from "@astryxdesign/core/TextArea"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
-import type { LibraryClip } from "@/lib/types"
+import type { LibraryClip, SocialAccount } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
+import { CaptionsGlyph, PublishGlyph, SendToWorkspaceGlyph } from "@/components/clip-action-icons"
 import { GhostCards } from "@/components/empty-illustrations"
 
 /**
@@ -33,6 +36,13 @@ import { GhostCards } from "@/components/empty-illustrations"
  * The heading was serif and is Geist now — serif is the wordmark's voice
  * only, per the AGENTS.md floors.
  */
+/** Platform names as their own users write them, never a lowercased id. */
+const PLATFORM_LABELS: Record<string, string> = {
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  instagram: "Instagram",
+}
+
 export default function ClipsPage() {
   const [clips, setClips] = useState<LibraryClip[] | null>(null)
   /**
@@ -55,6 +65,16 @@ export default function ClipsPage() {
    * finishing request can tell whether the open panel is still its own.
    */
   const [publishOpenId, setPublishOpenId] = useState<string | null>(null)
+  /**
+   * The accounts a publish could go to, and which are ticked.
+   *
+   * Loaded when the dialog opens rather than with the page: most visits to
+   * the library never publish anything, and this is the only screen that
+   * needs it.
+   */
+  const [accounts, setAccounts] = useState<SocialAccount[] | null>(null)
+  const [accountsFailed, setAccountsFailed] = useState(false)
+  const [chosenAccountIds, setChosenAccountIds] = useState<string[]>([])
   const publishOpenIdRef = useRef<string | null>(null)
   /**
    * Caption drafts, one per clip. A draft survives its popover closing —
@@ -79,6 +99,32 @@ export default function ClipsPage() {
     setPublishOpenId(id)
   }
 
+  // The accounts a publish can reach, fetched when the dialog opens. Every
+  // connected one starts ticked: the previous behaviour was "goes to all of
+  // them", and opening a picker that silently defaults to nothing would turn
+  // a familiar action into a puzzle.
+  useEffect(() => {
+    if (publishOpenId === null) return
+    let cancelled = false
+    setAccountsFailed(false)
+    void api
+      .listSocialAccounts()
+      .then((page) => {
+        if (cancelled) return
+        const connected = page.accounts.filter((account) => account.status === "connected")
+        setAccounts(connected)
+        setChosenAccountIds(connected.map((account) => account.id))
+      })
+      .catch(() => {
+        // A failed load is not "no accounts". Saying "connect one first" to
+        // someone who has three would be a lie about their own setup.
+        if (!cancelled) setAccountsFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [publishOpenId])
+
   useEffect(() => {
     let cancelled = false
     void api
@@ -100,7 +146,16 @@ export default function ClipsPage() {
     if (publishingIds.includes(clipId)) return
     setPublishingIds((current) => [...current, clipId])
     try {
-      const { posts } = await api.publishClip(clipId, { caption: (drafts[clipId] ?? "").trim() })
+      const { posts } = await api.publishClip(clipId, {
+        caption: (drafts[clipId] ?? "").trim(),
+        // Omitted means "all" to the API. Sending the list only when it is a
+        // real subset keeps a publish working even if the account list could
+        // not be loaded — the old behaviour, unchanged, rather than a
+        // failure to fetch turning into a failure to post.
+        ...(accounts && chosenAccountIds.length > 0 && chosenAccountIds.length < accounts.length
+          ? { accountIds: chosenAccountIds }
+          : {}),
+      })
       // Transient news is transient: the confirmation appears and leaves on
       // its own instead of becoming permanent card content. When a platform
       // needs a different shape than the clip was shot in, the file is cut
@@ -344,16 +399,20 @@ export default function ClipsPage() {
                       <>
                         {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
                         {clip.status === "ready" && (
-                          <Button
+                          <IconButton
+                            icon={<CaptionsGlyph />}
                             label="Captions"
+                            tooltip="Captions"
                             variant="secondary"
                             size="sm"
                             onClick={() => setCaptionClipId(clip.id)}
                           />
                         )}
                         {clip.status === "ready" && (
-                          <Button
+                          <IconButton
+                            icon={<PublishGlyph />}
                             label="Publish"
+                            tooltip="Publish"
                             variant="secondary"
                             size="sm"
                             onClick={() => setPublishTarget(clip.id)}
@@ -424,7 +483,13 @@ export default function ClipsPage() {
                               )
                             }
                           >
-                            <Button label="Send to workspace" variant="secondary" size="sm" />
+                            <IconButton
+                              icon={<SendToWorkspaceGlyph />}
+                              label="Send to workspace"
+                              tooltip="Send to workspace"
+                              variant="secondary"
+                              size="sm"
+                            />
                           </Popover>
                         )}
                       </>
@@ -475,9 +540,69 @@ export default function ClipsPage() {
               }
               placeholder="Say something about this clip (optional)"
             />
+            {/* Which accounts get it. Everything connected starts ticked,
+                because "goes to all of them" is what this button did before
+                and a picker that quietly defaulted to nothing would turn a
+                familiar action into a puzzle. */}
+            {accountsFailed ? (
+              <Text as="p" type="supporting" display="block">
+                Couldn&apos;t load your accounts just now — posting will still go to all of them.
+              </Text>
+            ) : accounts === null ? (
+              <Skeleton height={72} radius={2} />
+            ) : accounts.length === 0 ? (
+              <Text as="p" type="supporting" display="block">
+                No connected accounts. Connect one on the Publishing page first.
+              </Text>
+            ) : (
+              <VStack gap={2} align="stretch">
+                <Text as="p" type="supporting" display="block">
+                  Post to
+                </Text>
+                {/* Toggles rather than a checkbox list. Astryx's checkbox
+                    washes a selected row in --color-accent-muted, which on
+                    this palette is a solid amber block — the accent is for
+                    small marks here, never a surface. A pressed
+                    ToggleButton uses a neutral overlay instead, and a row of
+                    pills is the language every other action in this app
+                    already speaks. */}
+                <HStack gap={2} wrap="wrap">
+                  {accounts.map((account) => {
+                    const on = chosenAccountIds.includes(account.id)
+                    return (
+                      <ToggleButton
+                        key={account.id}
+                        size="sm"
+                        isPressed={on}
+                        // Two accounts on one platform is normal, so the
+                        // handle is part of the name — "TikTok" twice with
+                        // no way to tell them apart is not a choice.
+                        label={
+                          account.displayName
+                            ? `${PLATFORM_LABELS[account.platform] ?? account.platform} · ${account.displayName}`
+                            : PLATFORM_LABELS[account.platform] ?? account.platform
+                        }
+                        onPressedChange={(pressed) =>
+                          setChosenAccountIds((current) =>
+                            pressed
+                              ? [...current, account.id]
+                              : current.filter((id) => id !== account.id),
+                          )
+                        }
+                      />
+                    )
+                  })}
+                </HStack>
+              </VStack>
+            )}
+
             <HStack gap={3} justify="between" align="center">
               <Text as="p" type="supporting" display="block">
-                Goes to every account you have connected.
+                {accounts && accounts.length > 0
+                  ? chosenAccountIds.length === 0
+                    ? "Pick at least one account."
+                    : `Going to ${chosenAccountIds.length} of ${accounts.length}.`
+                  : "Goes to every account you have connected."}
               </Text>
               <Button
                 label="Post it"
@@ -486,7 +611,12 @@ export default function ClipsPage() {
                 // this unmounts it, and a flag that reset would let a second
                 // Post start a publish of a clip already on its way out.
                 isLoading={publishingIds.includes(publishOpenId)}
-                isDisabled={publishingIds.includes(publishOpenId)}
+                isDisabled={
+                  publishingIds.includes(publishOpenId) ||
+                  // An empty tick-list is a refusal to pick, not permission
+                  // to post everywhere — the same rule the API enforces.
+                  (accounts !== null && accounts.length > 0 && chosenAccountIds.length === 0)
+                }
                 onClick={() => void publish(publishOpenId)}
               />
             </HStack>

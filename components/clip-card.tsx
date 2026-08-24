@@ -1,5 +1,7 @@
 "use client"
 
+import { DownloadGlyph } from "@/components/clip-action-icons"
+
 import type { ReactNode } from "react"
 import { HStack } from "@astryxdesign/core/Stack"
 import type { LibraryClip } from "@/lib/types"
@@ -100,19 +102,20 @@ export function ClipCard({
 
 /**
  * The Download action both pages use: a plain anchor with `download`, not a
- * routed link — the browser must save the signed file directly.
+ * routed link — the browser must save the signed file directly, and no button
+ * component can stand in for that. Styled to match an IconButton beside it so
+ * the row reads as one set of controls rather than one odd one out.
  */
 export function ClipDownloadAction({ href }: { href: string }) {
   return (
     <a
       href={href}
       download
-      className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
+      aria-label="Download this clip"
+      title="Download"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform active:scale-[0.94]"
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
-      </svg>
-      Download
+      <DownloadGlyph />
     </a>
   )
 }
