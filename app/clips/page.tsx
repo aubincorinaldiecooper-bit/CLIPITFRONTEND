@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
+import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
@@ -15,6 +16,7 @@ import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
+import { GhostCards } from "@/components/empty-illustrations"
 
 /**
  * Everything you have cut, newest first — chrome on Astryx, clips
@@ -185,12 +187,12 @@ export default function ClipsPage() {
                 ))}
               </Grid>
             ) : clips.length === 0 ? (
-              <VStack gap={3} align="start">
-                <Text as="p" type="supporting">
-                  Nothing here yet — cut a moment from a video and it lands here.
-                </Text>
-                <Button label="Clip a video" variant="primary" size="sm" href="/start" />
-              </VStack>
+              <EmptyState
+                icon={<GhostCards />}
+                title="No clips yet"
+                description="Cut a moment from any video and it lands here — ready to play, download, caption, and publish."
+                actions={<Button label="Clip a video" variant="primary" href="/start" />}
+              />
             ) : (
               <VStack gap={4} align="stretch">
                 <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
