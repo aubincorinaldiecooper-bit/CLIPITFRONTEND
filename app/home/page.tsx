@@ -77,7 +77,7 @@ export default function HomePage() {
 
   return (
     <AppShell active="home">
-      <Layout height="auto" contentWidth={1152}>
+      <Layout height="auto" contentWidth={1360}>
         <LayoutContent padding={6}>
           <VStack gap={6} align="stretch">
             <HStack justify="between" align="end" gap={4} wrap="wrap">
@@ -127,7 +127,7 @@ export default function HomePage() {
               {recentFailed ? (
                 <p className="text-sm text-error">Couldn't load your clips just now — refresh to try again.</p>
               ) : recent === null ? (
-                <Grid columns={{ minWidth: 150, max: 6 }} gap={2}>
+                <Grid columns={{ minWidth: 260, max: 4 }} gap={3}>
                   {[0, 1, 2, 3, 4, 5].map((index) => (
                     <Skeleton key={index} height={110} radius={2} index={index} />
                   ))}
@@ -137,7 +137,7 @@ export default function HomePage() {
                   Nothing yet — cut a moment from a video and it lands here.
                 </Text>
               ) : (
-                <Grid columns={{ minWidth: 150, max: 6 }} gap={2}>
+                <Grid columns={{ minWidth: 260, max: 4 }} gap={3}>
               {recent.map((clip) => (
                 <div key={clip.id} className="overflow-hidden rounded-xl bg-surface ring-1 ring-white/[0.07]">
                   {playingId === clip.id && clip.url ? (

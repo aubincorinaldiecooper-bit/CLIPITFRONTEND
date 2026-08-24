@@ -300,7 +300,7 @@ export default function ClipsPage() {
 
   return (
     <AppShell active="clips">
-      <Layout height="auto" contentWidth={1152}>
+      <Layout height="auto" contentWidth={1360}>
         <LayoutContent padding={6}>
           <VStack gap={5} align="stretch">
             <VStack gap={1.5}>
@@ -313,7 +313,7 @@ export default function ClipsPage() {
             {failed ? (
               <p className="text-sm text-error">Couldn't load your clips. Refresh to try again.</p>
             ) : clips === null ? (
-              <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
+              <Grid columns={{ minWidth: 320, max: 4 }} gap={3}>
                 {[0, 1, 2, 3, 4, 5].map((index) => (
                   <Skeleton key={index} height={230} radius={3} index={index} />
                 ))}
@@ -332,7 +332,7 @@ export default function ClipsPage() {
               </Center>
             ) : (
               <VStack gap={4} align="stretch">
-                <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
+                <Grid columns={{ minWidth: 320, max: 4 }} gap={3}>
                 {clips.map((clip) => (
                   <ClipCard
                     key={clip.id}

@@ -322,7 +322,7 @@ function WorkspacesBody() {
 export default function WorkspacesScreen() {
   return (
     <AppShell active="workspaces">
-      <Layout height="auto" contentWidth={672}>
+      <Layout height="auto" contentWidth={880}>
         <LayoutContent padding={6}>
           <WorkspacesBody />
         </LayoutContent>

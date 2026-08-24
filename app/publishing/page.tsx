@@ -401,7 +401,7 @@ function ConnectDialog({
 export default function PublishingPage() {
   return (
     <AppShell active="publishing">
-      <Layout height="auto" contentWidth={672}>
+      <Layout height="auto" contentWidth={880}>
         <LayoutContent padding={6}>
           <VStack gap={4} align="stretch">
             <VStack gap={1.5}>
