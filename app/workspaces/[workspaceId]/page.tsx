@@ -199,6 +199,15 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     return <Skeleton height={160} radius={3} />
   }
 
+  // Your personal room and "Your clips" are one place. It is no longer listed
+  // as a workspace, so a link that still points here — a bookmark, a URL
+  // someone kept — lands on the page that place actually has, rather than on
+  // a second view of it wearing a different name.
+  if (page.workspace.isPersonal) {
+    router.replace("/clips")
+    return <Skeleton height={160} radius={3} />
+  }
+
   const { isOwner } = page.workspace
 
   const peopleContent = (

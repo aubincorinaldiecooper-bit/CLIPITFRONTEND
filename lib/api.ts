@@ -365,6 +365,11 @@ export const api = {
     return request(`/api/social-accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" })
   },
 
+  /**
+   * The files a publish WOULD send, without sending them. Poll until every
+   * entry is 'ready' — a shape that does not exist yet is rendered on the
+   * first call.
+   */
   async publishClip(
     clipId: string,
     input: { caption: string; accountIds?: string[] },

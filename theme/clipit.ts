@@ -62,6 +62,16 @@ export const clipitTheme = defineTheme({
     // The landing hero's voice: display-1 is the marquee size, set heavy and
     // tight the way the reference's headline is. It appears nowhere in the
     // app's chrome, so the app's heading scale is untouched.
+    // A page title should lead. At the inherited 2xl a heading sat almost
+    // level with the body text under it, so nothing on a screen said "start
+    // here" — the flatness the owner read as unpolished beside the platforms
+    // creators use all day. The steps below open the gap between a page
+    // title, a section and its prose without touching the type family.
+    "--text-heading-1-size": "2rem",
+    "--text-heading-1-leading": "1.2",
+    "--text-heading-2-size": "1.25rem",
+    "--text-heading-2-leading": "1.3",
+
     "--text-display-1-size": "clamp(2.6rem, 5vw, 4.25rem)",
     "--text-display-1-weight": "var(--font-weight-semibold)",
     "--text-display-1-leading": "1.02",
