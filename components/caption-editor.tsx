@@ -196,16 +196,41 @@ export function CaptionEditor({
    * one slip of Backspace destroys a caption someone placed and styled.
    */
   const historyRef = useRef<ClipCaption[][]>([])
+  const redoRef = useRef<ClipCaption[][]>([])
+  // The stacks live in refs (pointer handlers need the live values), and
+  // these mirror their depths so the Undo/Redo buttons know when to dim.
+  const [historyDepth, setHistoryDepth] = useState(0)
+  const [redoDepth, setRedoDepth] = useState(0)
+  const syncDepths = () => {
+    setHistoryDepth(historyRef.current.length)
+    setRedoDepth(redoRef.current.length)
+  }
+  const snapshot = () => captionsRef.current.map((caption) => ({ ...caption }))
   const pushHistory = () => {
-    historyRef.current.push(captionsRef.current.map((caption) => ({ ...caption })))
+    historyRef.current.push(snapshot())
     if (historyRef.current.length > 50) historyRef.current.shift()
+    // A new gesture forks the timeline: what was undone stays undone.
+    redoRef.current = []
+    syncDepths()
+  }
+  const restore = (state: ClipCaption[]) => {
+    setCaptions(state)
+    setEditing(null)
+    setSelected((index) => (index !== null && index < state.length ? index : state.length ? 0 : null))
   }
   const undo = () => {
     const previous = historyRef.current.pop()
     if (!previous) return
-    setCaptions(previous)
-    setEditing(null)
-    setSelected((index) => (index !== null && index < previous.length ? index : previous.length ? 0 : null))
+    redoRef.current.push(snapshot())
+    restore(previous)
+    syncDepths()
+  }
+  const redo = () => {
+    const next = redoRef.current.pop()
+    if (!next) return
+    historyRef.current.push(snapshot())
+    restore(next)
+    syncDepths()
   }
   /** True while the editor is open; the render poll checks it so a finished
    *  render never acts on a modal that was closed mid-wait. */
@@ -232,14 +257,15 @@ export function CaptionEditor({
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      // Cmd/Ctrl+Z: put back what the last gesture changed. While typing,
-      // the browser's own text undo applies instead.
-      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+      // Cmd/Ctrl+Z undoes the last gesture; add Shift to redo it. While
+      // typing, the browser's own text undo applies instead.
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         if (editing !== null || document.activeElement instanceof HTMLTextAreaElement) return
         if (document.activeElement instanceof HTMLInputElement) return
         event.preventDefault()
         event.stopPropagation()
-        undo()
+        if (event.shiftKey) redo()
+        else undo()
         return
       }
       // Canva's T: add a text box, as long as nothing is being typed into.
@@ -742,6 +768,38 @@ export function CaptionEditor({
                   : "Click text on the clip to restyle it — double-click empty space to add more."}
               </Text>
             )
+          }
+          endContent={
+            <HStack gap={0.5} align="center">
+              <IconButton
+                label="Undo"
+                tooltip="Undo (Ctrl+Z)"
+                variant="ghost"
+                size="sm"
+                isDisabled={historyDepth === 0}
+                icon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M9 14 4 9l5-5" />
+                    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+                  </svg>
+                }
+                onClick={undo}
+              />
+              <IconButton
+                label="Redo"
+                tooltip="Redo (Ctrl+Shift+Z)"
+                variant="ghost"
+                size="sm"
+                isDisabled={redoDepth === 0}
+                icon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="m15 14 5-5-5-5" />
+                    <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+                  </svg>
+                }
+                onClick={redo}
+              />
+            </HStack>
           }
         />
       </Card>
