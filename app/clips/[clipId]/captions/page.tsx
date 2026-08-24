@@ -276,7 +276,12 @@ function CaptionEditor({ clipId }: { clipId: string }) {
               }}
             >
               {/* The SAME wrap the renderer uses (lib/captions.ts mirrors the
-                  backend), so the lines on screen are the lines burned in. */}
+                  backend), so the lines on screen are the lines burned in.
+                  These spans are the media carve-out, not interface
+                  furniture: they ARE the burned pixels being previewed,
+                  wearing the user's own font/size/colour choices — an
+                  Astryx Text here would fight those with theme typography
+                  tokens, which is exactly what this surface must not wear. */}
               {wrapCaptionText(caption.text, maxCharsPerLine(caption.font, caption.sizePct, aspectRatio ?? 16 / 9)).map(
                 (line, lineIndex) => (
                   <span key={lineIndex} className="block whitespace-pre">
