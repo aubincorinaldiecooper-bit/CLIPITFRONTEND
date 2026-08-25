@@ -297,6 +297,7 @@ function WorkspacesBody() {
           </>
         ) : (
           <>
+            <ModalArt kind="workspace" onClose={() => setCreateOpen(false)} />
             <DialogHeader title="Create a workspace" />
             <form onSubmit={create}>
               <VStack gap={3} align="stretch">

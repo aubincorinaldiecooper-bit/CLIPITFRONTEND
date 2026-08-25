@@ -165,11 +165,9 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
       purpose="form"
       width="min(420px, 94vw)"
     >
-      <ModalArt kind="sign-in" />
+      <ModalArt kind="sign-in" onClose={onClose} />
       <DialogHeader
-        title={`Sign in ${purpose}`}
-        onOpenChange={(open) => !open && onClose()}
-      />
+        title={`Sign in ${purpose}`} />
       {state === "sent" ? (
         <VStack gap={3} align="stretch">
           <Text as="p" type="body" display="block">

@@ -455,13 +455,8 @@ function ConnectDialog({
       purpose="info"
       width={460}
     >
-      <ModalArt kind="connect" />
-      <DialogHeader
-        title={target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`}
-        onOpenChange={(open) => {
-          if (!open) onClose()
-        }}
-      />
+      <ModalArt kind="connect" onClose={onClose} />
+      <DialogHeader title={target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`} />
       {target && (
         <VStack gap={3} align="stretch">
           {actionError && <Banner status="error" title="That didn't work" description={actionError} />}

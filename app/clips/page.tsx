@@ -549,11 +549,8 @@ export default function ClipsPage() {
         purpose="form"
         width="min(520px, 94vw)"
       >
-        <ModalArt kind="publish" />
-        <DialogHeader
-          title="Post this clip"
-          onOpenChange={(open) => !open && setPublishTarget(null)}
-        />
+        <ModalArt kind="publish" onClose={() => setPublishTarget(null)} />
+        <DialogHeader title="Post this clip" />
         {publishOpenId && (
           <VStack gap={4} align="stretch">
             <TextArea
@@ -661,7 +658,8 @@ export default function ClipsPage() {
         {/* Passing onOpenChange is what gives the header its close button —
             without it the only ways out were the two save buttons, and on a
             touch screen there was no way out at all. */}
-        <DialogHeader title="Captions" onOpenChange={(open) => !open && closeCaptionEditor()} />
+        <ModalArt kind="captions" onClose={closeCaptionEditor} />
+        <DialogHeader title="Captions" />
         {captionClipId && (
           <CaptionEditor
             clipId={captionClipId}
