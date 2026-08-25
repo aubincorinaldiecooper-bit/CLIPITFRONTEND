@@ -1,27 +1,41 @@
 import type { SVGProps } from "react"
 
 /**
- * The band of artwork at the top of a modal.
+ * The band at the top of a modal.
  *
- * Two attempts got here. The first was outline-only and read as a wireframe.
- * The second filled the shapes and still read as GENERIC, which was the
- * owner's word and the right one — four grey rounded rectangles and an arrow
- * could belong to any product on earth. Nothing in them said *video*.
+ * The owner's anchor is a high-contrast black-and-white photograph — hard
+ * light, deep shadow, a figure against a white wall. That is the right answer
+ * and better than anything drawn here: three attempts at flat SVG produced a
+ * wireframe, then something the owner correctly called generic, then a
+ * diagram. Photography carries depth and atmosphere that vector shapes cannot,
+ * and monochrome sits inside this near-black palette instead of fighting it.
  *
- * What is not generic is the thing this app is actually about: a long
- * recording, and the moment somebody pulled out of it. So the artwork is a
- * WAVEFORM — dense, hundreds of bars, the way an editor sees a timeline — with
- * the cut region standing out of the quiet either side of it.
+ * So the band takes a PHOTOGRAPH when one is registered below, and falls back
+ * to the drawn artwork when none is. The treatment is fixed in one place so
+ * every picture arrives looking like it belongs to the same product:
  *
- * Density is the point. The reference the owner shared is rich because it has
- * hundreds of details; a picture made of four shapes cannot compete with that
- * however well the four are drawn. Bars are cheap to draw and read as craft.
+ *   - forced to greyscale, so a stray colour cast cannot pull the palette
+ *     sideways when somebody drops a new image in;
+ *   - contrast lifted slightly, because the anchor's character IS its
+ *     contrast;
+ *   - a gradient from transparent to the panel colour along the bottom, so
+ *     the picture resolves into the modal rather than stopping at a hard
+ *     line above the title.
  *
- * Everything is theme tokens, so the band moves with the palette. No blurred
- * glows — that look was tried on this product and rejected.
+ * To use one: put the file in public/modal-art/ and name it in PHOTOGRAPHS.
+ * Nothing else needs to change.
  */
 
 export type ModalArtKind = "sign-in" | "connect" | "publish" | "captions" | "workspace"
+
+/**
+ * The photograph for each modal, from public/modal-art/.
+ *
+ * Empty entries fall through to the drawn artwork, so the app is never
+ * missing a band — and so a picture can be added one modal at a time rather
+ * than all five at once.
+ */
+const PHOTOGRAPHS: Partial<Record<ModalArtKind, string>> = {}
 
 const ink = "var(--color-text-primary)"
 const accent = "var(--color-accent)"
@@ -228,37 +242,62 @@ export function ModalArt({
   kind: ModalArtKind
   /**
    * Closing the dialog. Passed HERE rather than to DialogHeader because the
-   * close belongs at the modal's top-right CORNER, and the picture occupies
-   * that corner. Left on the header, the X landed in the title row beneath
-   * the artwork — floating in the middle of the panel with nothing to anchor
-   * it, which is exactly how it looked.
+   * close belongs at the modal's top-right CORNER, and the band occupies that
+   * corner. Left on the header, the X landed in the title row beneath the
+   * picture, floating mid-panel with nothing to anchor it.
    */
   onClose?: () => void
 }) {
   const Art = ART[kind]
+  const photograph = PHOTOGRAPHS[kind]
+
   return (
-    <div
-      className="relative -mx-6 -mt-6 mb-1 h-[104px] overflow-hidden border-b border-border"
-      // The ground lives here, not in the drawing: the waveform runs edge to
-      // edge (a recording has no margins), so the SVG stretches while the
-      // gradient sits behind it.
-      style={{
-        background:
-          "linear-gradient(to bottom, var(--color-background-surface), var(--color-background-body))",
-      }}
-    >
-      <div aria-hidden className="h-full w-full">
-        <Art />
-      </div>
+    <div className="relative -mx-6 -mt-6 mb-1 h-[150px] overflow-hidden">
+      {photograph ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photograph}
+            alt=""
+            aria-hidden
+            className="h-full w-full object-cover"
+            // Greyscale is enforced rather than assumed: a colour photograph
+            // dropped in later would otherwise drag the whole palette with it.
+            style={{ filter: "grayscale(1) contrast(1.08)" }}
+          />
+          {/* The picture resolves INTO the panel instead of stopping at a
+              hard line above the title. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
+            style={{
+              background:
+                "linear-gradient(to bottom, transparent, var(--color-background-popover))",
+            }}
+          />
+        </>
+      ) : (
+        <div
+          aria-hidden
+          className="h-full w-full border-b border-border"
+          style={{
+            background:
+              "linear-gradient(to bottom, var(--color-background-surface), var(--color-background-body))",
+          }}
+        >
+          <Art />
+        </div>
+      )}
+
       {onClose && (
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-primary transition-opacity hover:opacity-80"
-          // Its own ground, so it stays legible whatever the artwork does
-          // behind it.
-          style={{ backgroundColor: "var(--color-background-body)", opacity: 0.85 }}
+          // Its own ground, so it stays legible over a bright part of a
+          // photograph as readily as over a dark one.
+          style={{ backgroundColor: "var(--color-background-body)", opacity: 0.72 }}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
             <path d="M18 6 6 18M6 6l12 12" />
