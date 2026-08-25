@@ -2,16 +2,18 @@
 
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
+import { Card } from "@astryxdesign/core/Card"
 import { Center } from "@astryxdesign/core/Center"
+import { Divider } from "@astryxdesign/core/Divider"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
+import { StatusDot } from "@astryxdesign/core/StatusDot"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { useToast } from "@astryxdesign/core/Toast"
@@ -19,7 +21,7 @@ import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { GhostRows } from "@/components/empty-illustrations"
-import { PlatformGlyph } from "@/components/platform-glyphs"
+import { PlatformGlyph, PlatformMark } from "@/components/platform-glyphs"
 
 /**
  * Publishing, now real: connect the accounts you post to, see them plainly,
@@ -294,36 +296,25 @@ function PublishingBody() {
       )}
 
       {/* One card per platform, the accounts nested inside it.
-          
+
           Before, every account was a flat row labelled with its platform, and
           the way to add one was a separate row of buttons further down — so
           "which platforms can I use, and what do I have on each" took reading
           two lists and joining them yourself. Grouping answers it in one
           glance: the platform is the heading, its accounts sit under it, and
-          the action to add another is right there on the same card. */}
+          the action to add another is right there on the same card.
+
+          Built from Astryx throughout — Card, Divider, List/ListItem, Stack.
+          Codex was right that the first version was a raw div with inline
+          styles: it would have drifted from every later theme change, and the
+          repo's own rule is that components do the layout. */}
       {PLATFORMS.map((platform) => {
         const mine = connectedAccounts.filter((account) => account.platform === platform)
         return (
-          <div
-            key={platform}
-            className="overflow-hidden rounded-[var(--radius-container)]"
-            style={{
-              backgroundColor: "var(--color-background-card)",
-              boxShadow: "inset 0 0 0 1px var(--color-border)",
-            }}
-          >
+          <Card key={platform} variant="muted" padding={0}>
             <HStack justify="between" align="center" gap={3} className="px-4 py-3.5">
               <HStack gap={3} align="center">
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: "var(--color-background-surface)",
-                    boxShadow: "inset 0 0 0 1px var(--color-border)",
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
-                  <PlatformGlyph platform={platform} />
-                </span>
+                <PlatformMark platform={platform} />
                 <Text as="span" weight="medium" display="block">
                   {PLATFORM_LABELS[platform]}
                 </Text>
@@ -334,9 +325,11 @@ function PublishingBody() {
                 )}
               </HStack>
               <Button
-                // "Connect another" once there is one, because that is what
-                // the button then does — a second account, not a first.
-                label={mine.length > 0 ? "Connect another" : "Connect"}
+                // Always "Connect". It read "Connect another" once one
+                // existed, which made the same control change its name — and
+                // the owner's call is that one word, steady in both states,
+                // is easier to find than a more precise one that moves.
+                label="Connect"
                 variant={mine.length > 0 ? "secondary" : "primary"}
                 size="sm"
                 onClick={() => askToConnect(platform)}
@@ -344,50 +337,48 @@ function PublishingBody() {
             </HStack>
 
             {mine.length > 0 && (
-              <div style={{ borderTop: "1px solid var(--color-border)" }}>
-                {mine.map((account) => (
-                  <HStack
-                    key={account.id}
-                    justify="between"
-                    align="center"
-                    gap={3}
-                    className="px-4 py-3"
-                  >
-                    <HStack gap={2} align="center">
-                      <Text as="span" display="block">
-                        {account.displayName ?? "Connected account"}
-                      </Text>
-                      {/* Astryx's Badge, which is what the state pill in the
-                          reference is. Text has no success/error colour, and
-                          hand-rolling one would be a colour that never
-                          follows the theme. */}
-                      {account.status === "reconnect_required" ? (
-                        <Badge variant="error" label="Needs reconnecting" />
-                      ) : (
-                        <Badge variant="success" label="Connected" />
-                      )}
-                    </HStack>
-                    {account.status === "reconnect_required" ? (
-                      <Button
-                        label="Reconnect"
-                        variant="primary"
-                        size="sm"
-                        onClick={() => askToConnect(account.platform, true)}
-                      />
-                    ) : (
-                      <Button
-                        label="Disconnect"
-                        variant="secondary"
-                        size="sm"
-                        isLoading={busyAccountId === account.id}
-                        onClick={() => void disconnect(account)}
-                      />
-                    )}
-                  </HStack>
-                ))}
-              </div>
+              <>
+                <Divider />
+                {/* Accounts are dense data, so they are rows — the repo rule
+                    is List/Item for a repeated collection, never a Card each. */}
+                <List hasDividers>
+                  {mine.map((account) => (
+                    <ListItem
+                      key={account.id}
+                      label={account.displayName ?? "Connected account"}
+                      // StatusDot, not Badge: this is a state, and Badge is
+                      // reserved for counts here.
+                      endContent={
+                        <HStack gap={3} align="center">
+                          {account.status === "reconnect_required" ? (
+                            <StatusDot variant="error" label="Needs reconnecting" />
+                          ) : (
+                            <StatusDot variant="success" label="Connected" />
+                          )}
+                          {account.status === "reconnect_required" ? (
+                            <Button
+                              label="Reconnect"
+                              variant="primary"
+                              size="sm"
+                              onClick={() => askToConnect(account.platform, true)}
+                            />
+                          ) : (
+                            <Button
+                              label="Disconnect"
+                              variant="secondary"
+                              size="sm"
+                              isLoading={busyAccountId === account.id}
+                              onClick={() => void disconnect(account)}
+                            />
+                          )}
+                        </HStack>
+                      }
+                    />
+                  ))}
+                </List>
+              </>
             )}
-          </div>
+          </Card>
         )
       })}
 
