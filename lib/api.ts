@@ -126,8 +126,39 @@ async function createSession(): Promise<string> {
  * can have changed (the magic link lands on a fresh page).
  */
 let exchangePromise: Promise<string | null> | null = null
+/**
+ * Returns the signed-in token, or null — and on a definite "not signed in",
+ * THROWS AWAY any signed-in token this browser still holds.
+ *
+ * That last part is the security half. A sign-in can end without anyone
+ * pressing Sign out: the session expires, the cookie is cleared, it is
+ * revoked from another device. When that happened, the header correctly said
+ * "Sign in" while the stored bearer token kept working — the app looked
+ * signed out and still acted as the person, which is how an account got
+ * connected by someone the interface considered a guest.
+ */
+/**
+ * How long a "yes, still signed in" answer is trusted before asking again.
+ *
+ * Codex, P1 on this change: memoizing the promise for the whole page lifetime
+ * meant a tab left open never asked twice. Sign out in another tab and this
+ * one kept working indefinitely — sessionStorage is tab-local, so the other
+ * tab's clearToken() cannot reach it, and the shared sign-in cookie being
+ * gone went unnoticed.
+ *
+ * A minute bounds that window without making every request pay for it.
+ */
+const SESSION_RECHECK_MS = 60_000
+let exchangeCheckedAt = 0
+
 function exchangeSignedInToken(): Promise<string | null> {
   if (typeof window === "undefined") return Promise.resolve(null)
+  // A settled answer older than the window is stale: drop it so the next
+  // caller asks again. An IN-FLIGHT promise is never discarded — concurrent
+  // callers must still share one answer.
+  if (exchangeCheckedAt && Date.now() - exchangeCheckedAt > SESSION_RECHECK_MS) {
+    exchangePromise = null
+  }
   // The in-flight PROMISE is memoized, not a boolean. A home screen fires two
   // requests at once; with a flag, the second saw "already asked" while the
   // first was still waiting, skipped the exchange, and minted a guest — so a
@@ -137,12 +168,27 @@ function exchangeSignedInToken(): Promise<string | null> {
   exchangePromise ??= (async () => {
     try {
       const response = await fetch("/api/backend-session", { method: "POST" })
-      if (!response.ok) return null
+      if (!response.ok) {
+        // 401 is the server, holding the httpOnly cookie, saying plainly that
+        // nobody is signed in. A stored "user" token is then stale and must
+        // not be used — dropping it downgrades this tab to a guest, which is
+        // what the person actually is.
+        //
+        // 503 (sign-in not configured) and network failures are NOT that
+        // answer. Clearing on those would sign people out whenever the site
+        // hiccupped, so the token is left alone.
+        if (response.status === 401 && readKind() === "user") clearToken()
+        return null
+      }
       const body = (await response.json()) as { token: string }
       writeToken(body.token, "user")
       return body.token
     } catch {
       return null
+    } finally {
+      // Stamped on settle, not on start, so a slow answer is trusted for a
+      // full window from when it actually arrived.
+      exchangeCheckedAt = Date.now()
     }
   })()
   return exchangePromise
@@ -165,8 +211,20 @@ function mintGuestSession(): Promise<string> {
 
 async function ensureToken(): Promise<string> {
   const stored = readToken()
-  // A signed-in token is already the strongest identity there is; keep it.
-  if (stored && readKind() === "user") return stored
+  // A stored signed-in token is CHECKED, not assumed. It used to be returned
+  // unconditionally — "the strongest identity there is" — which quietly meant
+  // it outlived the sign-in that produced it. The check costs one request per
+  // page load (the same one guests already make) and the answer is memoized
+  // for that load, because a fresh page is exactly when sign-in state can
+  // have changed.
+  if (stored && readKind() === "user") {
+    const verified = await exchangeSignedInToken()
+    // Verified, or the check itself could not run (offline, sign-in not
+    // configured) — in which case the stored token stands rather than
+    // signing someone out over a hiccup. A definite 401 already cleared it
+    // above, so `readToken()` here reflects that.
+    return verified ?? readToken() ?? (await mintGuestSession())
+  }
 
   // A guest tab might have signed in since — the magic link lands on a fresh
   // page, and that page's first API call is where the upgrade happens.
@@ -180,6 +238,7 @@ async function ensureToken(): Promise<string> {
 export function forgetApiSession(): void {
   clearToken()
   exchangePromise = null
+  exchangeCheckedAt = 0
 }
 
 async function parseError(response: Response): Promise<ApiError> {

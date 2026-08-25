@@ -13,10 +13,12 @@ import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
+import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { GhostRows } from "@/components/empty-illustrations"
+import { PlatformGlyph } from "@/components/platform-glyphs"
 
 /**
  * Publishing, now real: connect the accounts you post to, see them plainly,
@@ -27,8 +29,11 @@ import { GhostRows } from "@/components/empty-illustrations"
  * - Publishing not configured on this deployment → one sentence, no buttons.
  * - Signed out → one sentence; the way in is the header's Sign in.
  *   A social account bound to a guest tab would be stranded when it closed.
- * - The OAuth return lands here with ?connected= or ?connect_error= — the
- *   banner repeats exactly what the backend verified, never what it hoped.
+ * - The OAuth return lands here with ?connected= or ?connect_error= — and
+ *   repeats exactly what the backend VERIFIED, never what it hoped. Success
+ *   is a toast (the account is visible below; a permanent green box restating
+ *   it only takes up the page); a failure is a banner, because it has to sit
+ *   still while you read it.
  */
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -38,21 +43,41 @@ const PLATFORM_LABELS: Record<string, string> = {
 }
 const PLATFORMS = ["tiktok", "youtube", "instagram"] as const
 
+/**
+ * The OAuth return, reported.
+ *
+ * Success is a TOAST, not a banner: it is news that something worked, the
+ * account is now visible in the list right below, and a permanent green box
+ * restating it just takes up the page until you navigate away. Failures stay
+ * as banners — those need to sit still while you read them and decide what
+ * to do.
+ */
 function CallbackBanner() {
   const params = useSearchParams()
   const connected = params.get("connected")
   const error = params.get("connect_error")
   const platform = params.get("platform")
+  const toast = useToast()
+  const announced = useRef<string | null>(null)
 
-  if (connected) {
-    return (
-      <Banner
-        status="success"
-        title={`${PLATFORM_LABELS[connected] ?? connected} is connected`}
-        description="It appears below, and clips can publish to it from your library."
-      />
-    )
-  }
+  useEffect(() => {
+    if (!connected) return
+    if (announced.current === connected) return
+    announced.current = connected
+    toast({ body: `${PLATFORM_LABELS[connected] ?? connected} is connected.` })
+
+    // Consume the parameter. Codex, P2: a ref only survives THIS mount, and
+    // ?connected= stays in history — so leaving the page and coming back with
+    // Back mounts a fresh component against the same URL and announces a
+    // connection that happened ages ago. replaceState edits the entry in
+    // place, so Back still goes where it should; it just no longer carries a
+    // message that has already been delivered.
+    const url = new URL(window.location.href)
+    url.searchParams.delete("connected")
+    url.searchParams.delete("platform")
+    window.history.replaceState(window.history.state, "", url.toString())
+  }, [connected, toast])
+
   if (error === "nothing_new") {
     // The backend compared the account list before and after this attempt
     // and saw no change — an older account was already connected, but this
@@ -230,6 +255,7 @@ function PublishingBody() {
                 <Button
                   key={platform}
                   label={`Connect ${PLATFORM_LABELS[platform]}`}
+                  icon={<PlatformGlyph platform={platform} />}
                   variant="secondary"
                   onClick={() => askToConnect(platform)}
                 />
@@ -268,6 +294,25 @@ function PublishingBody() {
             {connectedAccounts.map((account) => (
               <ListItem
                 key={account.id}
+                // The platform's mark, so a list of connections is scannable
+                // rather than four rows of similar text.
+                // Codex, P1: the container was hardcoded white opacities, so
+                // it would not follow a theme change. Astryx has no component
+                // for "our own mark in a themed well" — Avatar takes a person,
+                // Icon takes a Lucide name — so it stays hand-built, but every
+                // colour now comes from a token.
+                startContent={
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    style={{
+                      backgroundColor: "var(--color-background-surface)",
+                      boxShadow: "inset 0 0 0 1px var(--color-border)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    <PlatformGlyph platform={account.platform} />
+                  </span>
+                }
                 label={PLATFORM_LABELS[account.platform] ?? account.platform}
                 description={
                   (account.displayName ?? "Connected account") +
@@ -307,6 +352,7 @@ function PublishingBody() {
             <Button
               key={platform}
               label={`Connect ${PLATFORM_LABELS[platform]}`}
+              icon={<PlatformGlyph platform={platform} />}
               variant="secondary"
               onClick={() => askToConnect(platform)}
             />
