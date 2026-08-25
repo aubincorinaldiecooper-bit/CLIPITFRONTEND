@@ -10,6 +10,8 @@ import { Divider } from "@astryxdesign/core/Divider"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Icon } from "@astryxdesign/core/Icon"
+import { IconButton } from "@astryxdesign/core/IconButton"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
@@ -21,8 +23,9 @@ import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { GhostRows } from "@/components/empty-illustrations"
-import { ModalArt } from "@/components/modal-art"
-import { PlatformGlyph, PlatformMark } from "@/components/platform-glyphs"
+import { LockGlyph } from "@/components/glyphs"
+import { PlatformGlyph } from "@/components/platform-glyphs"
+import { PlatformLogo } from "@/components/platform-logos"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 
 /**
@@ -333,7 +336,7 @@ function PublishingBody() {
           <Card key={platform} variant="muted" padding={0}>
             <HStack justify="between" align="center" gap={3} className="px-4 py-3.5">
               <HStack gap={3} align="center">
-                <PlatformMark platform={platform} />
+                <PlatformLogo platform={platform} size="sm" />
                 <Text as="span" weight="medium" display="block">
                   {PLATFORM_LABELS[platform]}
                 </Text>
@@ -446,6 +449,7 @@ function ConnectDialog({
   onContinue: (platform: string) => void
 }) {
   const label = target ? PLATFORM_LABELS[target.platform] ?? target.platform : ""
+  const title = target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`
   return (
     <Dialog
       isOpen={target !== null}
@@ -453,38 +457,53 @@ function ConnectDialog({
         if (!open) onClose()
       }}
       purpose="info"
-      width={460}
+      width={440}
+      aria-label={title}
     >
-      <ModalArt kind="connect" onClose={onClose} />
-      <DialogHeader title={target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`} />
       {target && (
-        <VStack gap={3} align="stretch">
-          {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
-          {target.reconnect && (
-            <Text as="p" type="body" color="secondary" display="block">
-              This account needs a fresh sign-in — posts can't go out until it's reconnected.
-            </Text>
-          )}
-          <VStack gap={2} align="stretch">
-            <Text as="p" type="body" display="block">
-              1. You'll be taken to a secure page to approve the connection.
-            </Text>
-            <Text as="p" type="body" display="block">
-              2. You sign in with {label} itself — CLIPIT never sees that password.
-            </Text>
-            <Text as="p" type="body" display="block">
-              3. You land back here, connected — and every ready clip in your library can
-              publish straight to it.
+        <VStack gap={4} align="stretch">
+          <HStack justify="between" align="start">
+            <PlatformLogo platform={target.platform} />
+            <IconButton
+              icon={<Icon icon="close" />}
+              label="Close"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+            />
+          </HStack>
+
+          <VStack gap={1} align="stretch">
+            <Heading level={1} accessibilityLevel={2}>
+              {title}
+            </Heading>
+            <Text as="p" type="supporting" display="block">
+              {target.reconnect
+                ? `This account needs a fresh sign-in — posts can't go out until it's reconnected.`
+                : `Publish clips directly to ${label}.`}
             </Text>
           </VStack>
-          <HStack gap={2} justify="end">
-            <Button label="Cancel" variant="ghost" onClick={onClose} />
-            <Button
-              label="Continue"
-              variant="primary"
-              isLoading={connecting === target.platform}
-              onClick={() => onContinue(target.platform)}
-            />
+
+          {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
+
+          {/* One button, full width, saying where it goes. The modal used to
+              spell out three numbered steps before it; the mockups cut them,
+              and they were reassurance nobody had asked for — the promise
+              that matters is the one below, which is about the password. */}
+          <Button
+            label={`Continue with ${label}`}
+            variant="primary"
+            width="100%"
+            endContent={<Icon icon="chevronRight" />}
+            isLoading={connecting === target.platform}
+            onClick={() => onContinue(target.platform)}
+          />
+
+          <HStack gap={1.5} justify="center" align="center">
+            <Icon icon={LockGlyph} size="sm" />
+            <Text as="span" type="supporting">
+              You&apos;ll sign in on {label} itself — CLIPIT never sees that password.
+            </Text>
           </HStack>
         </VStack>
       )}

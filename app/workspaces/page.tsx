@@ -8,6 +8,7 @@ import { Center } from "@astryxdesign/core/Center"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Icon } from "@astryxdesign/core/Icon"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
@@ -22,7 +23,10 @@ import { personName } from "@/components/side-nav"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { GhostRoom } from "@/components/empty-illustrations"
-import { ModalArt } from "@/components/modal-art"
+import { SplitModal } from "@/components/split-modal"
+
+/** Ties the footer's submit button back to the form it sits outside of. */
+const CREATE_FORM_ID = "create-workspace-form"
 
 /**
  * Your workspaces, the traditional shape: the first one is where all your
@@ -242,18 +246,70 @@ function WorkspacesBody() {
         </Center>
       )}
 
+      {/* Making the room, and handing over a link that could not be emailed,
+          are two different moments and now two different dialogs. They used to
+          share one, which meant the picture and the failure banner had to take
+          turns inside the same frame. */}
+      <SplitModal
+        isOpen={createOpen && !handoff}
+        onOpenChange={setCreateOpen}
+        photo="workspace"
+        title="Create a workspace"
+        subtitle="Share clips with your team."
+        footer={
+          <>
+            <Button label="Cancel" variant="ghost" onClick={() => setCreateOpen(false)} />
+            <Button
+              label="Create workspace"
+              variant="primary"
+              type="submit"
+              // The button lives in the footer, outside the form element, so
+              // it is tied back to it by id rather than by nesting.
+              form={CREATE_FORM_ID}
+              endContent={<Icon icon="chevronRight" />}
+              isLoading={creating}
+            />
+          </>
+        }
+      >
+        <form id={CREATE_FORM_ID} onSubmit={create}>
+          <VStack gap={3} align="stretch">
+            {formError && <Banner status="error" title="That didn't work" description={formError} />}
+            <TextInput
+              label="Workspace name"
+              isRequired
+              value={name}
+              onChange={(value) => setName(value)}
+              placeholder="e.g. Northside Films"
+              hasAutoFocus
+            />
+            <TextInput
+              label="Invite someone (optional)"
+              type="email"
+              value={inviteEmail}
+              onChange={(value) => setInviteEmail(value)}
+              placeholder="teammate@example.com"
+              description="They'll get an email link that works once and expires in seven days."
+            />
+            <Text as="p" type="supporting" display="block">
+              You'll own the workspace. Everyone in it sees the clips sent there; your own library
+              stays yours.
+            </Text>
+          </VStack>
+        </form>
+      </SplitModal>
+
       <Dialog
-        isOpen={createOpen}
+        isOpen={Boolean(handoff)}
         onOpenChange={(open) => {
-          setCreateOpen(open)
           // Dismissing the handoff is the owner saying they have the link;
           // the workspace was made either way, so take them to it.
-          if (!open && handoff) finishHandoff()
+          if (!open) finishHandoff()
         }}
         purpose="form"
         width={420}
       >
-        {handoff ? (
+        {handoff && (
           <>
             <DialogHeader title={`${handoff.workspace.name} is ready`} />
             <VStack gap={3} align="stretch">
@@ -294,40 +350,6 @@ function WorkspacesBody() {
                 <Button label="Done" variant="primary" onClick={finishHandoff} />
               </HStack>
             </VStack>
-          </>
-        ) : (
-          <>
-            <ModalArt kind="workspace" onClose={() => setCreateOpen(false)} />
-            <DialogHeader title="Create a workspace" />
-            <form onSubmit={create}>
-              <VStack gap={3} align="stretch">
-                {formError && <Banner status="error" title="That didn't work" description={formError} />}
-                <TextInput
-                  label="Workspace name"
-                  isRequired
-                  value={name}
-                  onChange={(value) => setName(value)}
-                  placeholder="e.g. Northside Films"
-                  hasAutoFocus
-                />
-                <TextInput
-                  label="Invite someone (optional)"
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(value) => setInviteEmail(value)}
-                  placeholder="teammate@example.com"
-                  description="They'll get an email link that works once and expires in seven days."
-                />
-                <Text as="p" type="supporting" display="block">
-                  You'll own the workspace. Everyone in it sees the clips sent there; your own library
-                  stays yours.
-                </Text>
-                <HStack gap={2} justify="end">
-                  <Button label="Cancel" variant="ghost" onClick={() => setCreateOpen(false)} />
-                  <Button label="Create workspace" variant="primary" type="submit" isLoading={creating} />
-                </HStack>
-              </VStack>
-            </form>
           </>
         )}
       </Dialog>

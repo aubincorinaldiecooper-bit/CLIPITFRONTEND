@@ -2,12 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
-import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
+import { Icon } from "@astryxdesign/core/Icon"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { authClient } from "@/lib/auth-client"
-import { ModalArt } from "@/components/modal-art"
+import { SplitModal } from "@/components/split-modal"
 
 /**
  * "You need to be signed in for that" — asked at the moment it matters, and
@@ -132,14 +132,22 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
     if (intent) setState("idle")
   }, [intent])
 
+  /**
+   * Why the box appeared, said in the subtitle rather than the title.
+   *
+   * The title was "Sign in to publish this clip" until the owner's mockups
+   * put a short, heavy "Sign in" at the top. The reason is worth more than the
+   * headline is, so it moved down a line rather than being dropped: a prompt
+   * that does not say what it interrupted reads as an interruption.
+   */
   const purpose =
     intent?.action === "publish"
-      ? "to publish this clip"
+      ? "To publish this clip"
       : intent?.action === "connect"
-        ? "to connect an account"
+        ? "To connect an account"
         : intent?.action === "invite"
-          ? "to invite someone"
-          : "to send this clip to a workspace"
+          ? "To invite someone"
+          : "To send this clip to a workspace"
 
   const send = async () => {
     const address = email.trim()
@@ -159,23 +167,29 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
   }
 
   return (
-    <Dialog
+    <SplitModal
       isOpen={intent !== null}
       onOpenChange={(open) => !open && onClose()}
-      purpose="form"
-      width="min(420px, 94vw)"
+      photo="sign-in"
+      title="Sign in"
+      subtitle={
+        state === "sent"
+          ? "Check your email."
+          : `${purpose}, we'll email you a sign-in link.`
+      }
     >
-      <ModalArt kind="sign-in" onClose={onClose} />
-      <DialogHeader
-        title={`Sign in ${purpose}`} />
       {state === "sent" ? (
         <VStack gap={3} align="stretch">
           <Text as="p" type="body" display="block">
-            Link sent — check your email at {email.trim()}. Open it and you&apos;ll land back here,
-            ready to carry on.
+            Sent to {email.trim()}. Open it and you&apos;ll land back here, ready to carry on.
           </Text>
-          <HStack justify="end">
-            <Button label="Use a different address" variant="secondary" size="sm" onClick={() => setState("idle")} />
+          <HStack justify="start">
+            <Button
+              label="Use a different address"
+              variant="secondary"
+              size="sm"
+              onClick={() => setState("idle")}
+            />
           </HStack>
         </VStack>
       ) : (
@@ -186,9 +200,6 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
           }}
         >
           <VStack gap={3} align="stretch">
-            <Text as="p" type="supporting" display="block">
-              We&apos;ll email you a link — no password. Clips you have already made come with you.
-            </Text>
             <TextInput
               label="Email"
               type="email"
@@ -202,20 +213,26 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
                 That didn&apos;t send. Check the address and try again.
               </Text>
             )}
-            <HStack gap={2} justify="end">
-              <Button label="Cancel" variant="secondary" onClick={onClose} />
+            <HStack justify="start">
               <Button
-                label="Email me a link"
+                label="Continue"
                 variant="primary"
                 type="submit"
+                endContent={<Icon icon="chevronRight" />}
                 isLoading={state === "sending"}
                 isDisabled={email.trim() === ""}
               />
             </HStack>
+            {/* The promise that makes the interruption bearable: a guest's
+                work is carried into the account, so signing in here costs
+                nothing already done. Kept small, but kept. */}
+            <Text as="p" type="supporting" display="block">
+              No password. Clips you have already made come with you.
+            </Text>
           </VStack>
         </form>
       )}
-    </Dialog>
+    </SplitModal>
   )
 }
 

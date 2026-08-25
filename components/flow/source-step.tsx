@@ -2,8 +2,11 @@
 
 import { useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
+import { Icon } from "@astryxdesign/core/Icon"
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
+import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
+import { LockGlyph, UploadGlyph } from "@/components/glyphs"
 import { ProgressBar } from "./step-shell"
 
 interface SourceStepProps {
@@ -36,10 +39,14 @@ export function SourceStep({ onUpload, onYoutube, busy, uploadFraction }: Source
 
   return (
     <div className="space-y-5">
-      <SegmentedControl value={tab} onChange={(value) => setTab(value as "upload" | "youtube")} label="Video source">
-        <SegmentedControlItem value="upload" label="Upload a file" />
-        <SegmentedControlItem value="youtube" label="YouTube URL" />
-      </SegmentedControl>
+      {/* Centred under a centred heading. Left-aligned it read as the start of
+          a form the rest of the page had not been told about. */}
+      <HStack justify="center">
+        <SegmentedControl value={tab} onChange={(value) => setTab(value as "upload" | "youtube")} label="Video source">
+          <SegmentedControlItem value="upload" label="Upload a file" />
+          <SegmentedControlItem value="youtube" label="YouTube URL" />
+        </SegmentedControl>
+      </HStack>
 
       {tab === "upload" ? (
         <div
@@ -54,15 +61,21 @@ export function SourceStep({ onUpload, onYoutube, busy, uploadFraction }: Source
             const file = event.dataTransfer.files?.[0]
             if (file) onUpload(file)
           }}
-          className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center transition-colors ${
+          className={`flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed px-6 py-14 text-center transition-colors ${
             dragging ? "border-foreground/50 bg-white/[0.04]" : "border-white/15"
           }`}
         >
-          <Text as="p" type="body">Drop a video here</Text>
-          <Text as="p" type="supporting">MP4, MOV, MKV, WebM — up to 6 hours</Text>
-          <span className="mt-5">
-            <Button label="Choose a file" variant="primary" isDisabled={busy} onClick={() => fileInput.current?.click()} />
+          {/* The mark first, then the words. An empty dashed rectangle with
+              text in it reads as a form field; the arrow is what says a file
+              goes here. */}
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-primary ring-1 ring-border">
+            <Icon icon={UploadGlyph} size="lg" />
           </span>
+          <VStack gap={1}>
+            <Text as="p" type="body">Drop a video here</Text>
+            <Text as="p" type="supporting">MP4, MOV, MKV, WebM — up to 6 hours</Text>
+          </VStack>
+          <Button label="Choose a file" variant="primary" isDisabled={busy} onClick={() => fileInput.current?.click()} />
           <input
             ref={fileInput}
             type="file"
@@ -99,6 +112,17 @@ export function SourceStep({ onUpload, onYoutube, busy, uploadFraction }: Source
           />
         </form>
       )}
+
+      {/* The reassurance the mockup puts under the zone. It belongs to both
+          tabs: a YouTube link is read into the same private library a file is,
+          and someone weighing whether to hand over footage is asking the same
+          question either way. */}
+      <HStack gap={1.5} justify="center" align="center">
+        <Icon icon={LockGlyph} size="sm" />
+        <Text as="span" type="supporting">
+          Your video is private and secure.
+        </Text>
+      </HStack>
     </div>
   )
 }

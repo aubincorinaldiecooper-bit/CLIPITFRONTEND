@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
+import { Divider } from "@astryxdesign/core/Divider"
+import { Icon } from "@astryxdesign/core/Icon"
 import { IconButton } from "@astryxdesign/core/IconButton"
 import { Center } from "@astryxdesign/core/Center"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
@@ -9,11 +11,11 @@ import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
 import { Popover } from "@astryxdesign/core/Popover"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
-import { ToggleButton } from "@astryxdesign/core/ToggleButton"
 import { TextArea } from "@astryxdesign/core/TextArea"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { useToast } from "@astryxdesign/core/Toast"
@@ -25,7 +27,19 @@ import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { CaptionsGlyph, PublishGlyph, SendToWorkspaceGlyph } from "@/components/clip-action-icons"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { GhostCards } from "@/components/empty-illustrations"
-import { ModalArt } from "@/components/modal-art"
+import { PlatformLogo } from "@/components/platform-logos"
+import { ChosenTick, PublishPreview } from "@/components/publish-preview"
+import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
+
+/**
+ * The caption length to count against.
+ *
+ * The shortest limit among the platforms this posts to, so a caption inside it
+ * fits everywhere. Advisory: the counter turns red, nothing is blocked. A
+ * platform trims what it minds about, and refusing to type past this would be
+ * us enforcing a rule that only one of them applies.
+ */
+const CAPTION_LIMIT = 220
 
 /**
  * Everything you have cut, newest first — chrome on Astryx, clips
@@ -82,8 +96,18 @@ export default function ClipsPage() {
    * Caption drafts, one per clip. A draft survives its popover closing —
    * clicking a pixel outside the panel must not erase a paragraph someone
    * typed — and is dropped only when the publish it was written for lands.
+   *
+   * Seeded from the ones Save draft has written down, so a caption written
+   * yesterday is still there today.
    */
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+
+  // Read once, on the client. Deliberately not part of the initial state: this
+  // page is prerendered, and reading storage during the first render makes the
+  // server's HTML and the browser's disagree.
+  useEffect(() => {
+    setDrafts((current) => ({ ...savedDrafts(), ...current }))
+  }, [])
   const [publishingIds, setPublishingIds] = useState<string[]>([])
   /** Which clip's caption editor is open — a modal visit, not a page. */
   const [captionClipId, setCaptionClipId] = useState<string | null>(null)
@@ -189,11 +213,14 @@ export default function ClipsPage() {
             : "Sent — it's on its way to your connected accounts.",
       })
       // The draft did its job; the panel closes only if it is still this
-      // clip's — another clip's popover may have opened mid-flight.
+      // clip's — another clip's popover may have opened mid-flight. A saved
+      // copy goes too: keeping a caption that has already been published would
+      // hand it straight back the next time this clip was opened.
       setDrafts((current) => {
         const { [clipId]: _sent, ...rest } = current
         return rest
       })
+      clearDraft(clipId)
       if (publishOpenIdRef.current === clipId) {
         setPublishTarget(null)
       }
@@ -547,20 +574,51 @@ export default function ClipsPage() {
           if (!open) setPublishTarget(null)
         }}
         purpose="form"
-        width="min(520px, 94vw)"
+        width="min(560px, 94vw)"
+        maxHeight="90vh"
+        aria-label="Publish"
       >
-        <ModalArt kind="publish" onClose={() => setPublishTarget(null)} />
-        <DialogHeader title="Post this clip" />
         {publishOpenId && (
-          <VStack gap={4} align="stretch">
+          // The heading and the buttons stay put; only the middle scrolls.
+          // Four connected accounts and a preview frame were already enough to
+          // push Publish off the bottom of a laptop screen, and a button you
+          // cannot reach is the same as a button that is not there.
+          <VStack gap={4} align="stretch" className="min-h-0">
+            <HStack justify="between" align="start">
+              <VStack gap={1} align="stretch">
+                <Heading level={1} accessibilityLevel={2}>
+                  Publish
+                </Heading>
+                <Text as="p" type="supporting" display="block">
+                  Share your clip with the world.
+                </Text>
+              </VStack>
+              <IconButton
+                icon={<Icon icon="close" />}
+                label="Close"
+                variant="ghost"
+                size="sm"
+                onClick={() => setPublishTarget(null)}
+              />
+            </HStack>
+
+            <VStack gap={4} align="stretch" isScrollable className="min-h-0">
+            <PublishPreview clip={clips?.find((clip) => clip.id === publishOpenId) ?? null} />
+
             <TextArea
               label="Caption"
-              rows={4}
+              rows={3}
               value={drafts[publishOpenId] ?? ""}
               onChange={(value) =>
                 setDrafts((current) => ({ ...current, [publishOpenId]: value }))
               }
               placeholder="Say something about this clip (optional)"
+              // The shortest cap across the platforms this posts to, so the
+              // count means "this will fit everywhere" rather than "this fits
+              // one of them". Advisory, not enforced: a caption is trimmed by
+              // whichever platform minds, and refusing to type here would be
+              // us inventing a rule none of them applies to all posts.
+              maxLength={CAPTION_LIMIT}
             />
             {/* Which accounts get it. Everything connected starts ticked,
                 because "goes to all of them" is what this button did before
@@ -579,68 +637,89 @@ export default function ClipsPage() {
             ) : (
               <VStack gap={2} align="stretch">
                 <Text as="p" type="supporting" display="block">
-                  Post to
+                  Accounts
                 </Text>
-                {/* Toggles rather than a checkbox list. Astryx's checkbox
-                    washes a selected row in --color-accent-muted, which on
-                    this palette is a solid amber block — the accent is for
-                    small marks here, never a surface. A pressed
-                    ToggleButton uses a neutral overlay instead, and a row of
-                    pills is the language every other action in this app
-                    already speaks. */}
-                <HStack gap={2} wrap="wrap">
+                {/* Rows, not pills. Each account now carries its platform's
+                    own mark, and a mark plus a name plus a handle is more than
+                    a pill can hold legibly — the row is also what the mockup
+                    asks for. The tick is drawn rather than an Astryx checkbox
+                    because that washes a selected row in --color-accent-muted,
+                    which on this palette is a solid amber block; the accent is
+                    for small marks here, never a surface. */}
+                <List hasDividers>
                   {accounts.map((account) => {
                     const on = chosenAccountIds.includes(account.id)
+                    const platform = PLATFORM_LABELS[account.platform] ?? account.platform
                     return (
-                      <ToggleButton
+                      <ListItem
                         key={account.id}
-                        size="sm"
-                        isPressed={on}
-                        // Two accounts on one platform is normal, so the
-                        // handle is part of the name — "TikTok" twice with
-                        // no way to tell them apart is not a choice.
-                        label={
-                          account.displayName
-                            ? `${PLATFORM_LABELS[account.platform] ?? account.platform} · ${account.displayName}`
-                            : PLATFORM_LABELS[account.platform] ?? account.platform
-                        }
-                        onPressedChange={(pressed) =>
+                        // NOT `isSelected`. That paints the whole row in
+                        // --color-accent-muted, which on this palette is a
+                        // solid amber block — the same trap the Astryx
+                        // checkbox falls into, and the reason these were pills
+                        // before. The row still announces itself as a tickable
+                        // thing and still says whether it is ticked; it just
+                        // says it in the mark rather than in a wash of colour.
+                        role="checkbox"
+                        aria-checked={on}
+                        startContent={<PlatformLogo platform={account.platform} size="sm" />}
+                        label={platform}
+                        // Two accounts on one platform is normal, so the handle
+                        // is part of the row — "TikTok" twice with no way to
+                        // tell them apart is not a choice.
+                        description={account.displayName ?? undefined}
+                        endContent={<ChosenTick isOn={on} />}
+                        onClick={() =>
                           setChosenAccountIds((current) =>
-                            pressed
-                              ? [...current, account.id]
-                              : current.filter((id) => id !== account.id),
+                            on
+                              ? current.filter((id) => id !== account.id)
+                              : [...current, account.id],
                           )
                         }
                       />
                     )
                   })}
-                </HStack>
+                </List>
               </VStack>
             )}
+            </VStack>
+
+            <Divider />
 
             <HStack gap={3} justify="between" align="center">
               <Text as="p" type="supporting" display="block">
                 {accounts && accounts.length > 0
                   ? chosenAccountIds.length === 0
                     ? "Pick at least one account."
-                    : `Going to ${chosenAccountIds.length} of ${accounts.length}.`
+                    : `${chosenAccountIds.length} of ${accounts.length} selected.`
                   : "Goes to every account you have connected."}
               </Text>
-              <Button
-                label="Post it"
-                variant="primary"
-                // The guard stays on the page, not in the dialog: closing
-                // this unmounts it, and a flag that reset would let a second
-                // Post start a publish of a clip already on its way out.
-                isLoading={publishingIds.includes(publishOpenId)}
-                isDisabled={
-                  publishingIds.includes(publishOpenId) ||
-                  // An empty tick-list is a refusal to pick, not permission
-                  // to post everywhere — the same rule the API enforces.
-                  (accounts !== null && accounts.length > 0 && chosenAccountIds.length === 0)
-                }
-                onClick={() => void publish(publishOpenId)}
-              />
+              <HStack gap={2}>
+                <Button
+                  label="Save draft"
+                  variant="secondary"
+                  onClick={() => {
+                    saveDraft(publishOpenId, drafts[publishOpenId] ?? "")
+                    setPublishTarget(null)
+                  }}
+                />
+                <Button
+                  label="Publish"
+                  variant="primary"
+                  endContent={<Icon icon="chevronRight" />}
+                  // The guard stays on the page, not in the dialog: closing
+                  // this unmounts it, and a flag that reset would let a second
+                  // Post start a publish of a clip already on its way out.
+                  isLoading={publishingIds.includes(publishOpenId)}
+                  isDisabled={
+                    publishingIds.includes(publishOpenId) ||
+                    // An empty tick-list is a refusal to pick, not permission
+                    // to post everywhere — the same rule the API enforces.
+                    (accounts !== null && accounts.length > 0 && chosenAccountIds.length === 0)
+                  }
+                  onClick={() => void publish(publishOpenId)}
+                />
+              </HStack>
             </HStack>
           </VStack>
         )}
@@ -657,9 +736,13 @@ export default function ClipsPage() {
       >
         {/* Passing onOpenChange is what gives the header its close button —
             without it the only ways out were the two save buttons, and on a
-            touch screen there was no way out at all. */}
-        <ModalArt kind="captions" onClose={closeCaptionEditor} />
-        <DialogHeader title="Captions" />
+            touch screen there was no way out at all.
+
+            The picture that used to run across the top is gone: this modal is
+            about to become the editor from the mockups, with its own header
+            carrying undo, redo and Save, and a band above that would be a
+            second header. */}
+        <DialogHeader title="Captions" onOpenChange={(open) => !open && closeCaptionEditor()} />
         {captionClipId && (
           <CaptionEditor
             clipId={captionClipId}

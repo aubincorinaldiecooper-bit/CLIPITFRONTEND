@@ -407,11 +407,15 @@ export default function StartPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
         >
-          <Heading level={1}>Add a video</Heading>
-          <div className="mt-2">
+          {/* Centred, per the mockup — the page has one thing to do and the
+              heading sits over it rather than off to one side. */}
+          <div className="text-center">
+            <Heading level={1}>Add a video</Heading>
+          </div>
+          <div className="mx-auto mt-2 max-w-md text-center">
             <Text as="p" type="supporting">
-              Upload a file or paste a YouTube link. The video takes the stage while it is read once, end to end —
-              then ask it anything.
+              Upload a file or paste a YouTube link. We&apos;ll read the video once, end to end — then you
+              can ask it anything.
             </Text>
           </div>
           <div className="mt-8">
