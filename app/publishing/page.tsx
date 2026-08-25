@@ -62,11 +62,20 @@ function CallbackBanner() {
 
   useEffect(() => {
     if (!connected) return
-    // Once per arrival, not once per render — and not again if this component
-    // remounts with the same query string still in the address bar.
     if (announced.current === connected) return
     announced.current = connected
     toast({ body: `${PLATFORM_LABELS[connected] ?? connected} is connected.` })
+
+    // Consume the parameter. Codex, P2: a ref only survives THIS mount, and
+    // ?connected= stays in history — so leaving the page and coming back with
+    // Back mounts a fresh component against the same URL and announces a
+    // connection that happened ages ago. replaceState edits the entry in
+    // place, so Back still goes where it should; it just no longer carries a
+    // message that has already been delivered.
+    const url = new URL(window.location.href)
+    url.searchParams.delete("connected")
+    url.searchParams.delete("platform")
+    window.history.replaceState(window.history.state, "", url.toString())
   }, [connected, toast])
 
   if (error === "nothing_new") {
@@ -287,8 +296,20 @@ function PublishingBody() {
                 key={account.id}
                 // The platform's mark, so a list of connections is scannable
                 // rather than four rows of similar text.
+                // Codex, P1: the container was hardcoded white opacities, so
+                // it would not follow a theme change. Astryx has no component
+                // for "our own mark in a themed well" — Avatar takes a person,
+                // Icon takes a Lucide name — so it stays hand-built, but every
+                // colour now comes from a token.
                 startContent={
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-foreground/80 ring-1 ring-white/10">
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    style={{
+                      backgroundColor: "var(--color-background-surface)",
+                      boxShadow: "inset 0 0 0 1px var(--color-border)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
                     <PlatformGlyph platform={account.platform} />
                   </span>
                 }

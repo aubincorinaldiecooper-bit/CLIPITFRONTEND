@@ -137,8 +137,28 @@ let exchangePromise: Promise<string | null> | null = null
  * signed out and still acted as the person, which is how an account got
  * connected by someone the interface considered a guest.
  */
+/**
+ * How long a "yes, still signed in" answer is trusted before asking again.
+ *
+ * Codex, P1 on this change: memoizing the promise for the whole page lifetime
+ * meant a tab left open never asked twice. Sign out in another tab and this
+ * one kept working indefinitely — sessionStorage is tab-local, so the other
+ * tab's clearToken() cannot reach it, and the shared sign-in cookie being
+ * gone went unnoticed.
+ *
+ * A minute bounds that window without making every request pay for it.
+ */
+const SESSION_RECHECK_MS = 60_000
+let exchangeCheckedAt = 0
+
 function exchangeSignedInToken(): Promise<string | null> {
   if (typeof window === "undefined") return Promise.resolve(null)
+  // A settled answer older than the window is stale: drop it so the next
+  // caller asks again. An IN-FLIGHT promise is never discarded — concurrent
+  // callers must still share one answer.
+  if (exchangeCheckedAt && Date.now() - exchangeCheckedAt > SESSION_RECHECK_MS) {
+    exchangePromise = null
+  }
   // The in-flight PROMISE is memoized, not a boolean. A home screen fires two
   // requests at once; with a flag, the second saw "already asked" while the
   // first was still waiting, skipped the exchange, and minted a guest — so a
@@ -165,6 +185,10 @@ function exchangeSignedInToken(): Promise<string | null> {
       return body.token
     } catch {
       return null
+    } finally {
+      // Stamped on settle, not on start, so a slow answer is trusted for a
+      // full window from when it actually arrived.
+      exchangeCheckedAt = Date.now()
     }
   })()
   return exchangePromise
@@ -214,6 +238,7 @@ async function ensureToken(): Promise<string> {
 export function forgetApiSession(): void {
   clearToken()
   exchangePromise = null
+  exchangeCheckedAt = 0
 }
 
 async function parseError(response: Response): Promise<ApiError> {
