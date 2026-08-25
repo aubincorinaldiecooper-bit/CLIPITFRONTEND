@@ -32,7 +32,7 @@ const BOX: Record<PlatformLogoSize, string> = {
   sm: "h-10 w-10 rounded-xl",
   // Modal-sized. In the connect mockup the mark is the first thing on the
   // panel and is read before the title, which a small one is not.
-  md: "h-14 w-14 rounded-2xl",
+  md: "h-[72px] w-[72px] rounded-2xl",
 }
 
 /** Instagram: the rounded-square camera outline over its warm gradient. */
@@ -91,6 +91,22 @@ function YouTubeLogo({ size }: { size: PlatformLogoSize }) {
   )
 }
 
+/** X: the wordmark letter, white on black. */
+function XLogo({ size }: { size: PlatformLogoSize }) {
+  return (
+    <svg viewBox="0 0 48 48" className={`${BOX[size]} shrink-0`} aria-hidden>
+      <rect width="48" height="48" rx="12" fill="#000" />
+      {/* The two strokes of the X, drawn as the mark's own tapered form
+          rather than a typed letter — a letter X in whatever font happens to
+          be loaded is not the mark. */}
+      <path
+        d="M27.6 21.9 37.4 10.5h-2.3l-8.5 9.9-6.8-9.9H12l10.3 15-10.3 12h2.3l9-10.5 7.2 10.5h7.8L27.6 21.9Zm-3.2 3.7-1-1.5-8.3-11.9h3.6l6.7 9.6 1 1.5 8.7 12.4h-3.6l-7.1-10.1Z"
+        fill="#fff"
+      />
+    </svg>
+  )
+}
+
 /**
  * A platform we have no mark for.
  *
@@ -119,5 +135,6 @@ export function PlatformLogo({
   if (platform === "instagram") return <InstagramLogo size={size} />
   if (platform === "tiktok") return <TikTokLogo size={size} />
   if (platform === "youtube") return <YouTubeLogo size={size} />
+  if (platform === "x") return <XLogo size={size} />
   return <UnknownLogo platform={platform} size={size} />
 }

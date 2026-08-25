@@ -40,7 +40,9 @@ export function PublishPreview({ clip }: { clip: LibraryClip | null }) {
 
   return (
     <VStack gap={2} align="stretch">
-      <AspectRatio ratio={16 / 9} fit="cover">
+      {/* Wider than 16:9 — measured at about 2.4:1 off the mockup. A
+          full 16:9 still made the modal taller than a laptop screen. */}
+      <AspectRatio ratio={2.4} fit="cover">
         <span className="relative block overflow-hidden rounded-xl bg-black">
           {clip.thumbnailUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -93,7 +95,7 @@ export function ChosenTick({ isOn }: { isOn: boolean }) {
       // platform marks beside it, which are the row's real colour.
       className={
         isOn
-          ? "flex h-6 w-6 items-center justify-center rounded-full bg-white/85 text-black"
+          ? "flex h-6 w-6 items-center justify-center rounded-full bg-white/25 text-primary"
           : "flex h-6 w-6 items-center justify-center rounded-full text-secondary ring-1 ring-border"
       }
     >

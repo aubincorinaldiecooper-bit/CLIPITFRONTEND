@@ -48,8 +48,9 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
   instagram: "Instagram",
+  x: "X",
 }
-const PLATFORMS = ["tiktok", "youtube", "instagram"] as const
+const PLATFORMS = ["tiktok", "instagram", "youtube", "x"] as const
 
 /**
  * The OAuth return, reported.
@@ -457,27 +458,34 @@ function ConnectDialog({
         if (!open) onClose()
       }}
       purpose="info"
-      width={440}
+      // Measured off the mockup once the two were normalised to the same
+      // scale: the card is 543px there against the 440 this had, and every
+      // gap inside it is roughly twice what the design system gives by
+      // default. The layout was right and the density was not.
+      width={540}
+      padding={8}
       aria-label={title}
     >
       {target && (
-        <VStack gap={4} align="stretch">
+        <VStack gap={6} align="stretch">
           <HStack justify="between" align="start">
             <PlatformLogo platform={target.platform} />
             <IconButton
               icon={<Icon icon="close" />}
               label="Close"
               variant="ghost"
-              size="sm"
+              // Its own well, as in the mockup — a bare X on a flat panel has
+              // nothing to aim at.
+              className="rounded-full ring-1 ring-border"
               onClick={onClose}
             />
           </HStack>
 
-          <VStack gap={1} align="stretch">
+          <VStack gap={2} align="stretch">
             <Heading level={1} accessibilityLevel={2}>
               {title}
             </Heading>
-            <Text as="p" type="supporting" display="block">
+            <Text as="p" type="body" color="secondary" display="block">
               {target.reconnect
                 ? `This account needs a fresh sign-in — posts can't go out until it's reconnected.`
                 : `Publish clips directly to ${label}.`}
@@ -485,6 +493,7 @@ function ConnectDialog({
           </VStack>
 
           {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
+
 
           {/* One button, full width, saying where it goes. The modal used to
               spell out three numbered steps before it; the mockups cut them,

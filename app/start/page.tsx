@@ -69,21 +69,9 @@ export default function StartPage() {
     [fail],
   )
 
-  const startYoutube = useCallback(
-    async (url: string) => {
-      setError(null)
-      setBusy(true)
-      try {
-        const { video: created } = await api.createYoutubeVideo(url)
-        setVideo(created)
-      } catch (cause) {
-        fail(cause)
-      } finally {
-        setBusy(false)
-      }
-    },
-    [fail],
-  )
+  // The YouTube-URL path used to start here, from a tab above the drop zone.
+  // The owner removed that tab; `api.createYoutubeVideo` and the route behind
+  // it are untouched, so bringing it back is a UI change and nothing more.
 
   // --- polling ------------------------------------------------------------
 
@@ -402,7 +390,7 @@ export default function StartPage() {
       <div className="flex w-full flex-1 flex-col px-6 py-6">
       {!video ? (
         <motion.div
-          className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center py-10"
+          className="mx-auto flex w-full max-w-[34rem] flex-1 flex-col justify-center py-10"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
@@ -412,7 +400,7 @@ export default function StartPage() {
           <div className="text-center">
             <Heading level={1}>Add a video</Heading>
           </div>
-          <div className="mx-auto mt-2 max-w-sm text-center">
+          <div className="mx-auto mt-2 max-w-[22rem] text-center">
             <Text as="p" type="supporting">
               Upload a file. We&apos;ll read the video, then you can ask it anything.
             </Text>

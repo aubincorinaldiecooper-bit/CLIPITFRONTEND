@@ -96,7 +96,7 @@ export function SplitModal({
                 {title}
               </Heading>
               {subtitle && (
-                <Text as="p" type="supporting" display="block">
+                <Text as="p" type="body" color="secondary" display="block">
                   {subtitle}
                 </Text>
               )}

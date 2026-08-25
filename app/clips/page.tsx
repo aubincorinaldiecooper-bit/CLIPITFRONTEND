@@ -58,6 +58,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
   instagram: "Instagram",
+  x: "X",
 }
 
 export default function ClipsPage() {
@@ -575,7 +576,7 @@ export default function ClipsPage() {
           if (!open) setPublishTarget(null)
         }}
         purpose="form"
-        width="min(560px, 94vw)"
+        width="min(740px, 94vw)"
         maxHeight="90vh"
         aria-label="Publish"
       >
@@ -590,7 +591,7 @@ export default function ClipsPage() {
                 <Heading level={1} accessibilityLevel={2}>
                   Publish
                 </Heading>
-                <Text as="p" type="supporting" display="block">
+                <Text as="p" type="body" color="secondary" display="block">
                   Share your clip with the world.
                 </Text>
               </VStack>
@@ -670,11 +671,20 @@ export default function ClipsPage() {
                         // collection, and this is the right one.
                         className="mb-2 rounded-xl bg-surface/60 px-3 ring-1 ring-border last:mb-0"
                         startContent={<PlatformLogo platform={account.platform} size="sm" />}
-                        label={platform}
-                        // Two accounts on one platform is normal, so the handle
-                        // is part of the row — "TikTok" twice with no way to
-                        // tell them apart is not a choice.
-                        description={account.displayName ?? undefined}
+                        // Name and handle sit on ONE line, in two columns, as
+                        // the mockup has them — stacked they made each row tall
+                        // enough that four accounts no longer fitted without
+                        // scrolling. Two accounts on one platform is normal, so
+                        // the handle is never dropped: "TikTok" twice with no
+                        // way to tell them apart is not a choice.
+                        label={
+                          <HStack gap={3} align="center">
+                            <Text as="span" type="body">{platform}</Text>
+                            {account.displayName && (
+                              <Text as="span" type="supporting">{account.displayName}</Text>
+                            )}
+                          </HStack>
+                        }
                         endContent={<ChosenTick isOn={on} />}
                         onClick={() =>
                           setChosenAccountIds((current) =>

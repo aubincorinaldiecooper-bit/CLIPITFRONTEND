@@ -29,6 +29,23 @@ export const clipitTheme = defineTheme({
   },
   // Gothic's pacing: slower, theatrical. Reduced motion is honoured globally.
   motion: { fast: 150, medium: 350, slow: 800, ratio: 0.75 },
+  /**
+   * One notch up from the inherited ramp, across the board.
+   *
+   * Measured, not chosen by eye. The owner's mockups and the built screens
+   * were normalised to the same scale — matched on the side nav, which appears
+   * in both — and compared. The layouts agreed; the type did not. Body wanted
+   * about 16px against the 14 here, quiet text 14 against 12, and a page title
+   * 40 against 32. Everything was uniformly one size small, which is why the
+   * screens read tighter and busier than the designs however the spacing
+   * around them was adjusted.
+   *
+   * The ratio is unchanged at 1.2 — the relationships between sizes were
+   * right, the anchor was not. Moving the anchor moves every step with it, so
+   * this is one change for the whole app rather than a size argued at each
+   * call site and left to drift.
+   */
+  typography: { scale: { base: 16, ratio: 1.2 } },
   tokens: {
     "--color-background-body": ["#ffffff", "#08080a"],
     // The amber accent seed tints the generated neutral ramp warm — the
@@ -67,9 +84,14 @@ export const clipitTheme = defineTheme({
     // here" — the flatness the owner read as unpolished beside the platforms
     // creators use all day. The steps below open the gap between a page
     // title, a section and its prose without touching the type family.
-    "--text-heading-1-size": "2rem",
-    "--text-heading-1-leading": "1.2",
-    "--text-heading-2-size": "1.25rem",
+    // These two are pinned rather than read off the scale, so raising the
+    // anchor above left them behind — a 32px title against 16px body is only
+    // twice the size, where the designs set it at two and a half. Moved with
+    // the rest so the gap between a page title, a section and its prose stays
+    // the one that was tuned here, at the size the mockups draw it.
+    "--text-heading-1-size": "2.5rem",
+    "--text-heading-1-leading": "1.15",
+    "--text-heading-2-size": "1.5rem",
     "--text-heading-2-leading": "1.3",
 
     "--text-display-1-size": "clamp(2.6rem, 5vw, 4.25rem)",
@@ -82,6 +104,11 @@ export const clipitTheme = defineTheme({
     // highlights, not the colour of buttons.
     button: {
       base: { borderRadius: "9999px" },
+      // The designs' full-width actions are substantially taller than the
+      // system's large step — a "Continue with TikTok" that carries a logo
+      // and an arrow needs the room, and it is the only thing on that panel
+      // to press.
+      "size:lg": { minHeight: "3.75rem", paddingInline: "1.75rem" },
       "variant:primary": {
         backgroundColor: "light-dark(#111113, #ffffff)",
         color: "light-dark(#ffffff, #0b0b0c)",
