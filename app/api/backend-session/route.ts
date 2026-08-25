@@ -14,7 +14,7 @@ import { authConfigured, getAuth } from "@/lib/auth"
  * client calls this on every fresh page to ask "am I anyone?", and for guests
  * the answer is simply no.
  */
-export async function POST() {
+export async function POST(request: Request) {
   const secret = process.env.AUTH_BRIDGE_SECRET
   const api = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "")
   if (!secret || !api || !authConfigured()) {
@@ -26,10 +26,29 @@ export async function POST() {
     return Response.json({ error: "Not signed in" }, { status: 401 })
   }
 
+  // The token this browser was using while signed out, if any. Sent on so the
+  // API can hand that session's work — the video uploaded, the clips cut —
+  // to the person signing in, instead of stranding it on a session nobody
+  // will come back to. Reading it is safe: the browser already holds it.
+  let guestToken: string | undefined
+  try {
+    const body = (await request.json()) as { guestToken?: unknown }
+    if (typeof body?.guestToken === "string" && body.guestToken.trim() !== "") {
+      guestToken = body.guestToken.trim()
+    }
+  } catch {
+    // No body, or not JSON. Signing in with nothing to carry is the ordinary
+    // case for a first visit, not a failure.
+  }
+
   const exchange = await fetch(`${api}/api/sessions/exchange`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-auth-bridge-secret": secret },
-    body: JSON.stringify({ userId: session.user.id, email: session.user.email }),
+    body: JSON.stringify({
+      userId: session.user.id,
+      email: session.user.email,
+      ...(guestToken ? { guestToken } : {}),
+    }),
   })
 
   if (!exchange.ok) {

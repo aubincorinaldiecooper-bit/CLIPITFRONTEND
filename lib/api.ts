@@ -167,7 +167,14 @@ function exchangeSignedInToken(): Promise<string | null> {
   // every concurrent caller waits for the same answer.
   exchangePromise ??= (async () => {
     try {
-      const response = await fetch("/api/backend-session", { method: "POST" })
+      // Carry the guest token so the work done signed-out comes along. Read
+      // BEFORE the exchange, because a successful exchange overwrites it.
+      const guestToken = readKind() === "guest" ? readToken() : null
+      const response = await fetch("/api/backend-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(guestToken ? { guestToken } : {}),
+      })
       if (!response.ok) {
         // 401 is the server, holding the httpOnly cookie, saying plainly that
         // nobody is signed in. A stored "user" token is then stale and must
