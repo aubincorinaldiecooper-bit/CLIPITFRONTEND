@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
+import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
 import { Center } from "@astryxdesign/core/Center"
@@ -57,6 +58,8 @@ function CallbackBanner() {
   const connected = params.get("connected")
   const error = params.get("connect_error")
   const platform = params.get("platform")
+  /** The page that was added, when the backend could identify which one. */
+  const account = params.get("account")
   const toast = useToast()
   const announced = useRef<string | null>(null)
 
@@ -64,7 +67,15 @@ function CallbackBanner() {
     if (!connected) return
     if (announced.current === connected) return
     announced.current = connected
-    toast({ body: `${PLATFORM_LABELS[connected] ?? connected} is connected.` })
+    // Name the PAGE, not the platform. You connect an account, and with two
+    // Instagram pages "Instagram is connected" cannot say which one you just
+    // added. Falls back to the platform only when the backend could not
+    // identify the account — better than naming the wrong one.
+    toast({
+      body: account
+        ? `${account} is connected.`
+        : `${PLATFORM_LABELS[connected] ?? connected} is connected.`,
+    })
 
     // Consume the parameter. Codex, P2: a ref only survives THIS mount, and
     // ?connected= stays in history — so leaving the page and coming back with
@@ -75,8 +86,9 @@ function CallbackBanner() {
     const url = new URL(window.location.href)
     url.searchParams.delete("connected")
     url.searchParams.delete("platform")
+    url.searchParams.delete("account")
     window.history.replaceState(window.history.state, "", url.toString())
-  }, [connected, toast])
+  }, [connected, account, toast])
 
   if (error === "nothing_new") {
     // The backend compared the account list before and after this attempt
@@ -281,84 +293,109 @@ function PublishingBody() {
         <Banner status="error" title="That didn't work" description={actionError} />
       )}
 
-      <VStack gap={2} align="stretch">
-        <Heading level={2}>Connected accounts</Heading>
-        {connectedAccounts.length === 0 ? (
-          <Text as="p" type="supporting" display="block">
-            Nothing connected yet — pick a platform below to connect your first account.
-          </Text>
-        ) : (
-          /* A repeated collection is rows, not Card-wrapped items — the
-             AGENTS.md interface rule. */
-          <List hasDividers>
-            {connectedAccounts.map((account) => (
-              <ListItem
-                key={account.id}
-                // The platform's mark, so a list of connections is scannable
-                // rather than four rows of similar text.
-                // Codex, P1: the container was hardcoded white opacities, so
-                // it would not follow a theme change. Astryx has no component
-                // for "our own mark in a themed well" — Avatar takes a person,
-                // Icon takes a Lucide name — so it stays hand-built, but every
-                // colour now comes from a token.
-                startContent={
-                  <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                    style={{
-                      backgroundColor: "var(--color-background-surface)",
-                      boxShadow: "inset 0 0 0 1px var(--color-border)",
-                      color: "var(--color-text-secondary)",
-                    }}
-                  >
-                    <PlatformGlyph platform={account.platform} />
-                  </span>
-                }
-                label={PLATFORM_LABELS[account.platform] ?? account.platform}
-                description={
-                  (account.displayName ?? "Connected account") +
-                  (account.status === "reconnect_required" ? " — needs reconnecting" : "")
-                }
-                endContent={
-                  account.status === "reconnect_required" ? (
-                    <Button
-                      label="Reconnect"
-                      variant="primary"
-                      size="sm"
-                      onClick={() => askToConnect(account.platform, true)}
-                    />
-                  ) : (
-                    <Button
-                      label="Disconnect"
-                      variant="secondary"
-                      size="sm"
-                      isLoading={busyAccountId === account.id}
-                      onClick={() => void disconnect(account)}
-                    />
-                  )
-                }
+      {/* One card per platform, the accounts nested inside it.
+          
+          Before, every account was a flat row labelled with its platform, and
+          the way to add one was a separate row of buttons further down — so
+          "which platforms can I use, and what do I have on each" took reading
+          two lists and joining them yourself. Grouping answers it in one
+          glance: the platform is the heading, its accounts sit under it, and
+          the action to add another is right there on the same card. */}
+      {PLATFORMS.map((platform) => {
+        const mine = connectedAccounts.filter((account) => account.platform === platform)
+        return (
+          <div
+            key={platform}
+            className="overflow-hidden rounded-[var(--radius-container)]"
+            style={{
+              backgroundColor: "var(--color-background-card)",
+              boxShadow: "inset 0 0 0 1px var(--color-border)",
+            }}
+          >
+            <HStack justify="between" align="center" gap={3} className="px-4 py-3.5">
+              <HStack gap={3} align="center">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: "var(--color-background-surface)",
+                    boxShadow: "inset 0 0 0 1px var(--color-border)",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  <PlatformGlyph platform={platform} />
+                </span>
+                <Text as="span" weight="medium" display="block">
+                  {PLATFORM_LABELS[platform]}
+                </Text>
+                {mine.length === 0 && (
+                  <Text as="span" type="supporting" display="block">
+                    Not connected
+                  </Text>
+                )}
+              </HStack>
+              <Button
+                // "Connect another" once there is one, because that is what
+                // the button then does — a second account, not a first.
+                label={mine.length > 0 ? "Connect another" : "Connect"}
+                variant={mine.length > 0 ? "secondary" : "primary"}
+                size="sm"
+                onClick={() => askToConnect(platform)}
               />
-            ))}
-          </List>
-        )}
-      </VStack>
+            </HStack>
 
-      <VStack gap={2} align="stretch">
-        <Heading level={2}>Connect a platform</Heading>
-        <Text as="p" type="supporting" display="block">
-          You'll sign in with the platform itself; CLIPIT never sees that password.
-        </Text>
-        <HStack gap={2} wrap="wrap">
-          {PLATFORMS.map((platform) => (
-            <Button
-              key={platform}
-              label={`Connect ${PLATFORM_LABELS[platform]}`}
-              icon={<PlatformGlyph platform={platform} />}
-              variant="secondary"
-              onClick={() => askToConnect(platform)}
-            />
-          ))}
-        </HStack>
-      </VStack>
+            {mine.length > 0 && (
+              <div style={{ borderTop: "1px solid var(--color-border)" }}>
+                {mine.map((account) => (
+                  <HStack
+                    key={account.id}
+                    justify="between"
+                    align="center"
+                    gap={3}
+                    className="px-4 py-3"
+                  >
+                    <HStack gap={2} align="center">
+                      <Text as="span" display="block">
+                        {account.displayName ?? "Connected account"}
+                      </Text>
+                      {/* Astryx's Badge, which is what the state pill in the
+                          reference is. Text has no success/error colour, and
+                          hand-rolling one would be a colour that never
+                          follows the theme. */}
+                      {account.status === "reconnect_required" ? (
+                        <Badge variant="error" label="Needs reconnecting" />
+                      ) : (
+                        <Badge variant="success" label="Connected" />
+                      )}
+                    </HStack>
+                    {account.status === "reconnect_required" ? (
+                      <Button
+                        label="Reconnect"
+                        variant="primary"
+                        size="sm"
+                        onClick={() => askToConnect(account.platform, true)}
+                      />
+                    ) : (
+                      <Button
+                        label="Disconnect"
+                        variant="secondary"
+                        size="sm"
+                        isLoading={busyAccountId === account.id}
+                        onClick={() => void disconnect(account)}
+                      />
+                    )}
+                  </HStack>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      <Text as="p" type="supporting" display="block">
+        {connectedAccounts.length === 0
+          ? "Nothing connected yet. You'll sign in with the platform itself; CLIPIT never sees that password."
+          : `${connectedAccounts.length} ${connectedAccounts.length === 1 ? "account" : "accounts"} connected.`}
+      </Text>
 
       <Text as="p" type="supporting" display="block">
         Publishing happens from your library: every ready clip has a Publish button that posts it
