@@ -27,6 +27,7 @@ import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { CaptionsGlyph, PublishGlyph, SendToWorkspaceGlyph } from "@/components/clip-action-icons"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { GhostCards } from "@/components/empty-illustrations"
+import { ArrowRightGlyph } from "@/components/glyphs"
 import { PlatformLogo } from "@/components/platform-logos"
 import { ChosenTick, PublishPreview } from "@/components/publish-preview"
 import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
@@ -612,7 +613,7 @@ export default function ClipsPage() {
               onChange={(value) =>
                 setDrafts((current) => ({ ...current, [publishOpenId]: value }))
               }
-              placeholder="Say something about this clip (optional)"
+              placeholder="Write a caption..."
               // The shortest cap across the platforms this posts to, so the
               // count means "this will fit everywhere" rather than "this fits
               // one of them". Advisory, not enforced: a caption is trimmed by
@@ -646,7 +647,7 @@ export default function ClipsPage() {
                     because that washes a selected row in --color-accent-muted,
                     which on this palette is a solid amber block; the accent is
                     for small marks here, never a surface. */}
-                <List hasDividers>
+                <List>
                   {accounts.map((account) => {
                     const on = chosenAccountIds.includes(account.id)
                     const platform = PLATFORM_LABELS[account.platform] ?? account.platform
@@ -662,6 +663,12 @@ export default function ClipsPage() {
                         // says it in the mark rather than in a wash of colour.
                         role="checkbox"
                         aria-checked={on}
+                        // Each row in its own rounded container, per the
+                        // mockup, rather than divided by hairlines. Still a
+                        // List of rows, not a stack of Cards — the house rule
+                        // is about which component carries a repeated
+                        // collection, and this is the right one.
+                        className="mb-2 rounded-xl bg-surface/60 px-3 ring-1 ring-border last:mb-0"
                         startContent={<PlatformLogo platform={account.platform} size="sm" />}
                         label={platform}
                         // Two accounts on one platform is normal, so the handle
@@ -691,7 +698,7 @@ export default function ClipsPage() {
                 {accounts && accounts.length > 0
                   ? chosenAccountIds.length === 0
                     ? "Pick at least one account."
-                    : `${chosenAccountIds.length} of ${accounts.length} selected.`
+                    : `${chosenAccountIds.length} ${chosenAccountIds.length === 1 ? "account" : "accounts"} selected`
                   : "Goes to every account you have connected."}
               </Text>
               <HStack gap={2}>
@@ -706,7 +713,7 @@ export default function ClipsPage() {
                 <Button
                   label="Publish"
                   variant="primary"
-                  endContent={<Icon icon="chevronRight" />}
+                  endContent={<Icon icon={ArrowRightGlyph} />}
                   // The guard stays on the page, not in the dialog: closing
                   // this unmounts it, and a flag that reset would let a second
                   // Post start a publish of a clip already on its way out.

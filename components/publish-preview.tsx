@@ -25,7 +25,9 @@ export function clipDuration(seconds: number): string {
   const minutes = Math.floor((whole % 3600) / 60)
   const secs = whole % 60
   const pad = (value: number) => String(value).padStart(2, "0")
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${minutes}:${pad(secs)}`
+  // Minutes padded too, so the badge is a fixed width and reads as a
+  // timecode: "00:24", not "0:24".
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${pad(minutes)}:${pad(secs)}`
 }
 
 export function PublishPreview({ clip }: { clip: LibraryClip | null }) {
@@ -86,9 +88,12 @@ export function ChosenTick({ isOn }: { isOn: boolean }) {
   return (
     <span
       aria-hidden
+      // Neutral, not amber. The mockup fills the chosen circle with a light
+      // surface and a dark tick — amber in that list would compete with the
+      // platform marks beside it, which are the row's real colour.
       className={
         isOn
-          ? "flex h-6 w-6 items-center justify-center rounded-full bg-accent text-black"
+          ? "flex h-6 w-6 items-center justify-center rounded-full bg-white/85 text-black"
           : "flex h-6 w-6 items-center justify-center rounded-full text-secondary ring-1 ring-border"
       }
     >

@@ -28,8 +28,11 @@ import { useId } from "react"
 export type PlatformLogoSize = "sm" | "md"
 
 const BOX: Record<PlatformLogoSize, string> = {
-  sm: "h-8 w-8 rounded-lg",
-  md: "h-11 w-11 rounded-xl",
+  // Row-sized, for a list of accounts or platforms.
+  sm: "h-10 w-10 rounded-xl",
+  // Modal-sized. In the connect mockup the mark is the first thing on the
+  // panel and is read before the title, which a small one is not.
+  md: "h-14 w-14 rounded-2xl",
 }
 
 /** Instagram: the rounded-square camera outline over its warm gradient. */

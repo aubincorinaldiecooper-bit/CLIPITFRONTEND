@@ -23,7 +23,7 @@ import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { GhostRows } from "@/components/empty-illustrations"
-import { LockGlyph } from "@/components/glyphs"
+import { ArrowRightGlyph, LockGlyph } from "@/components/glyphs"
 import { PlatformGlyph } from "@/components/platform-glyphs"
 import { PlatformLogo } from "@/components/platform-logos"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
@@ -494,7 +494,8 @@ function ConnectDialog({
             label={`Continue with ${label}`}
             variant="primary"
             width="100%"
-            endContent={<Icon icon="chevronRight" />}
+            size="lg"
+            endContent={<Icon icon={ArrowRightGlyph} />}
             isLoading={connecting === target.platform}
             onClick={() => onContinue(target.platform)}
           />
@@ -502,7 +503,7 @@ function ConnectDialog({
           <HStack gap={1.5} justify="center" align="center">
             <Icon icon={LockGlyph} size="sm" />
             <Text as="span" type="supporting">
-              You&apos;ll sign in on {label} itself — CLIPIT never sees that password.
+              You&apos;ll sign in securely on {label}.
             </Text>
           </HStack>
         </VStack>

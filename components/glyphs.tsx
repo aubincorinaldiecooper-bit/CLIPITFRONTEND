@@ -53,3 +53,44 @@ export function UploadGlyph(props: SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+
+/**
+ * A long arrow pointing right — the mark on every forward action.
+ *
+ * Astryx ships `chevronRight`, and a chevron is not the same gesture: it reads
+ * as "there is more inside this row", where the mockups' arrow reads as "this
+ * takes you somewhere". Every primary button in the mockups carries the arrow,
+ * so it is worth having the right one.
+ */
+export function ArrowRightGlyph(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M4.5 12h15" />
+      <path d="m13.5 6 6 6-6 6" />
+    </svg>
+  )
+}
+
+/** A plus, for "add another of these". */
+export function PlusGlyph(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      {...props}
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}

@@ -39,7 +39,7 @@ const PHOTOGRAPHS: Partial<Record<ModalPhotoKind, string>> = {
  * point and decoration that costs half the width is not decoration, it is an
  * obstacle.
  */
-const PHOTO_SHARE = "54%"
+const PHOTO_SHARE = "57%"
 
 export function ModalPhoto({ kind }: { kind: ModalPhotoKind }) {
   const photograph = PHOTOGRAPHS[kind]

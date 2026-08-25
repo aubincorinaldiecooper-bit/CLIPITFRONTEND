@@ -23,6 +23,7 @@ import { personName } from "@/components/side-nav"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { GhostRoom } from "@/components/empty-illustrations"
+import { ArrowRightGlyph, PlusGlyph } from "@/components/glyphs"
 import { SplitModal } from "@/components/split-modal"
 
 /** Ties the footer's submit button back to the form it sits outside of. */
@@ -44,18 +45,22 @@ function WorkspacesBody() {
   const [failed, setFailed] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState("")
-  const [inviteEmail, setInviteEmail] = useState("")
+  /**
+   * The addresses to invite, one per row. Starts as a single empty row so the
+   * field is there to type into without anybody having to ask for it.
+   */
+  const [inviteEmails, setInviteEmails] = useState<string[]>([""])
   const [creating, setCreating] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   /**
-   * Set when a workspace was created but its invitation email could not be
-   * sent. The invitation itself is live — this holds the link so the owner
-   * can pass it on by hand, because nothing else in the app can recover it.
+   * Set when a workspace was created but one or more invitation emails could
+   * not be sent. Those invitations are live — this holds their links so the
+   * owner can pass them on by hand, because nothing else in the app can
+   * recover them.
    */
   const [handoff, setHandoff] = useState<{
     workspace: { id: string; name: string }
-    email: string
-    url: string
+    links: Array<{ email: string; url: string }>
   } | null>(null)
   const router = useRouter()
   const toast = useToast()
@@ -96,20 +101,27 @@ function WorkspacesBody() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** Put the form back to a single blank invite row. */
+  const resetForm = () => {
+    setName("")
+    setInviteEmails([""])
+  }
+
   /** Close the handoff and go to the workspace that was made. */
   const finishHandoff = () => {
     const target = handoff?.workspace.id
     setHandoff(null)
     setCreateOpen(false)
-    setName("")
-    setInviteEmail("")
+    resetForm()
     if (target) router.push(`/workspaces/${target}`)
   }
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault()
     const trimmed = name.trim()
-    const email = inviteEmail.trim()
+    // Blank rows are somebody who added one and thought better of it, and the
+    // same address typed twice is one invitation, not two.
+    const addresses = [...new Set(inviteEmails.map((address) => address.trim()).filter(Boolean))]
     if (!trimmed || creating) return
     setFormError(null)
     setCreating(true)
@@ -117,36 +129,53 @@ function WorkspacesBody() {
       const { workspace } = await api.createWorkspace(trimmed)
       window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
 
-      if (email) {
-        // The room exists either way; the invitation is its own step with its
-        // own honest outcome.
+      // The room exists either way; each invitation is its own step with its
+      // own honest outcome, and one failing must not stop the rest.
+      const emailed: string[] = []
+      const links: Array<{ email: string; url: string }> = []
+      const refused: string[] = []
+
+      for (const email of addresses) {
         try {
           const result = await api.inviteToWorkspace(workspace.id, email)
-          if (!result.emailed) {
+          if (result.emailed) {
+            emailed.push(email)
+          } else {
             // The invitation is REAL and its link works — only the email
             // failed. Closing here would throw that link away, and nothing
-            // else in the app can recover it, so the dialog stays open and
-            // hands it over instead.
-            setHandoff({ workspace, email, url: result.acceptUrl })
-            return
+            // else in the app can recover it.
+            links.push({ email, url: result.acceptUrl })
           }
-          toast({ body: `${workspace.name} created — invitation sent to ${email}.` })
-        } catch (cause) {
-          toast({
-            type: "error",
-            body:
-              cause instanceof ApiError
-                ? `${workspace.name} created, but: ${cause.message}`
-                : `${workspace.name} created, but the invitation couldn't be sent.`,
-          })
+        } catch {
+          refused.push(email)
         }
-      } else {
+      }
+
+      // Say what actually happened to each one, rather than a single verdict
+      // that would have to be wrong about somebody.
+      if (refused.length > 0) {
+        toast({
+          type: "error",
+          body: `${workspace.name} created, but no invitation could be made for ${refused.join(", ")}.`,
+        })
+      } else if (emailed.length > 0 && links.length === 0) {
+        toast({
+          body: `${workspace.name} created — ${
+            emailed.length === 1 ? `invitation sent to ${emailed[0]}` : `${emailed.length} invitations sent`
+          }.`,
+        })
+      } else if (links.length === 0) {
         toast({ body: `${workspace.name} created.` })
       }
 
+      if (links.length > 0) {
+        // The dialog stays open and hands the links over instead of closing.
+        setHandoff({ workspace, links })
+        return
+      }
+
       setCreateOpen(false)
-      setName("")
-      setInviteEmail("")
+      resetForm()
       router.push(`/workspaces/${workspace.id}`)
     } catch (cause) {
       setFormError(cause instanceof ApiError ? cause.message : "Couldn't create that workspace. Try again.")
@@ -266,35 +295,58 @@ function WorkspacesBody() {
               // The button lives in the footer, outside the form element, so
               // it is tied back to it by id rather than by nesting.
               form={CREATE_FORM_ID}
-              endContent={<Icon icon="chevronRight" />}
+              endContent={<Icon icon={ArrowRightGlyph} />}
               isLoading={creating}
             />
           </>
         }
       >
         <form id={CREATE_FORM_ID} onSubmit={create}>
-          <VStack gap={3} align="stretch">
+          <VStack gap={4} align="stretch">
             {formError && <Banner status="error" title="That didn't work" description={formError} />}
             <TextInput
               label="Workspace name"
               isRequired
               value={name}
               onChange={(value) => setName(value)}
-              placeholder="e.g. Northside Films"
+              placeholder="Northside Films"
               hasAutoFocus
             />
-            <TextInput
-              label="Invite someone (optional)"
-              type="email"
-              value={inviteEmail}
-              onChange={(value) => setInviteEmail(value)}
-              placeholder="teammate@example.com"
-              description="They'll get an email link that works once and expires in seven days."
-            />
-            <Text as="p" type="supporting" display="block">
-              You'll own the workspace. Everyone in it sees the clips sent there; your own library
-              stays yours.
-            </Text>
+
+            {/* One address per row, and a way to add another. The mockup shows
+                the "+ Add another" affordance, and it is the difference
+                between starting a room with your team in it and starting one
+                with a single person and a chore for later. */}
+            <VStack gap={2} align="stretch">
+              {inviteEmails.map((address, index) => (
+                <TextInput
+                  key={index}
+                  label={index === 0 ? "Invite someone (optional)" : `Invite someone else (${index + 1})`}
+                  isLabelHidden={index > 0}
+                  type="email"
+                  value={address}
+                  onChange={(value) =>
+                    setInviteEmails((current) =>
+                      current.map((entry, position) => (position === index ? value : entry)),
+                    )
+                  }
+                  placeholder="teammate@example.com"
+                />
+              ))}
+              <HStack justify="start">
+                <Button
+                  label="Add another"
+                  variant="ghost"
+                  size="sm"
+                  icon={<Icon icon={PlusGlyph} size="sm" />}
+                  // A row that is still blank is not a row anybody needs a
+                  // second of. Guarding here rather than letting empties pile
+                  // up keeps the modal honest about how much it is asking for.
+                  isDisabled={inviteEmails.some((address) => address.trim() === "")}
+                  onClick={() => setInviteEmails((current) => [...current, ""])}
+                />
+              </HStack>
+            </VStack>
           </VStack>
         </form>
       </SplitModal>
@@ -315,38 +367,56 @@ function WorkspacesBody() {
             <VStack gap={3} align="stretch">
               <Banner
                 status="warning"
-                title={`The invitation for ${handoff.email} couldn't be emailed`}
-                description="The invitation itself is live — send this link to them yourself. It works once and expires in seven days."
+                title={
+                  handoff.links.length === 1
+                    ? `The invitation for ${handoff.links[0]!.email} couldn't be emailed`
+                    : `${handoff.links.length} invitations couldn't be emailed`
+                }
+                description="The invitations themselves are live — send these links on yourself. Each works once and expires in seven days."
               />
-              {/* The link is the whole point of this state: selectable, and
-                  scrolling inside its own line rather than widening the
-                  dialog. */}
-              <Text
-                as="p"
-                type="supporting"
-                display="block"
-                className="select-all overflow-x-auto whitespace-nowrap rounded-md bg-black/30 p-2"
-              >
-                {handoff.url}
-              </Text>
+              {/* The links are the whole point of this state: selectable, and
+                  scrolling inside their own line rather than widening the
+                  dialog. Each is labelled with who it belongs to, because
+                  handing the wrong person the wrong link lets them into the
+                  room under somebody else's invitation. */}
+              {handoff.links.map((link) => (
+                <VStack key={link.email} gap={1} align="stretch">
+                  <Text as="p" type="supporting" display="block">
+                    {link.email}
+                  </Text>
+                  <HStack gap={2} align="center">
+                    <Text
+                      as="p"
+                      type="supporting"
+                      display="block"
+                      className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md bg-black/30 p-2"
+                    >
+                      {link.url}
+                    </Text>
+                    <Button
+                      label="Copy"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        // Optional chaining short-circuits the WHOLE chain when
+                        // the clipboard API is absent (plain-HTTP origins), so
+                        // the guard must be explicit or the button does nothing.
+                        if (!navigator.clipboard) {
+                          toast({ type: "error", body: "Couldn't copy here — select the link and copy it." })
+                          return
+                        }
+                        void navigator.clipboard
+                          .writeText(link.url)
+                          .then(() => toast({ body: `Link for ${link.email} copied.` }))
+                          .catch(() =>
+                            toast({ type: "error", body: "Couldn't copy — select the link and copy it." }),
+                          )
+                      }}
+                    />
+                  </HStack>
+                </VStack>
+              ))}
               <HStack gap={2} justify="end">
-                <Button
-                  label="Copy link"
-                  variant="secondary"
-                  onClick={() => {
-                    // Optional chaining short-circuits the WHOLE chain when
-                    // the clipboard API is absent (plain-HTTP origins), so
-                    // the guard must be explicit or the button does nothing.
-                    if (!navigator.clipboard) {
-                      toast({ type: "error", body: "Couldn't copy here — select the link and copy it." })
-                      return
-                    }
-                    void navigator.clipboard
-                      .writeText(handoff.url)
-                      .then(() => toast({ body: "Link copied." }))
-                      .catch(() => toast({ type: "error", body: "Couldn't copy — select the link and copy it." }))
-                  }}
-                />
                 <Button label="Done" variant="primary" onClick={finishHandoff} />
               </HStack>
             </VStack>

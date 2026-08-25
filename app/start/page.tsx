@@ -412,14 +412,13 @@ export default function StartPage() {
           <div className="text-center">
             <Heading level={1}>Add a video</Heading>
           </div>
-          <div className="mx-auto mt-2 max-w-md text-center">
+          <div className="mx-auto mt-2 max-w-sm text-center">
             <Text as="p" type="supporting">
-              Upload a file or paste a YouTube link. We&apos;ll read the video once, end to end — then you
-              can ask it anything.
+              Upload a file. We&apos;ll read the video, then you can ask it anything.
             </Text>
           </div>
           <div className="mt-8">
-            <SourceStep onUpload={startUpload} onYoutube={startYoutube} busy={busy} uploadFraction={uploadFraction} />
+            <SourceStep onUpload={startUpload} busy={busy} uploadFraction={uploadFraction} />
           </div>
 
           {library.length > 0 && (

@@ -7,6 +7,7 @@ import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { authClient } from "@/lib/auth-client"
+import { ArrowRightGlyph } from "@/components/glyphs"
 import { SplitModal } from "@/components/split-modal"
 
 /**
@@ -133,21 +134,22 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
   }, [intent])
 
   /**
-   * Why the box appeared, said in the subtitle rather than the title.
+   * Why the box appeared.
    *
-   * The title was "Sign in to publish this clip" until the owner's mockups
-   * put a short, heavy "Sign in" at the top. The reason is worth more than the
-   * headline is, so it moved down a line rather than being dropped: a prompt
-   * that does not say what it interrupted reads as an interruption.
+   * The mockup's subtitle is one flat line — "We'll send you a sign-in link."
+   * — and the mockup is the direction, so that is the line. The reason is not
+   * thrown away though: it goes on the button, which is the thing being
+   * pressed and the last thing read before pressing it. "Continue to publish"
+   * still answers "what did I interrupt", in the place it costs nothing.
    */
   const purpose =
     intent?.action === "publish"
-      ? "To publish this clip"
+      ? "to publish"
       : intent?.action === "connect"
-        ? "To connect an account"
+        ? "to connect"
         : intent?.action === "invite"
-          ? "To invite someone"
-          : "To send this clip to a workspace"
+          ? "to invite"
+          : "to send"
 
   const send = async () => {
     const address = email.trim()
@@ -172,11 +174,7 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
       onOpenChange={(open) => !open && onClose()}
       photo="sign-in"
       title="Sign in"
-      subtitle={
-        state === "sent"
-          ? "Check your email."
-          : `${purpose}, we'll email you a sign-in link.`
-      }
+      subtitle={state === "sent" ? "Check your email." : "We'll send you a sign-in link."}
     >
       {state === "sent" ? (
         <VStack gap={3} align="stretch">
@@ -199,9 +197,14 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
             void send()
           }}
         >
-          <VStack gap={3} align="stretch">
+          <VStack gap={4} align="stretch">
+            {/* The mockup shows the field with no label above it, just the
+                placeholder. `isLabelHidden` gives exactly that and keeps the
+                label for anyone using a screen reader — a placeholder is not a
+                label, and it vanishes the moment you start typing. */}
             <TextInput
               label="Email"
+              isLabelHidden
               type="email"
               value={email}
               onChange={setEmail}
@@ -215,20 +218,16 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
             )}
             <HStack justify="start">
               <Button
-                label="Continue"
+                // The reason the box appeared, carried on the button rather
+                // than in a subtitle the mockup keeps flat.
+                label={`Continue ${purpose}`}
                 variant="primary"
                 type="submit"
-                endContent={<Icon icon="chevronRight" />}
+                endContent={<Icon icon={ArrowRightGlyph} />}
                 isLoading={state === "sending"}
                 isDisabled={email.trim() === ""}
               />
             </HStack>
-            {/* The promise that makes the interruption bearable: a guest's
-                work is carried into the account, so signing in here costs
-                nothing already done. Kept small, but kept. */}
-            <Text as="p" type="supporting" display="block">
-              No password. Clips you have already made come with you.
-            </Text>
           </VStack>
         </form>
       )}
