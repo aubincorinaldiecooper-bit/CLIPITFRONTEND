@@ -19,6 +19,7 @@ import { api, ApiError } from "@/lib/api"
 import type { WorkspacesPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { personName } from "@/components/side-nav"
+import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { GhostRoom } from "@/components/empty-illustrations"
 
@@ -53,6 +54,22 @@ function WorkspacesBody() {
   } | null>(null)
   const router = useRouter()
   const toast = useToast()
+  const { requireSignIn } = useSignInGate()
+
+  /**
+   * Making a room is inviting people into it — the modal asks for the first
+   * address in the same breath — so it needs a person, not a browser tab.
+   */
+  const askToCreate = () =>
+    // A workspace has no id yet, so the intent carries the page instead: the
+    // dialog reopens and the name they typed is theirs to type again. Better
+    // than losing the whole errand.
+    requireSignIn({ action: "invite", workspaceId: "new" }, () => setCreateOpen(true))
+
+  useResumeIntent(
+    (intent) => intent.action === "invite" && intent.workspaceId === "new",
+    () => setCreateOpen(true),
+  )
 
   const load = () =>
     api
@@ -186,7 +203,7 @@ function WorkspacesBody() {
         {/* While the no-shared-workspaces empty state is on the page it owns
             this action; two identical primary buttons is one too many. */}
         {shared.length > 0 && (
-          <Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />
+          <Button label="Create workspace" variant="primary" onClick={askToCreate} />
         )}
       </HStack>
 
@@ -219,7 +236,7 @@ function WorkspacesBody() {
             icon={<GhostRoom />}
             title="No shared workspaces yet"
             description="Create one, invite people into it, and send clips there from your library — everyone in the workspace sees what's sent."
-            actions={<Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />}
+            actions={<Button label="Create workspace" variant="primary" onClick={askToCreate} />}
           />
         </Center>
       )}

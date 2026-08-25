@@ -23,6 +23,7 @@ import { AppShell } from "@/components/app-shell"
 import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { CaptionsGlyph, PublishGlyph, SendToWorkspaceGlyph } from "@/components/clip-action-icons"
+import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { GhostCards } from "@/components/empty-illustrations"
 
 /**
@@ -93,6 +94,20 @@ export default function ClipsPage() {
    */
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
   const toast = useToast()
+  const { requireSignIn } = useSignInGate()
+
+  // Signed in from the prompt and come back? Reopen the clip they were about
+  // to publish, rather than dropping them on the library with no idea where
+  // they were. It opens the dialog — it does NOT publish: that button is
+  // theirs to press, and pressing it for them would post to the world on the
+  // strength of a URL parameter.
+  useResumeIntent(
+    (intent) => intent.action === "publish" || intent.action === "send",
+    (intent) => {
+      if (intent.action === "publish") setPublishTarget(intent.clipId)
+      if (intent.action === "send") openSend(intent.clipId)
+    },
+  )
 
   const setPublishTarget = (id: string | null) => {
     publishOpenIdRef.current = id
@@ -415,7 +430,11 @@ export default function ClipsPage() {
                             tooltip="Publish"
                             variant="secondary"
                             size="sm"
-                            onClick={() => setPublishTarget(clip.id)}
+                            onClick={() =>
+                              requireSignIn({ action: "publish", clipId: clip.id }, () =>
+                                setPublishTarget(clip.id),
+                              )
+                            }
                           />
                         )}
                         {clip.status === "ready" && (
@@ -423,7 +442,11 @@ export default function ClipsPage() {
                             isOpen={sendOpenId === clip.id}
                             onOpenChange={(open) => {
                               if (open) {
-                                openSend(clip.id)
+                                // Sending a clip into a shared room needs a
+                                // person: rooms outlive a browser tab.
+                                requireSignIn({ action: "send", clipId: clip.id }, () =>
+                                  openSend(clip.id),
+                                )
                               } else if (sendOpenIdRef.current === clip.id) {
                                 setSendTarget(null)
                               }

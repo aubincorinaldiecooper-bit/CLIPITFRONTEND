@@ -22,6 +22,7 @@ import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { GhostRows } from "@/components/empty-illustrations"
 import { PlatformGlyph, PlatformMark } from "@/components/platform-glyphs"
+import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 
 /**
  * Publishing, now real: connect the accounts you post to, see them plainly,
@@ -134,6 +135,7 @@ function PublishingBody() {
   const [connectTarget, setConnectTarget] = useState<{ platform: string; reconnect: boolean } | null>(null)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const { requireSignIn } = useSignInGate()
 
   useEffect(() => {
     let cancelled = false
@@ -163,6 +165,22 @@ function PublishingBody() {
     setActionError(null)
     setConnectTarget({ platform, reconnect })
   }
+
+  /**
+   * Connecting needs a person: an account bound to a guest tab would be
+   * stranded the moment that tab closed. The prompt asks, and coming back
+   * from it reopens the platform they were connecting rather than dropping
+   * them on the page with no memory of it.
+   */
+  const askToConnectSignedIn = (platform: string, reconnect = false) =>
+    requireSignIn({ action: "connect", platform }, () => askToConnect(platform, reconnect))
+
+  useResumeIntent(
+    (intent) => intent.action === "connect",
+    (intent) => {
+      if (intent.action === "connect") askToConnect(intent.platform)
+    },
+  )
 
   /**
    * Which connect attempt is the live one. Closing the modal, or starting a
@@ -271,7 +289,7 @@ function PublishingBody() {
                   label={`Connect ${PLATFORM_LABELS[platform]}`}
                   icon={<PlatformGlyph platform={platform} />}
                   variant="secondary"
-                  onClick={() => askToConnect(platform)}
+                  onClick={() => askToConnectSignedIn(platform)}
                 />
               ))}
             </>
@@ -332,7 +350,7 @@ function PublishingBody() {
                 label="Connect"
                 variant={mine.length > 0 ? "secondary" : "primary"}
                 size="sm"
-                onClick={() => askToConnect(platform)}
+                onClick={() => askToConnectSignedIn(platform)}
               />
             </HStack>
 
@@ -360,7 +378,7 @@ function PublishingBody() {
                               label="Reconnect"
                               variant="primary"
                               size="sm"
-                              onClick={() => askToConnect(account.platform, true)}
+                              onClick={() => askToConnectSignedIn(account.platform, true)}
                             />
                           ) : (
                             <Button
