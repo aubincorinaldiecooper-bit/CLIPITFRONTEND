@@ -31,11 +31,28 @@ export type ModalArtKind = "sign-in" | "connect" | "publish" | "captions" | "wor
 /**
  * The photograph for each modal, from public/modal-art/.
  *
- * Empty entries fall through to the drawn artwork, so the app is never
- * missing a band — and so a picture can be added one modal at a time rather
- * than all five at once.
+ * All five are framings of ONE picture — the owner's anchor, a street in hard
+ * afternoon light. One photograph rather than five is deliberate: five
+ * unrelated stock images would read as decoration bought by the yard, where
+ * five moments in the same frame read as a house style. Same place, same
+ * light, same treatment, and each modal gets its own part of it:
+ *
+ *   sign-in    a person walking, wide — somebody arriving
+ *   connect    the road and its markings — a route out to somewhere
+ *   publish    the spire against open sky — something carried up and out
+ *   captions   the wall, and a figure against it — a surface to write on
+ *   workspace  two shadows on one wall — a room with people in it
+ *
+ * Empty entries fall through to the drawn artwork below, so the app is never
+ * missing a band if a file is removed.
  */
-const PHOTOGRAPHS: Partial<Record<ModalArtKind, string>> = {}
+const PHOTOGRAPHS: Partial<Record<ModalArtKind, string>> = {
+  "sign-in": "/modal-art/sign-in.jpg",
+  connect: "/modal-art/connect.jpg",
+  publish: "/modal-art/publish.jpg",
+  captions: "/modal-art/captions.jpg",
+  workspace: "/modal-art/workspace.jpg",
+}
 
 const ink = "var(--color-text-primary)"
 const accent = "var(--color-accent)"
