@@ -441,13 +441,18 @@ export const clipitTheme = {
         "paddingBlock": "0.5rem"
       }
     },
+    "side-nav": {
+      "base": {
+        "width": "333px"
+      }
+    },
     "side-nav-item": {
       "base": {
-        "fontSize": "0.9375rem",
-        "minHeight": "3.25rem",
-        "gap": "1rem",
-        "paddingInline": "0.875rem",
-        "borderRadius": "0.75rem"
+        "fontSize": "1.0625rem",
+        "minHeight": "4.25rem",
+        "gap": "1.125rem",
+        "paddingInline": "1.125rem",
+        "borderRadius": "0.875rem"
       },
       "size:sm": {
         "fontSize": "0.84375rem",

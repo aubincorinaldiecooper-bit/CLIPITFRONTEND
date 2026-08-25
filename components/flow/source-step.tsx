@@ -59,25 +59,25 @@ export function SourceStep({ onUpload, busy, uploadFraction }: SourceStepProps) 
           const file = event.dataTransfer.files?.[0]
           if (file) onUpload(file)
         }}
-        className={`flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed px-6 py-16 text-center transition-colors ${
+        className={`flex flex-col items-center justify-center gap-6 rounded-2xl border border-dashed px-6 py-[4.75rem] text-center transition-colors ${
           dragging ? "border-foreground/50 bg-white/[0.04]" : "border-white/15"
         }`}
       >
         {/* The mark first, then the words. An empty dashed rectangle with text
             in it reads as a form field; the arrow is what says a file goes
             here. */}
-        <span className="flex h-[70px] w-[70px] items-center justify-center rounded-full bg-surface text-primary ring-1 ring-border">
-          <Icon icon={UploadGlyph} size="lg" />
+        <span className="flex h-24 w-24 items-center justify-center rounded-full bg-surface text-primary ring-1 ring-border">
+          <Icon icon={UploadGlyph} size="lg" className="scale-125" />
         </span>
         <VStack gap={1}>
           {/* A heading, not body text — in the mockup this line is the second
               biggest thing on the screen after the page title. */}
-          <Heading level={3} accessibilityLevel={2}>
+          <Heading level={2} accessibilityLevel={2}>
             Drop a video here
           </Heading>
-          <Text as="p" type="supporting">MP4, MOV, MKV, WebM — up to 6 hours</Text>
+          <Text as="p" type="body" color="secondary">MP4, MOV, MKV, WebM — up to 6 hours</Text>
         </VStack>
-        <Button label="Choose a file" variant="primary" isDisabled={busy} onClick={() => fileInput.current?.click()} />
+        <Button label="Choose a file" variant="primary" size="lg" isDisabled={busy} onClick={() => fileInput.current?.click()} />
         <input
           ref={fileInput}
           type="file"
@@ -92,7 +92,7 @@ export function SourceStep({ onUpload, busy, uploadFraction }: SourceStepProps) 
 
       <HStack gap={1.5} justify="center" align="center">
         <Icon icon={LockGlyph} size="sm" />
-        <Text as="span" type="supporting">
+        <Text as="span" type="body" color="secondary">
           Your video is private and secure.
         </Text>
       </HStack>

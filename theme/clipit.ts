@@ -125,20 +125,27 @@ export const clipitTheme = defineTheme({
         paddingBlock: "0.5rem",
       },
     },
-    // The rail rows, at the proportions of the reference (Instagram's rail):
-    // 24px icons, ~48px rows, a real gap between icon and label, and a label
-    // you don't have to squint at. Structure and behaviour stay Astryx's —
-    // only the scale changes. The icon half lives in components/side-nav.tsx
-    // (the glyphs are drawn at 24px); the two move together.
+    // The rail's own width. Astryx defaults to 260px; the owner's designs draw
+    // it at 333, measured off the mockup by finding the vertical rule between
+    // rail and content. It was tuned to a different reference earlier — that
+    // reference is superseded.
+    "side-nav": {
+      base: { width: "333px" },
+    },
+    // The rail rows, at the proportions of the owner's designs: the label
+    // bands in the mockup sit on a 76px pitch, against the 52px minimum here,
+    // and the labels measure about 17px against 15. A wider rail with the old
+    // row height would have been a wider rail with more empty space in it, not
+    // the rail that was drawn. Structure and behaviour stay Astryx's — only
+    // the scale changes. The icon half lives in components/side-nav.tsx; the
+    // two move together.
     "side-nav-item": {
       base: {
-        fontSize: "0.9375rem",
-        // Taller rows and a wider gutter: the reference's rail breathes,
-        // and its icons sit on one axis well clear of the labels.
-        minHeight: "3.25rem",
-        gap: "1rem",
-        paddingInline: "0.875rem",
-        borderRadius: "0.75rem",
+        fontSize: "1.0625rem",
+        minHeight: "4.25rem",
+        gap: "1.125rem",
+        paddingInline: "1.125rem",
+        borderRadius: "0.875rem",
       },
       "size:sm": {
         fontSize: "0.84375rem",

@@ -390,7 +390,7 @@ export default function StartPage() {
       <div className="flex w-full flex-1 flex-col px-6 py-6">
       {!video ? (
         <motion.div
-          className="mx-auto flex w-full max-w-[34rem] flex-1 flex-col justify-center py-10"
+          className="mx-auto flex w-full max-w-[42rem] flex-1 flex-col justify-center py-10"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
@@ -400,8 +400,8 @@ export default function StartPage() {
           <div className="text-center">
             <Heading level={1}>Add a video</Heading>
           </div>
-          <div className="mx-auto mt-2 max-w-[22rem] text-center">
-            <Text as="p" type="supporting">
+          <div className="mx-auto mt-3 max-w-[20rem] text-center">
+            <Text as="p" type="large" color="secondary">
               Upload a file. We&apos;ll read the video, then you can ask it anything.
             </Text>
           </div>

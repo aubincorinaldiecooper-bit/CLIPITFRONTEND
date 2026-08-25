@@ -540,12 +540,16 @@
     padding-block: 0.5rem;
   }
 
+  .astryx-side-nav {
+    width: 333px;
+  }
+
   .astryx-side-nav-item {
-    font-size: 0.9375rem;
-    min-height: 3.25rem;
-    gap: 1rem;
-    padding-inline: 0.875rem;
-    border-radius: 0.75rem;
+    font-size: 1.0625rem;
+    min-height: 4.25rem;
+    gap: 1.125rem;
+    padding-inline: 1.125rem;
+    border-radius: 0.875rem;
   }
 
   .astryx-side-nav-item.sm {
