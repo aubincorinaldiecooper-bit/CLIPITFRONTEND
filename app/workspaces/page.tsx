@@ -22,6 +22,7 @@ import { personName } from "@/components/side-nav"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { GhostRoom } from "@/components/empty-illustrations"
+import { ModalArt } from "@/components/modal-art"
 
 /**
  * Your workspaces, the traditional shape: the first one is where all your

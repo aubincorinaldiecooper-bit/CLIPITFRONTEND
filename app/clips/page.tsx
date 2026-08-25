@@ -25,6 +25,7 @@ import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { CaptionsGlyph, PublishGlyph, SendToWorkspaceGlyph } from "@/components/clip-action-icons"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { GhostCards } from "@/components/empty-illustrations"
+import { ModalArt } from "@/components/modal-art"
 
 /**
  * Everything you have cut, newest first — chrome on Astryx, clips
@@ -548,6 +549,7 @@ export default function ClipsPage() {
         purpose="form"
         width="min(520px, 94vw)"
       >
+        <ModalArt kind="publish" />
         <DialogHeader
           title="Post this clip"
           onOpenChange={(open) => !open && setPublishTarget(null)}

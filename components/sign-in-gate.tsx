@@ -7,6 +7,7 @@ import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { authClient } from "@/lib/auth-client"
+import { ModalArt } from "@/components/modal-art"
 
 /**
  * "You need to be signed in for that" — asked at the moment it matters, and
@@ -164,6 +165,7 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
       purpose="form"
       width="min(420px, 94vw)"
     >
+      <ModalArt kind="sign-in" />
       <DialogHeader
         title={`Sign in ${purpose}`}
         onOpenChange={(open) => !open && onClose()}

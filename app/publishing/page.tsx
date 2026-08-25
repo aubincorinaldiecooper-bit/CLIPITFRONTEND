@@ -21,6 +21,7 @@ import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { GhostRows } from "@/components/empty-illustrations"
+import { ModalArt } from "@/components/modal-art"
 import { PlatformGlyph, PlatformMark } from "@/components/platform-glyphs"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 
@@ -454,6 +455,7 @@ function ConnectDialog({
       purpose="info"
       width={460}
     >
+      <ModalArt kind="connect" />
       <DialogHeader
         title={target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`}
         onOpenChange={(open) => {
