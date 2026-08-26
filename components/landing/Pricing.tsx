@@ -68,7 +68,8 @@ export default function Pricing() {
         </Reveal>
 
         <p className="mt-7 text-center text-[.82rem] text-[#6b6965]">
-          Prices in USD. Cancel any time &mdash; your approved clips stay published.
+          You approve every clip before it publishes, on every plan. Prices in USD.
+          Cancel any time &mdash; your approved clips stay published.
         </p>
       </div>
     </section>

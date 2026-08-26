@@ -51,12 +51,12 @@ export interface Tier {
  * unlock rather than inventing a limit.
  */
 export const TIERS: Tier[] = [
-  { veh: '🛹', name: 'Free',    who: 'Test the waters',  mo: 0,  yr: 0,
-    feats: ['3 videos a month','Clipit watermark','You approve every clip','No card needed'] },
-  { veh: '🏍️', name: 'Creator', who: 'Posting weekly',   mo: 17, yr: 14,
-    feats: ['No watermark','Publish to TikTok, Reels, Shorts and X','Auto captions','Schedule when clips go out','You approve every clip'] },
-  { veh: '🚀', name: 'Team',    who: 'Teams and brands', mo: 49, yr: 41, hot: true,
-    feats: ['Everything in Creator','Shared workspaces','Invite your team','Clips reviewed together','Priority processing'] },
+  { veh: '🛹', name: 'Free',    who: 'Trying it out',        mo: 0,  yr: 0,
+    feats: ['3 videos a month','Clips carry a Clipit watermark','No card needed'] },
+  { veh: '🏍️', name: 'Creator', who: 'Posting on your own',  mo: 17, yr: 14,
+    feats: ['Everything in Free, plus','No watermark','Publish straight to TikTok, Reels, Shorts and X','Auto captions and scheduling'] },
+  { veh: '🚀', name: 'Team',    who: 'Posting with a team',  mo: 49, yr: 41, hot: true,
+    feats: ['Everything in Creator, plus','Shared workspaces','Invite people to review clips','Priority processing'] },
 ];
 
 export const FAQ: [string, string][] = [
