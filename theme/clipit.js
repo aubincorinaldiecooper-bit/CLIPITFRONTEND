@@ -436,8 +436,10 @@ export const clipitTheme = {
     },
     "side-nav-heading": {
       "base": {
-        "fontFamily": "var(--font-instrument-serif), ui-serif, Georgia, serif",
-        "fontSize": "1.5rem",
+        "fontFamily": "var(--font-inter), system-ui, sans-serif",
+        "fontWeight": "800",
+        "fontSize": "1.35rem",
+        "letterSpacing": "-0.025em",
         "paddingBlock": "0.5rem"
       }
     },

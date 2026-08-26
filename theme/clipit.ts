@@ -8,7 +8,8 @@ import { neutralTheme } from "@astryxdesign/theme-neutral"
  * The colours are ours and unchanged: the near-black cinematic ground, zinc
  * structural surfaces, amber as the one accent (it is the colour of
  * timecodes, so it reads as "a moment in time" rather than decoration).
- * The serif (Instrument Serif) is the wordmark's voice only.
+ * The wordmark is Inter ExtraBold, from the owner's brand assets — the same
+ * lockup the landing uses, so the product has one wordmark rather than two.
  *
  * What is borrowed from Astryx's maintained GOTHIC theme is exactly its
  * STRUCTURE — the parts of a theme that carry polish without touching
@@ -114,14 +115,17 @@ export const clipitTheme = defineTheme({
         color: "light-dark(#ffffff, #0b0b0c)",
       },
     },
-    // The one place serif is allowed: the wordmark. The rail's heading IS
-    // the wordmark, so it carries the brand voice; every other heading is
-    // Geist via the heading font token above. Sized to anchor the roomier
-    // rail below it.
+    // The rail's heading IS the wordmark, so it carries the brand's own type:
+    // Inter ExtraBold at -2.5% tracking, matching components/brand/logo.tsx
+    // and the owner's spec. It was Instrument Serif until the brand assets
+    // arrived; the product had two different wordmarks for a while and now
+    // has one.
     "side-nav-heading": {
       base: {
-        fontFamily: "var(--font-instrument-serif), ui-serif, Georgia, serif",
-        fontSize: "1.5rem",
+        fontFamily: "var(--font-inter), system-ui, sans-serif",
+        fontWeight: "800",
+        fontSize: "1.35rem",
+        letterSpacing: "-0.025em",
         paddingBlock: "0.5rem",
       },
     },

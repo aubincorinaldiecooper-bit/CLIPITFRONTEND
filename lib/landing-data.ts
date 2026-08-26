@@ -35,16 +35,28 @@ export interface Tier {
   hot?: boolean; feats: string[];
 }
 
-// PLACEHOLDER PRICES — set real tiers before launch.
+/**
+ * The three plans, from the owner.
+ *
+ * Given directly: Free carries 3 videos a month, Creator is $17 and Team is
+ * $49, both monthly. Yearly is the two-months-free discount the page already
+ * advertises — ten months' money for twelve — which is $14 and $41 a month
+ * billed yearly, and the badge sits on Team.
+ *
+ * The feature lines describe things the product actually does today: the
+ * watermark, publishing to the four connected platforms, captions, shared
+ * workspaces and invitations. Nothing here promises a capability that does not
+ * exist. The one number still to come from the owner is how many videos a
+ * month Creator and Team allow — until it is given, those tiers say what they
+ * unlock rather than inventing a limit.
+ */
 export const TIERS: Tier[] = [
-  { veh: '🛹', name: 'Free',    who: 'Test the waters',  mo: 0,   yr: 0,
-    feats: ['1 video a month','3 clips per video','Clipit watermark','You approve everything','No card needed'] },
-  { veh: '🏍️', name: 'Creator', who: 'Posting weekly',   mo: 19,  yr: 15,
-    feats: ['4 videos a month','Up to 8 clips per video','No watermark','Publish to Shorts, TikTok, Reels','Schedule queue'] },
-  { veh: '🏎️', name: 'Growth',  who: 'Posting daily',    mo: 49,  yr: 39, hot: true,
-    feats: ['20 videos a month','Unlimited clips','Auto captions and hook titles','Best-time scheduling','Performance stats'] },
-  { veh: '🚀', name: 'Studio',  who: 'Teams and brands', mo: 149, yr: 119,
-    feats: ['Unlimited videos','5 workspaces','Brand presets','Priority processing','API access'] },
+  { veh: '🛹', name: 'Free',    who: 'Test the waters',  mo: 0,  yr: 0,
+    feats: ['3 videos a month','Clipit watermark','You approve every clip','No card needed'] },
+  { veh: '🏍️', name: 'Creator', who: 'Posting weekly',   mo: 17, yr: 14,
+    feats: ['No watermark','Publish to TikTok, Reels, Shorts and X','Auto captions','Schedule when clips go out','You approve every clip'] },
+  { veh: '🚀', name: 'Team',    who: 'Teams and brands', mo: 49, yr: 41, hot: true,
+    feats: ['Everything in Creator','Shared workspaces','Invite your team','Clips reviewed together','Priority processing'] },
 ];
 
 export const FAQ: [string, string][] = [

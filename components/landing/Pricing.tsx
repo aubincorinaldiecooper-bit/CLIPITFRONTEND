@@ -28,7 +28,10 @@ export default function Pricing() {
           </div>
         </Reveal>
 
-        <Reveal className="grid items-start gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Three columns, not four — a four-column grid with three tiers in it
+            leaves a hole on the right. Two up at sm so the cards keep a
+            readable width on a tablet. */}
+        <Reveal className="mx-auto grid max-w-[980px] items-start gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {TIERS.map(t => {
             const price = yearly ? t.yr : t.mo;
             return (

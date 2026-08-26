@@ -3,6 +3,7 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { AppShell as AstryxAppShell } from "@astryxdesign/core/AppShell"
+import { Logo } from "@/components/brand/logo"
 import { AccountControl } from "@/components/account-control"
 import { NAV_ITEMS, SideNav, type NavDestination } from "@/components/side-nav"
 
@@ -15,6 +16,8 @@ import { NAV_ITEMS, SideNav, type NavDestination } from "@/components/side-nav"
  * verified pass (mobileNav={false} suppresses it deliberately).
  *
  * The brand lives in the rail on desktop and in the header row on phones —
+ * both draw the same Logo component, so there is one wordmark in the product
+ * rather than a rail and a header disagreeing about what it looks like —
  * once each, never both.
  */
 export function AppShell({
@@ -41,8 +44,8 @@ export function AppShell({
             zero width. */}
         <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-6 pt-6">
           <span className="flex min-w-0 items-center gap-4 lg:hidden">
-            <Link href="/" className="shrink-0 font-serif text-2xl tracking-tight">
-              CLIPIT
+            <Link href="/" aria-label="Clipit — home" className="shrink-0">
+              <Logo size={22} />
             </Link>
             <nav aria-label="CLIPIT" className="flex min-w-0 items-center gap-1 overflow-x-auto">
               {NAV_ITEMS.map((item) => {
