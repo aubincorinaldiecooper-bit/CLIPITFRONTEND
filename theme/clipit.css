@@ -540,6 +540,12 @@
     padding-block: 0.5rem;
   }
 
+  .astryx-list-item {
+    padding-block: 1rem;
+    padding-inline: 1rem;
+    gap: 0.875rem;
+  }
+
   .astryx-side-nav {
     width: 333px;
   }

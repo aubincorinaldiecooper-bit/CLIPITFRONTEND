@@ -441,6 +441,13 @@ export const clipitTheme = {
         "paddingBlock": "0.5rem"
       }
     },
+    "list-item": {
+      "base": {
+        "paddingBlock": "1rem",
+        "paddingInline": "1rem",
+        "gap": "0.875rem"
+      }
+    },
     "side-nav": {
       "base": {
         "width": "333px"

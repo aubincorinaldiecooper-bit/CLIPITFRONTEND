@@ -23,11 +23,30 @@ import { personName } from "@/components/side-nav"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { GhostRoom } from "@/components/empty-illustrations"
-import { ArrowRightGlyph, PlusGlyph } from "@/components/glyphs"
+import { Card } from "@astryxdesign/core/Card"
+import { Divider } from "@astryxdesign/core/Divider"
+import { ArrowRightGlyph, CirclePlusGlyph, PlusGlyph } from "@/components/glyphs"
+import { ClockGlyph, InboxGlyph, PersonPlusGlyph, ShareGlyph } from "@/components/feature-glyphs"
+import { LockGlyph } from "@/components/glyphs"
+import { IconWell, SectionCard } from "@/components/section-card"
+import { WorkspaceIllustration } from "@/components/workspace-illustration"
 import { SplitModal } from "@/components/split-modal"
 
 /** Ties the footer's submit button back to the form it sits outside of. */
 const CREATE_FORM_ID = "create-workspace-form"
+
+/**
+ * What a workspace is for, in three lines.
+ *
+ * Straight from the owner's design. It answers "why would I make one of
+ * these" for somebody who has none — which is the only moment this list is
+ * ever shown.
+ */
+const WORKSPACE_FEATURES = [
+  { icon: PersonPlusGlyph, label: "Invite collaborators" },
+  { icon: ShareGlyph, label: "Share selected clips" },
+  { icon: LockGlyph, label: "Keep your own library separate" },
+] as const
 
 /**
  * Your workspaces, the traditional shape: the first one is where all your
@@ -227,53 +246,106 @@ function WorkspacesBody() {
 
   return (
     <VStack gap={5} align="stretch">
-      <HStack justify="between" align="start" gap={4} wrap="wrap">
+      {/* The action sits under the subtitle rather than opposite the title:
+          it is the first thing to do on this page, not a corner utility, and
+          the design puts it in the reading order where somebody arriving with
+          no workspaces would look for it. One button in one place, whether or
+          not any rooms exist — it used to be hidden while the empty state
+          carried its own copy of it, which meant the control moved. */}
+      <VStack gap={2} align="start">
         <VStack gap={1.5}>
           <Heading level={1}>Workspaces</Heading>
-          <Text as="p" type="supporting" display="block">
-            Rooms you share with other people. Your own clips live under Your clips.
+          <Text as="p" type="body" color="secondary" display="block">
+            Create shared spaces for clips, collaborators, and publishing.
           </Text>
         </VStack>
-        {/* While the no-shared-workspaces empty state is on the page it owns
-            this action; two identical primary buttons is one too many. */}
-        {shared.length > 0 && (
-          <Button label="Create workspace" variant="primary" onClick={askToCreate} />
-        )}
-      </HStack>
+        <Button
+          label="Create workspace"
+          variant="primary"
+          icon={<Icon icon={CirclePlusGlyph} />}
+          onClick={askToCreate}
+        />
+      </VStack>
 
       {/* The personal room is not listed. It is the same place "Your clips"
           already opens, and showing it here as well made one room look like
           two. This page is the shared ones. */}
-      {shared.length > 0 && (
-        <List hasDividers>
-          {shared.map((room) => (
-            <ListItem
-              key={room.id}
-              label={room.isOwner ? room.name : `${personName(room.ownerEmail) ?? "Shared"} · ${room.name}`}
-              href={`/workspaces/${room.id}`}
-              description={
-                `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
-                `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
-                (room.isOwner ? " · yours" : "")
-              }
-            />
-          ))}
-        </List>
+      {shared.length > 0 ? (
+        <Card variant="muted" padding={0}>
+          <List hasDividers>
+            {shared.map((room) => (
+              <ListItem
+                key={room.id}
+                label={room.isOwner ? room.name : `${personName(room.ownerEmail) ?? "Shared"} · ${room.name}`}
+                href={`/workspaces/${room.id}`}
+                description={
+                  `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
+                  `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
+                  (room.isOwner ? " · yours" : "")
+                }
+              />
+            ))}
+          </List>
+        </Card>
+      ) : (
+        <Card variant="muted" padding={6}>
+          {/* Words on the left, picture on the right, a rule between them.
+              Below the breakpoint the picture is dropped rather than stacked:
+              it explains the words, and on a phone it would push them off the
+              screen to do it. */}
+          {/* Two equal halves. Letting the text column size itself left the
+              picture squeezed against the right edge at about two thirds the
+              size the design draws it. */}
+          <HStack gap={8} align="center" justify="between" wrap="wrap">
+            <VStack gap={4} align="stretch" className="min-w-[280px] flex-1 basis-0">
+              <VStack gap={1.5}>
+                <Heading level={1} accessibilityLevel={2}>
+                  No workspaces yet
+                </Heading>
+                <Text as="p" type="body" color="secondary" display="block">
+                  Create a workspace to share clips with your team.
+                </Text>
+              </VStack>
+              <VStack gap={2} align="stretch">
+                {WORKSPACE_FEATURES.map((feature) => (
+                  <HStack key={feature.label} gap={3} align="center">
+                    <IconWell icon={feature.icon} size="sm" />
+                    <Text as="span" display="block">
+                      {feature.label}
+                    </Text>
+                  </HStack>
+                ))}
+              </VStack>
+            </VStack>
+            {/* A rule between the halves. It needs its own height — inside a
+                centre-aligned row a vertical divider has nothing to stretch
+                against and collapses to nothing. */}
+            <Divider orientation="vertical" className="hidden h-[240px] lg:block" />
+            <div className="hidden flex-1 basis-0 justify-center text-primary lg:flex">
+              <WorkspaceIllustration className="w-full max-w-[470px]" />
+            </div>
+          </HStack>
+        </Card>
       )}
 
-      {shared.length === 0 && (
-        // The library row exists above; what is missing is the SHARED kind,
-        // so the empty state sells exactly that and its action opens the
-        // create dialog.
-        <Center minHeight="45vh">
-          <EmptyState
-            icon={<GhostRoom />}
-            title="No shared workspaces yet"
-            description="Create one, invite people into it, and send clips there from your library — everyone in the workspace sees what's sent."
-            actions={<Button label="Create workspace" variant="primary" onClick={askToCreate} />}
-          />
+      <SectionCard icon={ClockGlyph} title="Recent activity">
+        <Center minHeight={150}>
+          <VStack gap={2} align="center">
+            <span
+              aria-hidden
+              className="mb-2 flex h-[72px] w-[72px] items-center justify-center rounded-full bg-surface text-primary ring-1 ring-border"
+            >
+              <InboxGlyph className="h-7 w-7" />
+            </span>
+            <Text as="p" weight="medium" display="block">
+              Nothing here yet.
+            </Text>
+            <Text as="p" type="body" color="secondary" display="block">
+              Activity from your workspaces will appear here.
+            </Text>
+          </VStack>
         </Center>
-      )}
+      </SectionCard>
 
       {/* Making the room, and handing over a link that could not be emailed,
           are two different moments and now two different dialogs. They used to
@@ -430,7 +502,7 @@ function WorkspacesBody() {
 export default function WorkspacesScreen() {
   return (
     <AppShell active="workspaces">
-      <Layout height="auto" contentWidth={880}>
+      <Layout height="auto" contentWidth={1213}>
         <LayoutContent padding={6}>
           <WorkspacesBody />
         </LayoutContent>

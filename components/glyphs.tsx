@@ -94,3 +94,26 @@ export function PlusGlyph(props: SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+
+/**
+ * A plus inside a circle.
+ *
+ * Distinct from `PlusGlyph`: the designs use the bare plus for "add another
+ * row inside this form" and the ringed one for "make a new thing", and the
+ * ring is what separates a minor addition from a primary action.
+ */
+export function CirclePlusGlyph(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      {...props}
+    >
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="M12 8.2v7.6M8.2 12h7.6" />
+    </svg>
+  )
+}

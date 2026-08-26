@@ -669,7 +669,7 @@ export default function ClipsPage() {
                         // List of rows, not a stack of Cards — the house rule
                         // is about which component carries a repeated
                         // collection, and this is the right one.
-                        className="mb-2 rounded-xl bg-surface/60 px-3 ring-1 ring-border last:mb-0"
+                        className="mb-2 rounded-[12px] bg-surface/60 px-3 ring-1 ring-border last:mb-0"
                         startContent={<PlatformLogo platform={account.platform} size="sm" />}
                         // Name and handle sit on ONE line, in two columns, as
                         // the mockup has them — stacked they made each row tall

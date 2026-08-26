@@ -125,6 +125,18 @@ export const clipitTheme = defineTheme({
         paddingBlock: "0.5rem",
       },
     },
+    // List rows carry most of this app's real content — connected accounts,
+    // the platforms you can add, the accounts a clip will post to. The designs
+    // draw them at an 84px pitch with a 19px label; Astryx's default is nearer
+    // 60 and 16, which made four platforms look like a settings sub-menu
+    // rather than the main business of the page.
+    "list-item": {
+      base: {
+        paddingBlock: "1rem",
+        paddingInline: "1rem",
+        gap: "0.875rem",
+      },
+    },
     // The rail's own width. Astryx defaults to 260px; the owner's designs draw
     // it at 333, measured off the mockup by finding the vertical rule between
     // rail and content. It was tuned to a different reference earlier — that

@@ -12,6 +12,32 @@ import { api } from "@/lib/api"
 import type { ActivityStats } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { authClient } from "@/lib/auth-client"
+import {
+  ClockGlyph,
+  EyeGlyph,
+  HeartGlyph,
+  QuestionGlyph,
+  ScissorsGlyph as ScissorsMark,
+  ShareGlyph,
+  TrendGlyph,
+  VideoGlyph,
+} from "@/components/feature-glyphs"
+import { IconWell, SectionCard } from "@/components/section-card"
+
+/** The four counts, each with the mark the design gives it. */
+const STAT_TILES = [
+  { icon: VideoGlyph, label: "Videos", value: (s: ActivityStats | null) => s?.videos },
+  { icon: ClockGlyph, label: "Minutes of video", value: (s: ActivityStats | null) => s?.minutesOfVideo },
+  { icon: QuestionGlyph, label: "Questions answered", value: (s: ActivityStats | null) => s?.questionsAnswered },
+  { icon: ScissorsMark, label: "Clips cut", value: (s: ActivityStats | null) => s?.clipsCut },
+] as const
+
+/** What performance would show, once there is any. */
+const PERFORMANCE = [
+  { icon: EyeGlyph, label: "Views" },
+  { icon: HeartGlyph, label: "Likes" },
+  { icon: ShareGlyph, label: "Shares" },
+] as const
 
 /**
  * Home: the numbers, and the one button that matters.
@@ -69,7 +95,7 @@ export default function HomePage() {
             <Heading level={1}>
               {firstName ? `Welcome back, ${firstName}` : "Welcome"}
             </Heading>
-            <Text as="p" type="supporting">
+            <Text as="p" type="body" color="secondary">
               Drop in a long video, describe the moment, and cut it into a post-ready clip.
             </Text>
           </VStack>
@@ -77,59 +103,58 @@ export default function HomePage() {
         </HStack>
 
             {/* Counted from this caller's rows; a dash means "not loaded",
-                never a fake zero. */}
-            <Grid columns={{ minWidth: 150, max: 4 }} gap={2}>
-            {(
-              [
-                { label: "Videos", value: stats?.videos },
-                { label: "Minutes of video", value: stats?.minutesOfVideo },
-                { label: "Questions answered", value: stats?.questionsAnswered },
-                { label: "Clips cut", value: stats?.clipsCut },
-              ] as const
-            ).map((tile) => (
-              <Card key={tile.label} variant="muted" padding={3}>
-                <VStack gap={0.5}>
-                  <Text size="2xl" weight="medium">
-                    <span className="tabular-nums">{tile.value ?? "—"}</span>
-                  </Text>
-                  <Text type="supporting">{tile.label}</Text>
-                </VStack>
-              </Card>
-            ))}
+                never a fake zero. Each tile carries its own mark, as the design
+                has them — four bare numbers in a row read as a table, and the
+                icon is what tells them apart at a glance. */}
+            <Grid columns={{ minWidth: 220, max: 4 }} gap={3}>
+              {STAT_TILES.map((tile) => (
+                <Card key={tile.label} variant="muted" padding={5}>
+                  <VStack gap={6} align="stretch">
+                    <IconWell icon={tile.icon} size="sm" />
+                    <VStack gap={0.5}>
+                      <Text size="4xl" weight="medium">
+                        <span className="tabular-nums">{tile.value(stats) ?? "—"}</span>
+                      </Text>
+                      <Text type="body" color="secondary">{tile.label}</Text>
+                    </VStack>
+                  </VStack>
+                </Card>
+              ))}
             </Grid>
 
-            {/* The section that cannot be real yet, saying so plainly. Dashes are
-            "no data exists", which is true; zeros would claim a measurement
-            that never happened. */}
-            <Card variant="muted" padding={4}>
-              <VStack gap={4} align="stretch">
-                <HStack justify="between" align="center" gap={4} wrap="wrap">
-              <VStack gap={1}>
-                <Heading level={2}>
-                  Post performance
-                </Heading>
-                <Text as="p" type="supporting">
-                  Views, likes and shares appear here once you connect the accounts you post to.
-                </Text>
-              </VStack>
-                  <Button label="Connect accounts" variant="secondary" size="sm" href="/publishing" />
-                </HStack>
-                <Grid columns={3} gap={2}>
-                {["Views", "Likes", "Shares"].map((label) => (
-                  <Card key={label} variant="transparent" padding={3}>
+            {/* The section that cannot be real yet, saying so plainly. Dashes
+                are "no data exists", which is true; zeros would claim a
+                measurement that never happened. */}
+            <SectionCard
+              icon={TrendGlyph}
+              title="Post performance"
+              descriptionPlacement="below"
+              description="Views, likes and shares appear here once you connect the accounts you post to."
+              action={<Button label="Connect accounts" variant="secondary" href="/publishing" />}
+            >
+              <Grid columns={{ minWidth: 200, max: 3 }} gap={0}>
+                {PERFORMANCE.map((metric, index) => (
+                  <VStack
+                    key={metric.label}
+                    gap={4}
+                    align="stretch"
+                    // A rule between the columns, as the design draws it, and
+                    // never before the first.
+                    className={index > 0 ? "sm:border-l sm:border-border sm:pl-6" : "sm:pr-6"}
+                  >
+                    <IconWell icon={metric.icon} size="sm" />
                     <VStack gap={0.5}>
-                      <Text size="xl" weight="medium" color="disabled">
+                      <Text size="2xl" weight="medium" color="disabled">
                         —
                       </Text>
-                      <Text type="supporting" color="disabled">
-                        {label}
+                      <Text type="body" color="secondary">
+                        {metric.label}
                       </Text>
                     </VStack>
-                  </Card>
+                  </VStack>
                 ))}
-                </Grid>
-              </VStack>
-            </Card>
+              </Grid>
+            </SectionCard>
           </VStack>
         </LayoutContent>
       </Layout>
