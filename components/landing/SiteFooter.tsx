@@ -1,4 +1,5 @@
 import { Logo } from '@/components/brand/logo';
+import { SHOW_PRICING } from '@/lib/landing-data';
 
 export default function SiteFooter() {
   return (
@@ -9,7 +10,7 @@ export default function SiteFooter() {
         </a>
         <nav aria-label="Footer" className="hidden gap-6 font-medium sm:flex">
           <a href="#how" className="hover:text-[#121212]">How it works</a>
-          <a href="#pricing" className="hover:text-[#121212]">Pricing</a>
+          {SHOW_PRICING && <a href="#pricing" className="hover:text-[#121212]">Pricing</a>}
           <a href="#faq" className="hover:text-[#121212]">FAQ</a>
         </nav>
         <span>&copy; 2026 Clipit</span>

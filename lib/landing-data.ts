@@ -2,6 +2,29 @@
 export const SIGNUP_URL = '/start';
 
 /**
+ * Whether the plans are shown at all.
+ *
+ * OFF while payment is being set up. Naming a price the product cannot yet
+ * charge is worse than naming none: the first person to click Start Creator
+ * finds nothing behind it.
+ *
+ * Turning this back on is this one line. Everything the plans touch reads it —
+ * the section itself, the links to it in the header and the footer, and the FAQ
+ * answer about monthly minutes, which means nothing with no plans on the page.
+ * They are wired to the flag rather than deleted so none of them can be
+ * forgotten on the way back.
+ *
+ * The section is removed from the page rather than hidden with CSS: hidden
+ * prices are still in the HTML, still readable by anyone who looks, and still
+ * indexable.
+ *
+ * Typed as boolean on purpose. Left as a literal, TypeScript narrows it to
+ * `false` and every use becomes provably dead code — which trips lint rules and
+ * strips the imports.
+ */
+export const SHOW_PRICING: boolean = false;
+
+/**
  * Where an Enterprise enquiry goes: the founder's own inbox, directly.
  *
  * Chosen deliberately over a company address on a domain forwarder. The
@@ -112,8 +135,12 @@ export const FAQ: [string, string][] = [
    'Clipit watches your full-length video, finds the moments worth posting, and cuts them into vertical clips. You approve the ones you like and they publish to YouTube Shorts, TikTok and Instagram Reels.'],
   ['What footage works best?',
    'Anything long-form: talking-head videos, podcasts, vlogs, shoots, event coverage. The more distinct moments your video holds, the more clips come out of it.'],
-  ['How are the minutes counted?',
-   'By the length of the video you upload, not by how many clips come out of it. A 40-minute video costs 40 minutes of your monthly allowance whether Clipit finds three clips in it or thirty.'],
+  // Only makes sense alongside the plans — it answers a question about a
+  // monthly allowance the page would not otherwise mention.
+  ...(SHOW_PRICING
+    ? ([['How are the minutes counted?',
+         'By the length of the video you upload, not by how many clips come out of it. A 40-minute video costs 40 minutes of your monthly allowance whether Clipit finds three clips in it or thirty.']] as [string, string][])
+    : []),
   ['Does Clipit ever post without me?',
    'No. Every clip waits in your review queue until you approve it. Nothing publishes on its own.'],
   ['Which platforms can I publish to?',

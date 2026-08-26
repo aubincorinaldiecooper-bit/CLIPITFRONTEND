@@ -1,7 +1,16 @@
 import { Logo } from '@/components/brand/logo';
-import { SIGNUP_URL } from '@/lib/landing-data';
+import { SHOW_PRICING, SIGNUP_URL } from '@/lib/landing-data';
 
-const NAV = [['#who','Who it\u2019s for'], ['#how','How it works'], ['#pricing','Pricing'], ['#faq','FAQ']];
+// Pricing drops out of the nav with the section itself. A link to an anchor
+// that is not on the page does nothing at all when clicked \u2014 the reader gets no
+// movement and no explanation, which reads as a broken site rather than a
+// deliberately absent section.
+const NAV = [
+  ['#who', 'Who it\u2019s for'],
+  ['#how', 'How it works'],
+  ...(SHOW_PRICING ? [['#pricing', 'Pricing']] : []),
+  ['#faq', 'FAQ'],
+];
 
 export default function SiteHeader() {
   return (

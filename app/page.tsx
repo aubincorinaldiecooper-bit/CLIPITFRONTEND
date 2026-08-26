@@ -22,6 +22,7 @@ import Integrations from '@/components/landing/Integrations';
 import Pricing from '@/components/landing/Pricing';
 import Faq from '@/components/landing/Faq';
 import SiteFooter from '@/components/landing/SiteFooter';
+import { SHOW_PRICING } from '@/lib/landing-data';
 
 const DESC = 'Clipit watches your full video, cuts the moments worth posting, and hands them to you ready for Shorts, TikTok and Reels.';
 
@@ -72,7 +73,7 @@ export default async function LandingPage() {
       <WhoItsFor />
       <HowItWorks />
       <Integrations />
-      <Pricing />
+      {SHOW_PRICING && <Pricing />}
       <Faq />
       <SiteFooter />
     </div>
