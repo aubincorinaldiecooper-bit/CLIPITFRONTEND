@@ -2,22 +2,23 @@
 export const SIGNUP_URL = '/start';
 
 /**
- * Where an Enterprise enquiry goes.
+ * Where an Enterprise enquiry goes: the founder's own inbox, directly.
  *
- * NOT LIVE YET. The owner's decision is that this becomes a forwarding address
- * rather than a mailbox — mail to it is redirected straight to the inbox they
- * already read — set up either through the DNS host's email routing or the
- * registrar's own forwarding. Until that redirect exists the address does not
- * resolve, and a dead address here loses enterprise leads in silence: the
- * visitor's mail client opens, they send, and they assume it arrived.
+ * Chosen deliberately over a company address on a domain forwarder. The
+ * forwarder was the earlier plan and would still work, but it is a DNS job that
+ * has to be done and verified before the page can ship, and this address works
+ * the moment it is deployed. "Chat with founder" is also a better offer than
+ * "get in touch" for the tier it sits on — at enterprise size, reaching the
+ * person who builds the thing IS the product.
  *
- * So this must not ship to production before the forwarding is confirmed
- * working by sending a test message to it.
+ * The trade, accepted knowingly: a mailto on a public page gets scraped, so
+ * this inbox will attract spam, and replies come from a personal address rather
+ * than from Clipit. Both are fixed by pointing this one constant at a
+ * forwarding address later — nothing else in the page needs to change.
  *
- * Deliberately a company address and not a personal one, both so replies can
- * later be sent from it and so a personal inbox is not published to scrapers.
+ * The subject line is fixed so these are filterable on arrival.
  */
-export const CONTACT_URL = 'mailto:sales@clipit.space?subject=Clipit%20for%20teams';
+export const CONTACT_URL = 'mailto:aubincorinaldiecooper@gmail.com?subject=Clipit%20Enterprise';
 
 export const RUNTIME = 47 * 60 + 32; // the demo source video, 47:32
 
@@ -102,7 +103,7 @@ export const TIERS: Tier[] = [
   { name: 'Team',       who: 'Posting with a team', mo: 49,   yr: 41, hot: true,
     feats: ['Everything in Creator, plus','900 minutes of video a month','Up to 6 hours per video','5 seats and shared workspaces','Priority processing'] },
   { name: 'Enterprise', who: 'Posting at scale',    mo: null, yr: null,
-    cta: { label: 'Get in touch', href: CONTACT_URL },
+    cta: { label: 'Chat with founder', href: CONTACT_URL },
     feats: ['Everything in Team, plus','Minutes and seats to fit your library','A dedicated contact, on call','Sessions to tune Clipit to your footage','Invoicing and security review'] },
 ];
 
