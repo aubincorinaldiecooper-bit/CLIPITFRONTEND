@@ -19,7 +19,11 @@ import { cn } from "@/lib/utils"
 export function Calendar({ className, classNames, ...props }: DayPickerProps) {
   return (
     <DayPicker
-      className={cn("[--rdp-cell-size:34px]", className)}
+      // Cells shrink below sm. The grid cannot shrink by itself — seven
+      // fixed-width cells set the calendar's minimum width, and at 34px that
+      // minimum (plus the times column beside it) is wider than a phone, which
+      // put an 18px horizontal scroll on the whole landing page.
+      className={cn("[--rdp-cell-size:30px] sm:[--rdp-cell-size:34px]", className)}
       classNames={{
         // `relative` lives HERE, not on `month`: react-day-picker puts the
         // nav inside `months` as a sibling of the month grid, so anchoring to
@@ -36,11 +40,11 @@ export function Calendar({ className, classNames, ...props }: DayPickerProps) {
           "grid h-7 w-7 place-items-center rounded-md text-[#6b6965] hover:bg-[#f7f5f2] disabled:opacity-40",
         month_grid: "w-full border-collapse",
         weekdays: "flex",
-        weekday: "w-[34px] text-[.66rem] font-medium uppercase tracking-wide text-[#6b6965]",
+        weekday: "w-[30px] sm:w-[34px] text-[.66rem] font-medium uppercase tracking-wide text-[#6b6965]",
         week: "mt-0.5 flex w-full",
-        day: "h-[34px] w-[34px] p-0",
+        day: "h-[30px] w-[30px] sm:h-[34px] sm:w-[34px] p-0",
         day_button:
-          "h-[34px] w-[34px] rounded-md text-[.78rem] text-[#121212] transition-colors hover:bg-[#f7f5f2] disabled:pointer-events-none disabled:text-[#c9c6c1]",
+          "h-[30px] w-[30px] sm:h-[34px] sm:w-[34px] rounded-md text-[.78rem] text-[#121212] transition-colors hover:bg-[#f7f5f2] disabled:pointer-events-none disabled:text-[#c9c6c1]",
         selected: "[&>button]:bg-[#121212] [&>button]:text-white [&>button:hover]:bg-[#121212]",
         today: "[&>button]:ring-1 [&>button]:ring-[#e8e5e0]",
         outside: "[&>button]:text-[#c9c6c1]",

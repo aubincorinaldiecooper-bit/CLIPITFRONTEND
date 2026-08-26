@@ -57,10 +57,14 @@ function StepRow({ step, first }: { step: Step; first: boolean }) {
   return (
     <Reveal className={'grid items-center gap-7 py-9 md:grid-cols-[1.05fr_.95fr] md:gap-14 ' +
       (first ? '' : 'border-t border-[#f1efeb]')}>
-      <div ref={ref} className="flex aspect-[16/10] items-center justify-center">
+      {/* min-w-0 on both columns: grid items refuse to shrink below their
+          content's minimum width by default, and on a phone that minimum
+          (the widest step demo) pushed the whole page 16px past the viewport
+          and gave the entire landing a horizontal scroll. */}
+      <div ref={ref} className="flex min-w-0 aspect-[16/10] items-center justify-center">
         {step.visual}
       </div>
-      <div className="relative pl-6 md:pl-8">
+      <div className="relative min-w-0 pl-6 md:pl-8">
         <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] rounded bg-[#e8e5e0]" />
         <motion.span aria-hidden
           className="absolute left-0 top-0 h-full w-[2px] origin-top rounded bg-[#121212]"

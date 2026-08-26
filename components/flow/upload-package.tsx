@@ -149,14 +149,12 @@ function readyCount(entries: UploadEntry[]): number {
 
 export function UploadPackage({
   entries,
-  busy,
   onAdd,
   onRemove,
   onRetry,
   onOpen,
 }: {
   entries: UploadEntry[]
-  busy: boolean
   onAdd: (files: File[]) => void
   onRemove: (id: string) => void
   onRetry: (id: string) => void
@@ -221,7 +219,11 @@ export function UploadPackage({
           label="Browse"
           variant="primary"
           size="lg"
-          isDisabled={busy || full}
+          // Full is the only gate. It used to also disable while uploads ran,
+          // which quietly disagreed with drag-and-drop — a drop mid-batch was
+          // accepted while Browse refused. Adding to a running batch is fine:
+          // every file runs its own upload and reports on its own row.
+          isDisabled={full}
           onClick={() => fileInput.current?.click()}
         />
         <input

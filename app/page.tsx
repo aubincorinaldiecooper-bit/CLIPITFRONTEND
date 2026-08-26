@@ -35,9 +35,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Read the cookie on every request rather than at build time, so a returning
- * visitor is recognised. Without this the page would be static and everyone
- * would get the marketing copy.
+ * Belt and braces: `cookies()` below already opts this page into per-request
+ * rendering, so this line is not what makes it dynamic — it just makes the
+ * intent survive a refactor that removes the cookie check.
  */
 export const dynamic = 'force-dynamic';
 

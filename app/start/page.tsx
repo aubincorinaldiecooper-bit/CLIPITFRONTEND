@@ -37,6 +37,9 @@ export default function StartPage() {
    * as all five failing — or, worse, disappear.
    */
   const [uploads, setUploads] = useState<UploadEntry[]>([])
+  /** The list as of the latest render, for settle-time checks inside promises. */
+  const uploadsRef = useRef<UploadEntry[]>([])
+  uploadsRef.current = uploads
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [seekRequest, setSeekRequest] = useState<{ seconds: number; token: number } | null>(null)
@@ -153,9 +156,13 @@ export default function StartPage() {
       setBusy(true)
       void Promise.all(accepted.map((entry) => runUpload(entry)))
         .then((results) => {
-          // A lone file goes on into the theater, as it always did.
+          // A lone file goes on into the theater, as it always did — but
+          // "lone" is re-checked when it lands, not just when it was picked.
+          // Files can be added while this one uploads, and being carried into
+          // the theater while a batch you just started uploads behind you
+          // would read as the page discarding it.
           const first = results.find((result) => result !== null)
-          if (single && first) setVideo(first)
+          if (single && first && uploadsRef.current.length === 1) setVideo(first)
         })
         .finally(() => setBusy(false))
     },
@@ -529,7 +536,6 @@ export default function StartPage() {
           <div className="mt-8">
             <UploadPackage
               entries={uploads}
-              busy={busy}
               onAdd={startUploads}
               onRemove={removeUpload}
               onRetry={retryUpload}

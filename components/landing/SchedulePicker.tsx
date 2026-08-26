@@ -49,7 +49,7 @@ export default function SchedulePicker() {
           modifiersClassNames={{ busy: BUSY_DOT }}
           className="flex-1 p-3"
         />
-        <div className="flex w-[126px] shrink-0 flex-col border-l border-[#e8e5e0]">
+        <div className="flex w-[112px] shrink-0 flex-col border-l border-[#e8e5e0] sm:w-[126px]">
           <p className="px-2.5 pb-2 pt-3 text-center text-[.76rem] font-semibold">Post times</p>
           <ScrollArea className="max-h-[170px] flex-1">
             <div className="grid gap-1.5 px-2.5 pb-3">
