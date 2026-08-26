@@ -7,6 +7,7 @@ import {
   SideNavItem,
   SideNavSection,
 } from "@astryxdesign/core/SideNav"
+import { Logo } from "@/components/brand/logo"
 import { api } from "@/lib/api"
 
 /**
@@ -230,7 +231,16 @@ export function SideNav({
   return (
     <AstryxSideNav
       collapsible={{ isCollapsed: collapsed, onCollapsedChange: handleCollapsedChange }}
-      header={<SideNavHeading heading="CLIPIT" headingHref="/" />}
+      header={
+        // The mark rides Astryx's own icon slot and the word its heading slot,
+        // so the rail keeps the component's spacing and collapse behaviour
+        // rather than a hand-built header sitting where one should be.
+        <SideNavHeading
+          icon={<Logo variant="mark" size={22} />}
+          heading="Clipit"
+          headingHref="/"
+        />
+      }
     >
       <SideNavSection title="Navigate" isHeaderHidden>
         {NAV_ITEMS.map((item) => {

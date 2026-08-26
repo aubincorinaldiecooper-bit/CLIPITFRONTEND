@@ -336,7 +336,7 @@ export function QueryDrawer({
           >
             {/* header */}
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
-              <h2 className="font-serif text-lg">Ask the video</h2>
+              <h2 className="text-lg font-semibold">Ask the video</h2>
               <button
                 type="button"
                 aria-label="Collapse"

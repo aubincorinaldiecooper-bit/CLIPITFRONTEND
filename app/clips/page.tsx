@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@astryxdesign/core/Button"
+import { Divider } from "@astryxdesign/core/Divider"
+import { Icon } from "@astryxdesign/core/Icon"
 import { IconButton } from "@astryxdesign/core/IconButton"
 import { Center } from "@astryxdesign/core/Center"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
@@ -9,11 +11,11 @@ import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { Grid } from "@astryxdesign/core/Grid"
 import { Heading } from "@astryxdesign/core/Heading"
+import { List, ListItem } from "@astryxdesign/core/List"
 import { Popover } from "@astryxdesign/core/Popover"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
-import { ToggleButton } from "@astryxdesign/core/ToggleButton"
 import { TextArea } from "@astryxdesign/core/TextArea"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { useToast } from "@astryxdesign/core/Toast"
@@ -23,7 +25,22 @@ import { AppShell } from "@/components/app-shell"
 import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
 import { CaptionsGlyph, PublishGlyph, SendToWorkspaceGlyph } from "@/components/clip-action-icons"
+import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { GhostCards } from "@/components/empty-illustrations"
+import { ArrowRightGlyph } from "@/components/glyphs"
+import { PlatformLogo } from "@/components/platform-logos"
+import { ChosenTick, PublishPreview } from "@/components/publish-preview"
+import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
+
+/**
+ * The caption length to count against.
+ *
+ * The shortest limit among the platforms this posts to, so a caption inside it
+ * fits everywhere. Advisory: the counter turns red, nothing is blocked. A
+ * platform trims what it minds about, and refusing to type past this would be
+ * us enforcing a rule that only one of them applies.
+ */
+const CAPTION_LIMIT = 220
 
 /**
  * Everything you have cut, newest first — chrome on Astryx, clips
@@ -41,6 +58,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
   instagram: "Instagram",
+  x: "X",
 }
 
 export default function ClipsPage() {
@@ -80,8 +98,18 @@ export default function ClipsPage() {
    * Caption drafts, one per clip. A draft survives its popover closing —
    * clicking a pixel outside the panel must not erase a paragraph someone
    * typed — and is dropped only when the publish it was written for lands.
+   *
+   * Seeded from the ones Save draft has written down, so a caption written
+   * yesterday is still there today.
    */
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+
+  // Read once, on the client. Deliberately not part of the initial state: this
+  // page is prerendered, and reading storage during the first render makes the
+  // server's HTML and the browser's disagree.
+  useEffect(() => {
+    setDrafts((current) => ({ ...savedDrafts(), ...current }))
+  }, [])
   const [publishingIds, setPublishingIds] = useState<string[]>([])
   /** Which clip's caption editor is open — a modal visit, not a page. */
   const [captionClipId, setCaptionClipId] = useState<string | null>(null)
@@ -93,6 +121,20 @@ export default function ClipsPage() {
    */
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
   const toast = useToast()
+  const { requireSignIn } = useSignInGate()
+
+  // Signed in from the prompt and come back? Reopen the clip they were about
+  // to publish, rather than dropping them on the library with no idea where
+  // they were. It opens the dialog — it does NOT publish: that button is
+  // theirs to press, and pressing it for them would post to the world on the
+  // strength of a URL parameter.
+  useResumeIntent(
+    (intent) => intent.action === "publish" || intent.action === "send",
+    (intent) => {
+      if (intent.action === "publish") setPublishTarget(intent.clipId)
+      if (intent.action === "send") openSend(intent.clipId)
+    },
+  )
 
   const setPublishTarget = (id: string | null) => {
     publishOpenIdRef.current = id
@@ -173,11 +215,14 @@ export default function ClipsPage() {
             : "Sent — it's on its way to your connected accounts.",
       })
       // The draft did its job; the panel closes only if it is still this
-      // clip's — another clip's popover may have opened mid-flight.
+      // clip's — another clip's popover may have opened mid-flight. A saved
+      // copy goes too: keeping a caption that has already been published would
+      // hand it straight back the next time this clip was opened.
       setDrafts((current) => {
         const { [clipId]: _sent, ...rest } = current
         return rest
       })
+      clearDraft(clipId)
       if (publishOpenIdRef.current === clipId) {
         setPublishTarget(null)
       }
@@ -415,7 +460,11 @@ export default function ClipsPage() {
                             tooltip="Publish"
                             variant="secondary"
                             size="sm"
-                            onClick={() => setPublishTarget(clip.id)}
+                            onClick={() =>
+                              requireSignIn({ action: "publish", clipId: clip.id }, () =>
+                                setPublishTarget(clip.id),
+                              )
+                            }
                           />
                         )}
                         {clip.status === "ready" && (
@@ -423,7 +472,11 @@ export default function ClipsPage() {
                             isOpen={sendOpenId === clip.id}
                             onOpenChange={(open) => {
                               if (open) {
-                                openSend(clip.id)
+                                // Sending a clip into a shared room needs a
+                                // person: rooms outlive a browser tab.
+                                requireSignIn({ action: "send", clipId: clip.id }, () =>
+                                  openSend(clip.id),
+                                )
                               } else if (sendOpenIdRef.current === clip.id) {
                                 setSendTarget(null)
                               }
@@ -523,22 +576,51 @@ export default function ClipsPage() {
           if (!open) setPublishTarget(null)
         }}
         purpose="form"
-        width="min(520px, 94vw)"
+        width="min(740px, 94vw)"
+        maxHeight="90vh"
+        aria-label="Publish"
       >
-        <DialogHeader
-          title="Post this clip"
-          onOpenChange={(open) => !open && setPublishTarget(null)}
-        />
         {publishOpenId && (
-          <VStack gap={4} align="stretch">
+          // The heading and the buttons stay put; only the middle scrolls.
+          // Four connected accounts and a preview frame were already enough to
+          // push Publish off the bottom of a laptop screen, and a button you
+          // cannot reach is the same as a button that is not there.
+          <VStack gap={4} align="stretch" className="min-h-0">
+            <HStack justify="between" align="start">
+              <VStack gap={1} align="stretch">
+                <Heading level={1} accessibilityLevel={2}>
+                  Publish
+                </Heading>
+                <Text as="p" type="body" color="secondary" display="block">
+                  Share your clip with the world.
+                </Text>
+              </VStack>
+              <IconButton
+                icon={<Icon icon="close" />}
+                label="Close"
+                variant="ghost"
+                size="sm"
+                onClick={() => setPublishTarget(null)}
+              />
+            </HStack>
+
+            <VStack gap={4} align="stretch" isScrollable className="min-h-0">
+            <PublishPreview clip={clips?.find((clip) => clip.id === publishOpenId) ?? null} />
+
             <TextArea
               label="Caption"
-              rows={4}
+              rows={3}
               value={drafts[publishOpenId] ?? ""}
               onChange={(value) =>
                 setDrafts((current) => ({ ...current, [publishOpenId]: value }))
               }
-              placeholder="Say something about this clip (optional)"
+              placeholder="Write a caption..."
+              // The shortest cap across the platforms this posts to, so the
+              // count means "this will fit everywhere" rather than "this fits
+              // one of them". Advisory, not enforced: a caption is trimmed by
+              // whichever platform minds, and refusing to type here would be
+              // us inventing a rule none of them applies to all posts.
+              maxLength={CAPTION_LIMIT}
             />
             {/* Which accounts get it. Everything connected starts ticked,
                 because "goes to all of them" is what this button did before
@@ -557,68 +639,104 @@ export default function ClipsPage() {
             ) : (
               <VStack gap={2} align="stretch">
                 <Text as="p" type="supporting" display="block">
-                  Post to
+                  Accounts
                 </Text>
-                {/* Toggles rather than a checkbox list. Astryx's checkbox
-                    washes a selected row in --color-accent-muted, which on
-                    this palette is a solid amber block — the accent is for
-                    small marks here, never a surface. A pressed
-                    ToggleButton uses a neutral overlay instead, and a row of
-                    pills is the language every other action in this app
-                    already speaks. */}
-                <HStack gap={2} wrap="wrap">
+                {/* Rows, not pills. Each account now carries its platform's
+                    own mark, and a mark plus a name plus a handle is more than
+                    a pill can hold legibly — the row is also what the mockup
+                    asks for. The tick is drawn rather than an Astryx checkbox
+                    because that washes a selected row in --color-accent-muted,
+                    which on this palette is a solid amber block; the accent is
+                    for small marks here, never a surface. */}
+                <List>
                   {accounts.map((account) => {
                     const on = chosenAccountIds.includes(account.id)
+                    const platform = PLATFORM_LABELS[account.platform] ?? account.platform
                     return (
-                      <ToggleButton
+                      <ListItem
                         key={account.id}
-                        size="sm"
-                        isPressed={on}
-                        // Two accounts on one platform is normal, so the
-                        // handle is part of the name — "TikTok" twice with
-                        // no way to tell them apart is not a choice.
+                        // NOT `isSelected`. That paints the whole row in
+                        // --color-accent-muted, which on this palette is a
+                        // solid amber block — the same trap the Astryx
+                        // checkbox falls into, and the reason these were pills
+                        // before. The row still announces itself as a tickable
+                        // thing and still says whether it is ticked; it just
+                        // says it in the mark rather than in a wash of colour.
+                        role="checkbox"
+                        aria-checked={on}
+                        // Each row in its own rounded container, per the
+                        // mockup, rather than divided by hairlines. Still a
+                        // List of rows, not a stack of Cards — the house rule
+                        // is about which component carries a repeated
+                        // collection, and this is the right one.
+                        className="mb-2 rounded-[12px] bg-surface/60 px-3 ring-1 ring-border last:mb-0"
+                        startContent={<PlatformLogo platform={account.platform} size="sm" />}
+                        // Name and handle sit on ONE line, in two columns, as
+                        // the mockup has them — stacked they made each row tall
+                        // enough that four accounts no longer fitted without
+                        // scrolling. Two accounts on one platform is normal, so
+                        // the handle is never dropped: "TikTok" twice with no
+                        // way to tell them apart is not a choice.
                         label={
-                          account.displayName
-                            ? `${PLATFORM_LABELS[account.platform] ?? account.platform} · ${account.displayName}`
-                            : PLATFORM_LABELS[account.platform] ?? account.platform
+                          <HStack gap={3} align="center">
+                            <Text as="span" type="body">{platform}</Text>
+                            {account.displayName && (
+                              <Text as="span" type="supporting">{account.displayName}</Text>
+                            )}
+                          </HStack>
                         }
-                        onPressedChange={(pressed) =>
+                        endContent={<ChosenTick isOn={on} />}
+                        onClick={() =>
                           setChosenAccountIds((current) =>
-                            pressed
-                              ? [...current, account.id]
-                              : current.filter((id) => id !== account.id),
+                            on
+                              ? current.filter((id) => id !== account.id)
+                              : [...current, account.id],
                           )
                         }
                       />
                     )
                   })}
-                </HStack>
+                </List>
               </VStack>
             )}
+            </VStack>
+
+            <Divider />
 
             <HStack gap={3} justify="between" align="center">
               <Text as="p" type="supporting" display="block">
                 {accounts && accounts.length > 0
                   ? chosenAccountIds.length === 0
                     ? "Pick at least one account."
-                    : `Going to ${chosenAccountIds.length} of ${accounts.length}.`
+                    : `${chosenAccountIds.length} ${chosenAccountIds.length === 1 ? "account" : "accounts"} selected`
                   : "Goes to every account you have connected."}
               </Text>
-              <Button
-                label="Post it"
-                variant="primary"
-                // The guard stays on the page, not in the dialog: closing
-                // this unmounts it, and a flag that reset would let a second
-                // Post start a publish of a clip already on its way out.
-                isLoading={publishingIds.includes(publishOpenId)}
-                isDisabled={
-                  publishingIds.includes(publishOpenId) ||
-                  // An empty tick-list is a refusal to pick, not permission
-                  // to post everywhere — the same rule the API enforces.
-                  (accounts !== null && accounts.length > 0 && chosenAccountIds.length === 0)
-                }
-                onClick={() => void publish(publishOpenId)}
-              />
+              <HStack gap={2}>
+                <Button
+                  label="Save draft"
+                  variant="secondary"
+                  onClick={() => {
+                    saveDraft(publishOpenId, drafts[publishOpenId] ?? "")
+                    setPublishTarget(null)
+                  }}
+                />
+                <Button
+                  label="Publish"
+                  variant="primary"
+                  endContent={<Icon icon={ArrowRightGlyph} />}
+                  // The guard stays on the page, not in the dialog: closing
+                  // this unmounts it, and a flag that reset would let a second
+                  // Post start a publish of a clip already on its way out.
+                  isLoading={publishingIds.includes(publishOpenId)}
+                  isDisabled={
+                    publishingIds.includes(publishOpenId) ||
+                    // An empty tick-list is a refusal to pick, not permission
+                    // to post everywhere — the same rule the API enforces.
+                    (accounts !== null && accounts.length > 0 && chosenAccountIds.length === 0)
+                  }
+                  onClick={() => void publish(publishOpenId)}
+                />
+              </HStack>
             </HStack>
           </VStack>
         )}
@@ -635,7 +753,12 @@ export default function ClipsPage() {
       >
         {/* Passing onOpenChange is what gives the header its close button —
             without it the only ways out were the two save buttons, and on a
-            touch screen there was no way out at all. */}
+            touch screen there was no way out at all.
+
+            The picture that used to run across the top is gone: this modal is
+            about to become the editor from the mockups, with its own header
+            carrying undo, redo and Save, and a band above that would be a
+            second header. */}
         <DialogHeader title="Captions" onOpenChange={(open) => !open && closeCaptionEditor()} />
         {captionClipId && (
           <CaptionEditor

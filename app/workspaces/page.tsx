@@ -8,6 +8,7 @@ import { Center } from "@astryxdesign/core/Center"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Icon } from "@astryxdesign/core/Icon"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
@@ -19,8 +20,33 @@ import { api, ApiError } from "@/lib/api"
 import type { WorkspacesPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { personName } from "@/components/side-nav"
+import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { GhostRoom } from "@/components/empty-illustrations"
+import { Card } from "@astryxdesign/core/Card"
+import { Divider } from "@astryxdesign/core/Divider"
+import { ArrowRightGlyph, CirclePlusGlyph, PlusGlyph } from "@/components/glyphs"
+import { ClockGlyph, InboxGlyph, PersonPlusGlyph, ShareGlyph } from "@/components/feature-glyphs"
+import { LockGlyph } from "@/components/glyphs"
+import { IconWell, SectionCard } from "@/components/section-card"
+import { WorkspaceIllustration } from "@/components/workspace-illustration"
+import { SplitModal } from "@/components/split-modal"
+
+/** Ties the footer's submit button back to the form it sits outside of. */
+const CREATE_FORM_ID = "create-workspace-form"
+
+/**
+ * What a workspace is for, in three lines.
+ *
+ * Straight from the owner's design. It answers "why would I make one of
+ * these" for somebody who has none — which is the only moment this list is
+ * ever shown.
+ */
+const WORKSPACE_FEATURES = [
+  { icon: PersonPlusGlyph, label: "Invite collaborators" },
+  { icon: ShareGlyph, label: "Share selected clips" },
+  { icon: LockGlyph, label: "Keep your own library separate" },
+] as const
 
 /**
  * Your workspaces, the traditional shape: the first one is where all your
@@ -38,21 +64,41 @@ function WorkspacesBody() {
   const [failed, setFailed] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState("")
-  const [inviteEmail, setInviteEmail] = useState("")
+  /**
+   * The addresses to invite, one per row. Starts as a single empty row so the
+   * field is there to type into without anybody having to ask for it.
+   */
+  const [inviteEmails, setInviteEmails] = useState<string[]>([""])
   const [creating, setCreating] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   /**
-   * Set when a workspace was created but its invitation email could not be
-   * sent. The invitation itself is live — this holds the link so the owner
-   * can pass it on by hand, because nothing else in the app can recover it.
+   * Set when a workspace was created but one or more invitation emails could
+   * not be sent. Those invitations are live — this holds their links so the
+   * owner can pass them on by hand, because nothing else in the app can
+   * recover them.
    */
   const [handoff, setHandoff] = useState<{
     workspace: { id: string; name: string }
-    email: string
-    url: string
+    links: Array<{ email: string; url: string }>
   } | null>(null)
   const router = useRouter()
   const toast = useToast()
+  const { requireSignIn } = useSignInGate()
+
+  /**
+   * Making a room is inviting people into it — the modal asks for the first
+   * address in the same breath — so it needs a person, not a browser tab.
+   */
+  const askToCreate = () =>
+    // A workspace has no id yet, so the intent carries the page instead: the
+    // dialog reopens and the name they typed is theirs to type again. Better
+    // than losing the whole errand.
+    requireSignIn({ action: "invite", workspaceId: "new" }, () => setCreateOpen(true))
+
+  useResumeIntent(
+    (intent) => intent.action === "invite" && intent.workspaceId === "new",
+    () => setCreateOpen(true),
+  )
 
   const load = () =>
     api
@@ -74,20 +120,27 @@ function WorkspacesBody() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** Put the form back to a single blank invite row. */
+  const resetForm = () => {
+    setName("")
+    setInviteEmails([""])
+  }
+
   /** Close the handoff and go to the workspace that was made. */
   const finishHandoff = () => {
     const target = handoff?.workspace.id
     setHandoff(null)
     setCreateOpen(false)
-    setName("")
-    setInviteEmail("")
+    resetForm()
     if (target) router.push(`/workspaces/${target}`)
   }
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault()
     const trimmed = name.trim()
-    const email = inviteEmail.trim()
+    // Blank rows are somebody who added one and thought better of it, and the
+    // same address typed twice is one invitation, not two.
+    const addresses = [...new Set(inviteEmails.map((address) => address.trim()).filter(Boolean))]
     if (!trimmed || creating) return
     setFormError(null)
     setCreating(true)
@@ -95,36 +148,53 @@ function WorkspacesBody() {
       const { workspace } = await api.createWorkspace(trimmed)
       window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
 
-      if (email) {
-        // The room exists either way; the invitation is its own step with its
-        // own honest outcome.
+      // The room exists either way; each invitation is its own step with its
+      // own honest outcome, and one failing must not stop the rest.
+      const emailed: string[] = []
+      const links: Array<{ email: string; url: string }> = []
+      const refused: string[] = []
+
+      for (const email of addresses) {
         try {
           const result = await api.inviteToWorkspace(workspace.id, email)
-          if (!result.emailed) {
+          if (result.emailed) {
+            emailed.push(email)
+          } else {
             // The invitation is REAL and its link works — only the email
             // failed. Closing here would throw that link away, and nothing
-            // else in the app can recover it, so the dialog stays open and
-            // hands it over instead.
-            setHandoff({ workspace, email, url: result.acceptUrl })
-            return
+            // else in the app can recover it.
+            links.push({ email, url: result.acceptUrl })
           }
-          toast({ body: `${workspace.name} created — invitation sent to ${email}.` })
-        } catch (cause) {
-          toast({
-            type: "error",
-            body:
-              cause instanceof ApiError
-                ? `${workspace.name} created, but: ${cause.message}`
-                : `${workspace.name} created, but the invitation couldn't be sent.`,
-          })
+        } catch {
+          refused.push(email)
         }
-      } else {
+      }
+
+      // Say what actually happened to each one, rather than a single verdict
+      // that would have to be wrong about somebody.
+      if (refused.length > 0) {
+        toast({
+          type: "error",
+          body: `${workspace.name} created, but no invitation could be made for ${refused.join(", ")}.`,
+        })
+      } else if (emailed.length > 0 && links.length === 0) {
+        toast({
+          body: `${workspace.name} created — ${
+            emailed.length === 1 ? `invitation sent to ${emailed[0]}` : `${emailed.length} invitations sent`
+          }.`,
+        })
+      } else if (links.length === 0) {
         toast({ body: `${workspace.name} created.` })
       }
 
+      if (links.length > 0) {
+        // The dialog stays open and hands the links over instead of closing.
+        setHandoff({ workspace, links })
+        return
+      }
+
       setCreateOpen(false)
-      setName("")
-      setInviteEmail("")
+      resetForm()
       router.push(`/workspaces/${workspace.id}`)
     } catch (cause) {
       setFormError(cause instanceof ApiError ? cause.message : "Couldn't create that workspace. Try again.")
@@ -176,139 +246,252 @@ function WorkspacesBody() {
 
   return (
     <VStack gap={5} align="stretch">
-      <HStack justify="between" align="start" gap={4} wrap="wrap">
+      {/* The action sits under the subtitle rather than opposite the title:
+          it is the first thing to do on this page, not a corner utility, and
+          the design puts it in the reading order where somebody arriving with
+          no workspaces would look for it. One button in one place, whether or
+          not any rooms exist — it used to be hidden while the empty state
+          carried its own copy of it, which meant the control moved. */}
+      <VStack gap={2} align="start">
         <VStack gap={1.5}>
           <Heading level={1}>Workspaces</Heading>
-          <Text as="p" type="supporting" display="block">
-            Rooms you share with other people. Your own clips live under Your clips.
+          <Text as="p" type="body" color="secondary" display="block">
+            Create shared spaces for clips, collaborators, and publishing.
           </Text>
         </VStack>
-        {/* While the no-shared-workspaces empty state is on the page it owns
-            this action; two identical primary buttons is one too many. */}
-        {shared.length > 0 && (
-          <Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />
-        )}
-      </HStack>
+        <Button
+          label="Create workspace"
+          variant="primary"
+          icon={<Icon icon={CirclePlusGlyph} />}
+          onClick={askToCreate}
+        />
+      </VStack>
 
       {/* The personal room is not listed. It is the same place "Your clips"
           already opens, and showing it here as well made one room look like
           two. This page is the shared ones. */}
-      {shared.length > 0 && (
-        <List hasDividers>
-          {shared.map((room) => (
-            <ListItem
-              key={room.id}
-              label={room.isOwner ? room.name : `${personName(room.ownerEmail) ?? "Shared"} · ${room.name}`}
-              href={`/workspaces/${room.id}`}
-              description={
-                `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
-                `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
-                (room.isOwner ? " · yours" : "")
-              }
-            />
-          ))}
-        </List>
+      {shared.length > 0 ? (
+        <Card variant="muted" padding={0}>
+          <List hasDividers>
+            {shared.map((room) => (
+              <ListItem
+                key={room.id}
+                label={room.isOwner ? room.name : `${personName(room.ownerEmail) ?? "Shared"} · ${room.name}`}
+                href={`/workspaces/${room.id}`}
+                description={
+                  `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
+                  `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
+                  (room.isOwner ? " · yours" : "")
+                }
+              />
+            ))}
+          </List>
+        </Card>
+      ) : (
+        <Card variant="muted" padding={6}>
+          {/* Words on the left, picture on the right, a rule between them.
+              Below the breakpoint the picture is dropped rather than stacked:
+              it explains the words, and on a phone it would push them off the
+              screen to do it. */}
+          {/* Two equal halves. Letting the text column size itself left the
+              picture squeezed against the right edge at about two thirds the
+              size the design draws it. */}
+          <HStack gap={8} align="center" justify="between" wrap="wrap">
+            <VStack gap={4} align="stretch" className="min-w-[280px] flex-1 basis-0">
+              <VStack gap={1.5}>
+                <Heading level={1} accessibilityLevel={2}>
+                  No workspaces yet
+                </Heading>
+                <Text as="p" type="body" color="secondary" display="block">
+                  Create a workspace to share clips with your team.
+                </Text>
+              </VStack>
+              <VStack gap={2} align="stretch">
+                {WORKSPACE_FEATURES.map((feature) => (
+                  <HStack key={feature.label} gap={3} align="center">
+                    <IconWell icon={feature.icon} size="sm" />
+                    <Text as="span" display="block">
+                      {feature.label}
+                    </Text>
+                  </HStack>
+                ))}
+              </VStack>
+            </VStack>
+            {/* A rule between the halves. It needs its own height — inside a
+                centre-aligned row a vertical divider has nothing to stretch
+                against and collapses to nothing. */}
+            <Divider orientation="vertical" className="hidden h-[240px] lg:block" />
+            <div className="hidden flex-1 basis-0 justify-center text-primary lg:flex">
+              <WorkspaceIllustration className="w-full max-w-[470px]" />
+            </div>
+          </HStack>
+        </Card>
       )}
 
-      {shared.length === 0 && (
-        // The library row exists above; what is missing is the SHARED kind,
-        // so the empty state sells exactly that and its action opens the
-        // create dialog.
-        <Center minHeight="45vh">
-          <EmptyState
-            icon={<GhostRoom />}
-            title="No shared workspaces yet"
-            description="Create one, invite people into it, and send clips there from your library — everyone in the workspace sees what's sent."
-            actions={<Button label="Create workspace" variant="primary" onClick={() => setCreateOpen(true)} />}
-          />
+      <SectionCard icon={ClockGlyph} title="Recent activity">
+        <Center minHeight={150}>
+          <VStack gap={2} align="center">
+            <span
+              aria-hidden
+              className="mb-2 flex h-[72px] w-[72px] items-center justify-center rounded-full bg-surface text-primary ring-1 ring-border"
+            >
+              <InboxGlyph className="h-7 w-7" />
+            </span>
+            <Text as="p" weight="medium" display="block">
+              Nothing here yet.
+            </Text>
+            <Text as="p" type="body" color="secondary" display="block">
+              Activity from your workspaces will appear here.
+            </Text>
+          </VStack>
         </Center>
-      )}
+      </SectionCard>
+
+      {/* Making the room, and handing over a link that could not be emailed,
+          are two different moments and now two different dialogs. They used to
+          share one, which meant the picture and the failure banner had to take
+          turns inside the same frame. */}
+      <SplitModal
+        isOpen={createOpen && !handoff}
+        onOpenChange={setCreateOpen}
+        photo="workspace"
+        title="Create a workspace"
+        subtitle="Share clips with your team."
+        footer={
+          <>
+            <Button label="Cancel" variant="ghost" onClick={() => setCreateOpen(false)} />
+            <Button
+              label="Create workspace"
+              variant="primary"
+              type="submit"
+              // The button lives in the footer, outside the form element, so
+              // it is tied back to it by id rather than by nesting.
+              form={CREATE_FORM_ID}
+              endContent={<Icon icon={ArrowRightGlyph} />}
+              isLoading={creating}
+            />
+          </>
+        }
+      >
+        <form id={CREATE_FORM_ID} onSubmit={create}>
+          <VStack gap={4} align="stretch">
+            {formError && <Banner status="error" title="That didn't work" description={formError} />}
+            <TextInput
+              label="Workspace name"
+              isRequired
+              value={name}
+              onChange={(value) => setName(value)}
+              placeholder="Northside Films"
+              hasAutoFocus
+            />
+
+            {/* One address per row, and a way to add another. The mockup shows
+                the "+ Add another" affordance, and it is the difference
+                between starting a room with your team in it and starting one
+                with a single person and a chore for later. */}
+            <VStack gap={2} align="stretch">
+              {inviteEmails.map((address, index) => (
+                <TextInput
+                  key={index}
+                  label={index === 0 ? "Invite someone (optional)" : `Invite someone else (${index + 1})`}
+                  isLabelHidden={index > 0}
+                  type="email"
+                  value={address}
+                  onChange={(value) =>
+                    setInviteEmails((current) =>
+                      current.map((entry, position) => (position === index ? value : entry)),
+                    )
+                  }
+                  placeholder="teammate@example.com"
+                />
+              ))}
+              <HStack justify="start">
+                <Button
+                  label="Add another"
+                  variant="ghost"
+                  size="sm"
+                  icon={<Icon icon={PlusGlyph} size="sm" />}
+                  // A row that is still blank is not a row anybody needs a
+                  // second of. Guarding here rather than letting empties pile
+                  // up keeps the modal honest about how much it is asking for.
+                  isDisabled={inviteEmails.some((address) => address.trim() === "")}
+                  onClick={() => setInviteEmails((current) => [...current, ""])}
+                />
+              </HStack>
+            </VStack>
+          </VStack>
+        </form>
+      </SplitModal>
 
       <Dialog
-        isOpen={createOpen}
+        isOpen={Boolean(handoff)}
         onOpenChange={(open) => {
-          setCreateOpen(open)
           // Dismissing the handoff is the owner saying they have the link;
           // the workspace was made either way, so take them to it.
-          if (!open && handoff) finishHandoff()
+          if (!open) finishHandoff()
         }}
         purpose="form"
         width={420}
       >
-        {handoff ? (
+        {handoff && (
           <>
             <DialogHeader title={`${handoff.workspace.name} is ready`} />
             <VStack gap={3} align="stretch">
               <Banner
                 status="warning"
-                title={`The invitation for ${handoff.email} couldn't be emailed`}
-                description="The invitation itself is live — send this link to them yourself. It works once and expires in seven days."
+                title={
+                  handoff.links.length === 1
+                    ? `The invitation for ${handoff.links[0]!.email} couldn't be emailed`
+                    : `${handoff.links.length} invitations couldn't be emailed`
+                }
+                description="The invitations themselves are live — send these links on yourself. Each works once and expires in seven days."
               />
-              {/* The link is the whole point of this state: selectable, and
-                  scrolling inside its own line rather than widening the
-                  dialog. */}
-              <Text
-                as="p"
-                type="supporting"
-                display="block"
-                className="select-all overflow-x-auto whitespace-nowrap rounded-md bg-black/30 p-2"
-              >
-                {handoff.url}
-              </Text>
+              {/* The links are the whole point of this state: selectable, and
+                  scrolling inside their own line rather than widening the
+                  dialog. Each is labelled with who it belongs to, because
+                  handing the wrong person the wrong link lets them into the
+                  room under somebody else's invitation. */}
+              {handoff.links.map((link) => (
+                <VStack key={link.email} gap={1} align="stretch">
+                  <Text as="p" type="supporting" display="block">
+                    {link.email}
+                  </Text>
+                  <HStack gap={2} align="center">
+                    <Text
+                      as="p"
+                      type="supporting"
+                      display="block"
+                      className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md bg-black/30 p-2"
+                    >
+                      {link.url}
+                    </Text>
+                    <Button
+                      label="Copy"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        // Optional chaining short-circuits the WHOLE chain when
+                        // the clipboard API is absent (plain-HTTP origins), so
+                        // the guard must be explicit or the button does nothing.
+                        if (!navigator.clipboard) {
+                          toast({ type: "error", body: "Couldn't copy here — select the link and copy it." })
+                          return
+                        }
+                        void navigator.clipboard
+                          .writeText(link.url)
+                          .then(() => toast({ body: `Link for ${link.email} copied.` }))
+                          .catch(() =>
+                            toast({ type: "error", body: "Couldn't copy — select the link and copy it." }),
+                          )
+                      }}
+                    />
+                  </HStack>
+                </VStack>
+              ))}
               <HStack gap={2} justify="end">
-                <Button
-                  label="Copy link"
-                  variant="secondary"
-                  onClick={() => {
-                    // Optional chaining short-circuits the WHOLE chain when
-                    // the clipboard API is absent (plain-HTTP origins), so
-                    // the guard must be explicit or the button does nothing.
-                    if (!navigator.clipboard) {
-                      toast({ type: "error", body: "Couldn't copy here — select the link and copy it." })
-                      return
-                    }
-                    void navigator.clipboard
-                      .writeText(handoff.url)
-                      .then(() => toast({ body: "Link copied." }))
-                      .catch(() => toast({ type: "error", body: "Couldn't copy — select the link and copy it." }))
-                  }}
-                />
                 <Button label="Done" variant="primary" onClick={finishHandoff} />
               </HStack>
             </VStack>
-          </>
-        ) : (
-          <>
-            <DialogHeader title="Create a workspace" />
-            <form onSubmit={create}>
-              <VStack gap={3} align="stretch">
-                {formError && <Banner status="error" title="That didn't work" description={formError} />}
-                <TextInput
-                  label="Workspace name"
-                  isRequired
-                  value={name}
-                  onChange={(value) => setName(value)}
-                  placeholder="e.g. Northside Films"
-                  hasAutoFocus
-                />
-                <TextInput
-                  label="Invite someone (optional)"
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(value) => setInviteEmail(value)}
-                  placeholder="teammate@example.com"
-                  description="They'll get an email link that works once and expires in seven days."
-                />
-                <Text as="p" type="supporting" display="block">
-                  You'll own the workspace. Everyone in it sees the clips sent there; your own library
-                  stays yours.
-                </Text>
-                <HStack gap={2} justify="end">
-                  <Button label="Cancel" variant="ghost" onClick={() => setCreateOpen(false)} />
-                  <Button label="Create workspace" variant="primary" type="submit" isLoading={creating} />
-                </HStack>
-              </VStack>
-            </form>
           </>
         )}
       </Dialog>
@@ -319,7 +502,7 @@ function WorkspacesBody() {
 export default function WorkspacesScreen() {
   return (
     <AppShell active="workspaces">
-      <Layout height="auto" contentWidth={880}>
+      <Layout height="auto" contentWidth={1213}>
         <LayoutContent padding={6}>
           <WorkspacesBody />
         </LayoutContent>

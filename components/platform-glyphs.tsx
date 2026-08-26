@@ -65,3 +65,20 @@ export function PlatformGlyph({ platform }: { platform: string }) {
   const Glyph = GLYPHS[platform] ?? UnknownPlatformGlyph
   return <Glyph />
 }
+
+/**
+ * A platform's mark in a well, ready to sit beside its name.
+ *
+ * Extracted so the container is written once rather than at every call site.
+ * Styled with token-backed Tailwind utilities — `bg-surface`, `text-secondary`,
+ * `ring-border` — not inline colour values: the repo's rule is that every
+ * value comes from a token, and a hardcoded opacity would stop following the
+ * theme the moment one changed.
+ */
+export function PlatformMark({ platform }: { platform: string }) {
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-secondary ring-1 ring-border">
+      <PlatformGlyph platform={platform} />
+    </span>
+  )
+}

@@ -4,13 +4,18 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Banner } from "@astryxdesign/core/Banner"
 import { Button } from "@astryxdesign/core/Button"
+import { Card } from "@astryxdesign/core/Card"
 import { Center } from "@astryxdesign/core/Center"
+import { Divider } from "@astryxdesign/core/Divider"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { EmptyState } from "@astryxdesign/core/EmptyState"
 import { Heading } from "@astryxdesign/core/Heading"
+import { Icon } from "@astryxdesign/core/Icon"
+import { IconButton } from "@astryxdesign/core/IconButton"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
+import { StatusDot } from "@astryxdesign/core/StatusDot"
 import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { useToast } from "@astryxdesign/core/Toast"
@@ -18,7 +23,13 @@ import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { AppShell } from "@/components/app-shell"
 import { GhostRows } from "@/components/empty-illustrations"
+import { Grid } from "@astryxdesign/core/Grid"
+import { ArrowRightGlyph, LockGlyph, PlusGlyph } from "@/components/glyphs"
+import { BarsGlyph, BoltGlyph, BroadcastGlyph, PersonGlyph, SparkGlyph } from "@/components/feature-glyphs"
+import { IconWell, SectionCard } from "@/components/section-card"
 import { PlatformGlyph } from "@/components/platform-glyphs"
+import { PlatformLogo } from "@/components/platform-logos"
+import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
 
 /**
  * Publishing, now real: connect the accounts you post to, see them plainly,
@@ -40,8 +51,34 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
   instagram: "Instagram",
+  x: "X",
 }
-const PLATFORMS = ["tiktok", "youtube", "instagram"] as const
+const PLATFORMS = ["tiktok", "instagram", "youtube", "x"] as const
+
+/**
+ * Why anyone would connect an account at all.
+ *
+ * Straight from the owner's design. It answers the question somebody asks
+ * before handing over access to an account that is often their livelihood, and
+ * answering it on the page beats making them guess.
+ */
+const WHY_CONNECT = [
+  {
+    icon: BoltGlyph,
+    title: "Publish faster",
+    body: "Skip the extra steps and post straight from CLIPIT.",
+  },
+  {
+    icon: BarsGlyph,
+    title: "Track performance",
+    body: "See how your clips perform across connected platforms.",
+  },
+  {
+    icon: PersonGlyph,
+    title: "Keep accounts saved",
+    body: "We'll keep your accounts secure for effortless publishing.",
+  },
+] as const
 
 /**
  * The OAuth return, reported.
@@ -57,6 +94,8 @@ function CallbackBanner() {
   const connected = params.get("connected")
   const error = params.get("connect_error")
   const platform = params.get("platform")
+  /** The page that was added, when the backend could identify which one. */
+  const account = params.get("account")
   const toast = useToast()
   const announced = useRef<string | null>(null)
 
@@ -64,7 +103,15 @@ function CallbackBanner() {
     if (!connected) return
     if (announced.current === connected) return
     announced.current = connected
-    toast({ body: `${PLATFORM_LABELS[connected] ?? connected} is connected.` })
+    // Name the PAGE, not the platform. You connect an account, and with two
+    // Instagram pages "Instagram is connected" cannot say which one you just
+    // added. Falls back to the platform only when the backend could not
+    // identify the account — better than naming the wrong one.
+    toast({
+      body: account
+        ? `${account} is connected.`
+        : `${PLATFORM_LABELS[connected] ?? connected} is connected.`,
+    })
 
     // Consume the parameter. Codex, P2: a ref only survives THIS mount, and
     // ?connected= stays in history — so leaving the page and coming back with
@@ -75,8 +122,9 @@ function CallbackBanner() {
     const url = new URL(window.location.href)
     url.searchParams.delete("connected")
     url.searchParams.delete("platform")
+    url.searchParams.delete("account")
     window.history.replaceState(window.history.state, "", url.toString())
-  }, [connected, toast])
+  }, [connected, account, toast])
 
   if (error === "nothing_new") {
     // The backend compared the account list before and after this attempt
@@ -115,11 +163,20 @@ function PublishingBody() {
   const [page, setPage] = useState<SocialAccountsPage | null>(null)
   const [failed, setFailed] = useState(false)
   const [connecting, setConnecting] = useState<string | null>(null)
+  /**
+   * The header's "Connect accounts" is the only action on this page that does
+   * not already name a platform, so it has to ask which one. The rows below it
+   * each carry their own Connect; this exists because the design puts a
+   * primary action in the header, and a primary action that cannot say what it
+   * will do would be worse than one that asks.
+   */
+  const [chooserOpen, setChooserOpen] = useState(false)
   /** The platform whose connect modal is open, and whether this is a
    *  fresh connection or a reconnect of a flagged account. */
   const [connectTarget, setConnectTarget] = useState<{ platform: string; reconnect: boolean } | null>(null)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const { requireSignIn } = useSignInGate()
 
   useEffect(() => {
     let cancelled = false
@@ -149,6 +206,36 @@ function PublishingBody() {
     setActionError(null)
     setConnectTarget({ platform, reconnect })
   }
+
+  /**
+   * Connecting needs a person: an account bound to a guest tab would be
+   * stranded the moment that tab closed. The prompt asks, and coming back
+   * from it reopens the platform they were connecting rather than dropping
+   * them on the page with no memory of it.
+   */
+  const askToConnectSignedIn = (platform: string, reconnect = false) =>
+    requireSignIn({ action: "connect", platform }, () => askToConnect(platform, reconnect))
+
+  /**
+   * The header's Connect, gated before the chooser rather than after it.
+   *
+   * Picking a platform and only then being told to sign in wastes the choice
+   * and asks the same question one step too late. The intent carries no
+   * platform because none has been picked yet — coming back from the email
+   * link reopens the chooser, which is where they were.
+   */
+  const askToChooseSignedIn = () =>
+    requireSignIn({ action: "connect", platform: "any" }, () => setChooserOpen(true))
+
+  useResumeIntent(
+    (intent) => intent.action === "connect",
+    (intent) => {
+      if (intent.action !== "connect") return
+      // "any" is the header's Connect, which had not picked a platform yet.
+      if (intent.platform === "any") setChooserOpen(true)
+      else askToConnect(intent.platform)
+    },
+  )
 
   /**
    * Which connect attempt is the live one. Closing the modal, or starting a
@@ -235,45 +322,13 @@ function PublishingBody() {
   // The first-account moment gets the whole stage: one empty state whose
   // actions ARE the connect buttons, instead of a bare sentence floating
   // above a distant section.
-  if (connectedAccounts.length === 0) {
-    return (
-      <VStack gap={4} align="stretch">
-        {/* Not while the connect dialog is open: it reports the same failure,
-            and one problem shown twice on one screen reads as two problems.
-            The dialog owns it, because that is where the action was taken. */}
-        {actionError && !connectTarget && (
-          <Banner status="error" title="That didn't work" description={actionError} />
-        )}
-        <Center minHeight="55vh">
-        <EmptyState
-          icon={<GhostRows />}
-          title="Connect your first account"
-          description="You'll sign in with the platform itself — CLIPIT never sees that password. Once connected, every ready clip in your library can publish straight to it."
-          actions={
-            <>
-              {PLATFORMS.map((platform) => (
-                <Button
-                  key={platform}
-                  label={`Connect ${PLATFORM_LABELS[platform]}`}
-                  icon={<PlatformGlyph platform={platform} />}
-                  variant="secondary"
-                  onClick={() => askToConnect(platform)}
-                />
-              ))}
-            </>
-          }
-        />
-        </Center>
-        <ConnectDialog
-          target={connectTarget}
-          connecting={connecting}
-          actionError={actionError}
-          onClose={closeConnect}
-          onContinue={(platform) => void connect(platform)}
-        />
-      </VStack>
-    )
-  }
+  // There is no separate "nothing connected yet" screen any more. It used to
+  // short-circuit this whole page into a centred EmptyState with a row of
+  // Connect buttons — which meant the empty state and the populated state were
+  // two different layouts, and the four platforms appeared in a different
+  // shape depending on whether you had any. The owner's design makes the two
+  // cards below the empty state: the same four rows, each already carrying its
+  // own Connect. Nothing is lost and the page stops rearranging itself.
 
   return (
     <VStack gap={5} align="stretch">
@@ -281,89 +336,146 @@ function PublishingBody() {
         <Banner status="error" title="That didn't work" description={actionError} />
       )}
 
-      <VStack gap={2} align="stretch">
-        <Heading level={2}>Connected accounts</Heading>
-        {connectedAccounts.length === 0 ? (
-          <Text as="p" type="supporting" display="block">
-            Nothing connected yet — pick a platform below to connect your first account.
-          </Text>
-        ) : (
-          /* A repeated collection is rows, not Card-wrapped items — the
-             AGENTS.md interface rule. */
+      {/* Two panels, as the design has them: what you have connected, and
+          why you would. It replaces a card per platform — that grouping
+          answered "which platforms, and what do I have on each" but spread
+          four small cards down the page where the design has one list. The
+          accounts still nest under their platform, because the design shows
+          the empty state and dropping them would lose what somebody has. */}
+      <SectionCard
+        icon={BroadcastGlyph}
+        title="Connected accounts"
+        description="Link your social accounts to publish clips with one click."
+        action={
+          <Button
+            label="Connect accounts"
+            variant="primary"
+            icon={<Icon icon={PlusGlyph} size="sm" />}
+            onClick={askToChooseSignedIn}
+          />
+        }
+      >
+        <Card variant="muted" padding={0}>
           <List hasDividers>
-            {connectedAccounts.map((account) => (
-              <ListItem
-                key={account.id}
-                // The platform's mark, so a list of connections is scannable
-                // rather than four rows of similar text.
-                // Codex, P1: the container was hardcoded white opacities, so
-                // it would not follow a theme change. Astryx has no component
-                // for "our own mark in a themed well" — Avatar takes a person,
-                // Icon takes a Lucide name — so it stays hand-built, but every
-                // colour now comes from a token.
-                startContent={
-                  <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                    style={{
-                      backgroundColor: "var(--color-background-surface)",
-                      boxShadow: "inset 0 0 0 1px var(--color-border)",
-                      color: "var(--color-text-secondary)",
-                    }}
-                  >
-                    <PlatformGlyph platform={account.platform} />
-                  </span>
-                }
-                label={PLATFORM_LABELS[account.platform] ?? account.platform}
-                description={
-                  (account.displayName ?? "Connected account") +
-                  (account.status === "reconnect_required" ? " — needs reconnecting" : "")
-                }
-                endContent={
-                  account.status === "reconnect_required" ? (
+            {PLATFORMS.map((platform) => {
+              const mine = connectedAccounts.filter((account) => account.platform === platform)
+              return (
+                <ListItem
+                  key={platform}
+                  startContent={<PlatformLogo platform={platform} size="sm" />}
+                  label={PLATFORM_LABELS[platform]}
+                  description={`Publish clips directly to ${PLATFORM_LABELS[platform]}`}
+                  endContent={
                     <Button
-                      label="Reconnect"
-                      variant="primary"
-                      size="sm"
-                      onClick={() => askToConnect(account.platform, true)}
-                    />
-                  ) : (
-                    <Button
-                      label="Disconnect"
+                      // Always "Connect". It read "Connect another" once one
+                      // existed, which made the same control change its name —
+                      // and the owner's call is that one word, steady in both
+                      // states, is easier to find than a more precise one that
+                      // moves.
+                      label="Connect"
+                      // Four buttons reading "Connect" and nothing else are
+                      // indistinguishable to anyone who cannot see which row
+                      // they are in. The design wants the one steady word on
+                      // screen, so the platform goes in the accessible name
+                      // instead of the label.
+                      aria-label={`Connect ${PLATFORM_LABELS[platform]}`}
                       variant="secondary"
-                      size="sm"
-                      isLoading={busyAccountId === account.id}
-                      onClick={() => void disconnect(account)}
+                      onClick={() => askToConnectSignedIn(platform)}
                     />
-                  )
-                }
-              />
-            ))}
+                  }
+                />
+              )
+            })}
           </List>
+        </Card>
+
+        {connectedAccounts.length > 0 && (
+          <VStack gap={2} align="stretch">
+            <Text as="p" type="body" color="secondary" display="block">
+              {connectedAccounts.length} {connectedAccounts.length === 1 ? "account" : "accounts"} connected
+            </Text>
+            {/* Accounts are dense data, so they are rows — the repo rule is
+                List/Item for a repeated collection, never a Card each. */}
+            <Card variant="muted" padding={0}>
+              <List hasDividers>
+                {connectedAccounts.map((account) => (
+                  <ListItem
+                    key={account.id}
+                    startContent={<PlatformLogo platform={account.platform} size="sm" />}
+                    label={account.displayName ?? "Connected account"}
+                    description={PLATFORM_LABELS[account.platform] ?? account.platform}
+                    endContent={
+                      <HStack gap={3} align="center">
+                        {/* StatusDot, not Badge: this is a state, and Badge is
+                            reserved for counts here. */}
+                        {account.status === "reconnect_required" ? (
+                          <StatusDot variant="error" label="Needs reconnecting" />
+                        ) : (
+                          <StatusDot variant="success" label="Connected" />
+                        )}
+                        {account.status === "reconnect_required" ? (
+                          <Button
+                            label="Reconnect"
+                            variant="primary"
+                            size="sm"
+                            onClick={() => askToConnectSignedIn(account.platform, true)}
+                          />
+                        ) : (
+                          <Button
+                            label="Disconnect"
+                            variant="secondary"
+                            size="sm"
+                            isLoading={busyAccountId === account.id}
+                            onClick={() => void disconnect(account)}
+                          />
+                        )}
+                      </HStack>
+                    }
+                  />
+                ))}
+              </List>
+            </Card>
+          </VStack>
         )}
-      </VStack>
+      </SectionCard>
 
-      <VStack gap={2} align="stretch">
-        <Heading level={2}>Connect a platform</Heading>
-        <Text as="p" type="supporting" display="block">
-          You'll sign in with the platform itself; CLIPIT never sees that password.
-        </Text>
-        <HStack gap={2} wrap="wrap">
-          {PLATFORMS.map((platform) => (
-            <Button
-              key={platform}
-              label={`Connect ${PLATFORM_LABELS[platform]}`}
-              icon={<PlatformGlyph platform={platform} />}
-              variant="secondary"
-              onClick={() => askToConnect(platform)}
-            />
+      <SectionCard icon={SparkGlyph} title="Why connect accounts?">
+        {/* Three equal columns that divide the card, not a responsive pack:
+            `minWidth` bunched them into a narrow band on the left while the
+            right half of the card sat empty, and every description wrapped to
+            four lines. They collapse to one column on a narrow viewport. */}
+        <Grid columns={{ minWidth: 280, max: 3 }} gap={0}>
+          {WHY_CONNECT.map((reason, index) => (
+            <HStack
+              key={reason.title}
+              gap={3}
+              align="start"
+              // A rule between the columns, as the design draws it, and never
+              // before the first one.
+              className={index > 0 ? "sm:border-l sm:border-border sm:pl-6" : "sm:pr-6"}
+            >
+              <IconWell icon={reason.icon} size="sm" />
+              <VStack gap={0.5}>
+                <Text as="span" weight="medium" display="block">
+                  {reason.title}
+                </Text>
+                <Text as="p" type="body" color="secondary" display="block">
+                  {reason.body}
+                </Text>
+              </VStack>
+            </HStack>
           ))}
-        </HStack>
-      </VStack>
+        </Grid>
+      </SectionCard>
 
-      <Text as="p" type="supporting" display="block">
-        Publishing happens from your library: every ready clip has a Publish button that posts it
-        to the accounts you pick.
-      </Text>
+      <PlatformChooser
+        isOpen={chooserOpen}
+        onClose={() => setChooserOpen(false)}
+        onPick={(platform: string) => {
+          setChooserOpen(false)
+          askToConnectSignedIn(platform)
+        }}
+      />
 
       <ConnectDialog
         target={connectTarget}
@@ -373,6 +485,60 @@ function PublishingBody() {
         onContinue={(platform) => void connect(platform)}
       />
     </VStack>
+  )
+}
+
+/**
+ * Which platform the header's Connect is for.
+ *
+ * A short list rather than a full modal: it is a choice between four things
+ * the person can already see on the page, so it wants to be quick and to get
+ * out of the way, not to be a second screen.
+ */
+function PlatformChooser({
+  isOpen,
+  onClose,
+  onPick,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onPick: (platform: string) => void
+}) {
+  return (
+    <Dialog
+      isOpen={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      purpose="info"
+      width={420}
+      padding={5}
+      aria-label="Connect an account"
+    >
+      <VStack gap={4} align="stretch">
+        <VStack gap={1} align="stretch">
+          <Heading level={1} accessibilityLevel={2}>
+            Connect an account
+          </Heading>
+          <Text as="p" type="body" color="secondary" display="block">
+            Pick where you want to post.
+          </Text>
+        </VStack>
+        <Card variant="muted" padding={0}>
+          <List hasDividers>
+            {PLATFORMS.map((platform) => (
+              <ListItem
+                key={platform}
+                startContent={<PlatformLogo platform={platform} size="sm" />}
+                label={PLATFORM_LABELS[platform]}
+                onClick={() => onPick(platform)}
+                endContent={<Icon icon={ArrowRightGlyph} size="sm" />}
+              />
+            ))}
+          </List>
+        </Card>
+      </VStack>
+    </Dialog>
   )
 }
 
@@ -399,6 +565,7 @@ function ConnectDialog({
   onContinue: (platform: string) => void
 }) {
   const label = target ? PLATFORM_LABELS[target.platform] ?? target.platform : ""
+  const title = target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`
   return (
     <Dialog
       isOpen={target !== null}
@@ -406,42 +573,62 @@ function ConnectDialog({
         if (!open) onClose()
       }}
       purpose="info"
-      width={460}
+      // Measured off the mockup once the two were normalised to the same
+      // scale: the card is 543px there against the 440 this had, and every
+      // gap inside it is roughly twice what the design system gives by
+      // default. The layout was right and the density was not.
+      width={540}
+      padding={8}
+      aria-label={title}
     >
-      <DialogHeader
-        title={target?.reconnect ? `Reconnect ${label}` : `Connect ${label}`}
-        onOpenChange={(open) => {
-          if (!open) onClose()
-        }}
-      />
       {target && (
-        <VStack gap={3} align="stretch">
-          {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
-          {target.reconnect && (
-            <Text as="p" type="body" color="secondary" display="block">
-              This account needs a fresh sign-in — posts can't go out until it's reconnected.
-            </Text>
-          )}
+        <VStack gap={6} align="stretch">
+          <HStack justify="between" align="start">
+            <PlatformLogo platform={target.platform} />
+            <IconButton
+              icon={<Icon icon="close" />}
+              label="Close"
+              variant="ghost"
+              // Its own well, as in the mockup — a bare X on a flat panel has
+              // nothing to aim at.
+              className="rounded-full ring-1 ring-border"
+              onClick={onClose}
+            />
+          </HStack>
+
           <VStack gap={2} align="stretch">
-            <Text as="p" type="body" display="block">
-              1. You'll be taken to a secure page to approve the connection.
-            </Text>
-            <Text as="p" type="body" display="block">
-              2. You sign in with {label} itself — CLIPIT never sees that password.
-            </Text>
-            <Text as="p" type="body" display="block">
-              3. You land back here, connected — and every ready clip in your library can
-              publish straight to it.
+            <Heading level={1} accessibilityLevel={2}>
+              {title}
+            </Heading>
+            <Text as="p" type="body" color="secondary" display="block">
+              {target.reconnect
+                ? `This account needs a fresh sign-in — posts can't go out until it's reconnected.`
+                : `Publish clips directly to ${label}.`}
             </Text>
           </VStack>
-          <HStack gap={2} justify="end">
-            <Button label="Cancel" variant="ghost" onClick={onClose} />
-            <Button
-              label="Continue"
-              variant="primary"
-              isLoading={connecting === target.platform}
-              onClick={() => onContinue(target.platform)}
-            />
+
+          {actionError && <Banner status="error" title="That didn't work" description={actionError} />}
+
+
+          {/* One button, full width, saying where it goes. The modal used to
+              spell out three numbered steps before it; the mockups cut them,
+              and they were reassurance nobody had asked for — the promise
+              that matters is the one below, which is about the password. */}
+          <Button
+            label={`Continue with ${label}`}
+            variant="primary"
+            width="100%"
+            size="lg"
+            endContent={<Icon icon={ArrowRightGlyph} />}
+            isLoading={connecting === target.platform}
+            onClick={() => onContinue(target.platform)}
+          />
+
+          <HStack gap={1.5} justify="center" align="center">
+            <Icon icon={LockGlyph} size="sm" />
+            <Text as="span" type="supporting">
+              You&apos;ll sign in securely on {label}.
+            </Text>
           </HStack>
         </VStack>
       )}
@@ -452,7 +639,7 @@ function ConnectDialog({
 export default function PublishingPage() {
   return (
     <AppShell active="publishing">
-      <Layout height="auto" contentWidth={880}>
+      <Layout height="auto" contentWidth={1213}>
         <LayoutContent padding={6}>
           <VStack gap={4} align="stretch">
             <VStack gap={1.5}>

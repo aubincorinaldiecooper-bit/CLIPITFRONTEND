@@ -8,7 +8,8 @@ import { neutralTheme } from "@astryxdesign/theme-neutral"
  * The colours are ours and unchanged: the near-black cinematic ground, zinc
  * structural surfaces, amber as the one accent (it is the colour of
  * timecodes, so it reads as "a moment in time" rather than decoration).
- * The serif (Instrument Serif) is the wordmark's voice only.
+ * The wordmark is Inter ExtraBold, from the owner's brand assets — the same
+ * lockup the landing uses, so the product has one wordmark rather than two.
  *
  * What is borrowed from Astryx's maintained GOTHIC theme is exactly its
  * STRUCTURE — the parts of a theme that carry polish without touching
@@ -29,6 +30,23 @@ export const clipitTheme = defineTheme({
   },
   // Gothic's pacing: slower, theatrical. Reduced motion is honoured globally.
   motion: { fast: 150, medium: 350, slow: 800, ratio: 0.75 },
+  /**
+   * One notch up from the inherited ramp, across the board.
+   *
+   * Measured, not chosen by eye. The owner's mockups and the built screens
+   * were normalised to the same scale — matched on the side nav, which appears
+   * in both — and compared. The layouts agreed; the type did not. Body wanted
+   * about 16px against the 14 here, quiet text 14 against 12, and a page title
+   * 40 against 32. Everything was uniformly one size small, which is why the
+   * screens read tighter and busier than the designs however the spacing
+   * around them was adjusted.
+   *
+   * The ratio is unchanged at 1.2 — the relationships between sizes were
+   * right, the anchor was not. Moving the anchor moves every step with it, so
+   * this is one change for the whole app rather than a size argued at each
+   * call site and left to drift.
+   */
+  typography: { scale: { base: 16, ratio: 1.2 } },
   tokens: {
     "--color-background-body": ["#ffffff", "#08080a"],
     // The amber accent seed tints the generated neutral ramp warm — the
@@ -67,9 +85,14 @@ export const clipitTheme = defineTheme({
     // here" — the flatness the owner read as unpolished beside the platforms
     // creators use all day. The steps below open the gap between a page
     // title, a section and its prose without touching the type family.
-    "--text-heading-1-size": "2rem",
-    "--text-heading-1-leading": "1.2",
-    "--text-heading-2-size": "1.25rem",
+    // These two are pinned rather than read off the scale, so raising the
+    // anchor above left them behind — a 32px title against 16px body is only
+    // twice the size, where the designs set it at two and a half. Moved with
+    // the rest so the gap between a page title, a section and its prose stays
+    // the one that was tuned here, at the size the mockups draw it.
+    "--text-heading-1-size": "2.5rem",
+    "--text-heading-1-leading": "1.15",
+    "--text-heading-2-size": "1.5rem",
     "--text-heading-2-leading": "1.3",
 
     "--text-display-1-size": "clamp(2.6rem, 5vw, 4.25rem)",
@@ -82,36 +105,63 @@ export const clipitTheme = defineTheme({
     // highlights, not the colour of buttons.
     button: {
       base: { borderRadius: "9999px" },
+      // The designs' full-width actions are substantially taller than the
+      // system's large step — a "Continue with TikTok" that carries a logo
+      // and an arrow needs the room, and it is the only thing on that panel
+      // to press.
+      "size:lg": { minHeight: "3.75rem", paddingInline: "1.75rem" },
       "variant:primary": {
         backgroundColor: "light-dark(#111113, #ffffff)",
         color: "light-dark(#ffffff, #0b0b0c)",
       },
     },
-    // The one place serif is allowed: the wordmark. The rail's heading IS
-    // the wordmark, so it carries the brand voice; every other heading is
-    // Geist via the heading font token above. Sized to anchor the roomier
-    // rail below it.
+    // The rail's heading IS the wordmark, so it carries the brand's own type:
+    // Inter ExtraBold at -2.5% tracking, matching components/brand/logo.tsx
+    // and the owner's spec. It was Instrument Serif until the brand assets
+    // arrived; the product had two different wordmarks for a while and now
+    // has one.
     "side-nav-heading": {
       base: {
-        fontFamily: "var(--font-instrument-serif), ui-serif, Georgia, serif",
-        fontSize: "1.5rem",
+        fontFamily: "var(--font-inter), system-ui, sans-serif",
+        fontWeight: "800",
+        fontSize: "1.35rem",
+        letterSpacing: "-0.025em",
         paddingBlock: "0.5rem",
       },
     },
-    // The rail rows, at the proportions of the reference (Instagram's rail):
-    // 24px icons, ~48px rows, a real gap between icon and label, and a label
-    // you don't have to squint at. Structure and behaviour stay Astryx's —
-    // only the scale changes. The icon half lives in components/side-nav.tsx
-    // (the glyphs are drawn at 24px); the two move together.
+    // List rows carry most of this app's real content — connected accounts,
+    // the platforms you can add, the accounts a clip will post to. The designs
+    // draw them at an 84px pitch with a 19px label; Astryx's default is nearer
+    // 60 and 16, which made four platforms look like a settings sub-menu
+    // rather than the main business of the page.
+    "list-item": {
+      base: {
+        paddingBlock: "1rem",
+        paddingInline: "1rem",
+        gap: "0.875rem",
+      },
+    },
+    // The rail's own width. Astryx defaults to 260px; the owner's designs draw
+    // it at 333, measured off the mockup by finding the vertical rule between
+    // rail and content. It was tuned to a different reference earlier — that
+    // reference is superseded.
+    "side-nav": {
+      base: { width: "333px" },
+    },
+    // The rail rows, at the proportions of the owner's designs: the label
+    // bands in the mockup sit on a 76px pitch, against the 52px minimum here,
+    // and the labels measure about 17px against 15. A wider rail with the old
+    // row height would have been a wider rail with more empty space in it, not
+    // the rail that was drawn. Structure and behaviour stay Astryx's — only
+    // the scale changes. The icon half lives in components/side-nav.tsx; the
+    // two move together.
     "side-nav-item": {
       base: {
-        fontSize: "0.9375rem",
-        // Taller rows and a wider gutter: the reference's rail breathes,
-        // and its icons sit on one axis well clear of the labels.
-        minHeight: "3.25rem",
-        gap: "1rem",
-        paddingInline: "0.875rem",
-        borderRadius: "0.75rem",
+        fontSize: "1.0625rem",
+        minHeight: "4.25rem",
+        gap: "1.125rem",
+        paddingInline: "1.125rem",
+        borderRadius: "0.875rem",
       },
       "size:sm": {
         fontSize: "0.84375rem",

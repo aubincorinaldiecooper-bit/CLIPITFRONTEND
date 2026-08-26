@@ -7,7 +7,7 @@ import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
 import { Button } from "@astryxdesign/core/Button"
 import { Heading } from "@astryxdesign/core/Heading"
 import { Text } from "@astryxdesign/core/Text"
-import { SourceStep } from "@/components/flow/source-step"
+import { MAX_FILES, MAX_FILE_BYTES, UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
 import { AppShell } from "@/components/app-shell"
@@ -29,7 +29,17 @@ export interface Exchange {
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
   const [exchanges, setExchanges] = useState<Exchange[]>([])
-  const [uploadFraction, setUploadFraction] = useState<number | null>(null)
+  /**
+   * The files in this drop, each with its own progress and outcome.
+   *
+   * A single number could not carry this: five files uploading at once have
+   * five different amounts done, and one of them failing must not be reported
+   * as all five failing — or, worse, disappear.
+   */
+  const [uploads, setUploads] = useState<UploadEntry[]>([])
+  /** The list as of the latest render, for settle-time checks inside promises. */
+  const uploadsRef = useRef<UploadEntry[]>([])
+  uploadsRef.current = uploads
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [seekRequest, setSeekRequest] = useState<{ seconds: number; token: number } | null>(null)
@@ -40,50 +50,156 @@ export default function StartPage() {
 
   const configured = api.isConfigured()
 
+  /**
+   * A page-wide failure — asking a question, cutting a clip.
+   *
+   * Upload failures do NOT come through here any more: with several files in
+   * flight a banner at the top cannot say which one went wrong, so each one is
+   * reported on its own row instead.
+   */
   const fail = useCallback((cause: unknown) => {
     setError(cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.")
     setBusy(false)
-    setUploadFraction(null)
   }, [])
 
   // --- source -------------------------------------------------------------
 
-  const startUpload = useCallback(
-    async (file: File) => {
-      setError(null)
-      setBusy(true)
+  /** Change one row without disturbing the others. */
+  const patchUpload = useCallback((id: string, patch: Partial<UploadEntry>) => {
+    setUploads((current) => current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)))
+  }, [])
+
+  /**
+   * Carry one file all the way: ask for a slot, send the bytes, tell the
+   * server it landed.
+   *
+   * Every failure is written onto that file's own row. Nothing here touches
+   * the page-wide error, because with several files in flight a banner at the
+   * top cannot say WHICH one went wrong — and the row can.
+   */
+  const runUpload = useCallback(
+    async (entry: UploadEntry) => {
+      patchUpload(entry.id, { phase: "uploading", progress: 0, error: undefined })
       try {
-        const { video: created, upload } = await api.createUpload(file.name, file.type || undefined)
-        setVideo(created)
-        setUploadFraction(0)
-        await api.uploadFile(upload, file, setUploadFraction)
+        const { video: created, upload } = await api.createUpload(
+          entry.file.name,
+          entry.file.type || undefined,
+        )
+        patchUpload(entry.id, { videoId: created.id })
+        await api.uploadFile(upload, entry.file, (fraction) =>
+          patchUpload(entry.id, { progress: fraction }),
+        )
         const { video: queued } = await api.markUploaded(created.id)
-        setVideo(queued)
-        setUploadFraction(null)
+        patchUpload(entry.id, { phase: "ready", progress: 1, videoId: queued.id })
+        return queued
       } catch (cause) {
-        fail(cause)
-      } finally {
-        setBusy(false)
+        patchUpload(entry.id, {
+          phase: "failed",
+          error: cause instanceof ApiError ? cause.message : "Upload failed. Try again.",
+        })
+        return null
       }
     },
-    [fail],
+    [patchUpload],
   )
 
-  const startYoutube = useCallback(
-    async (url: string) => {
+  /**
+   * Files picked or dropped.
+   *
+   * One file behaves exactly as it always has — it goes straight into the
+   * theater, because that is the whole errand and stopping to show a list of
+   * one would be a step for nothing. Several stay here with their rows, so a
+   * failure among them is visible and retryable instead of being skipped past
+   * on the way to whichever one happened to finish first.
+   */
+  const startUploads = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) return
       setError(null)
+
+      const room = Math.max(0, MAX_FILES - uploads.length)
+      const taken = files.slice(0, room)
+      const overflow = files.slice(room)
+
+      const rejected: UploadEntry[] = []
+      const accepted: UploadEntry[] = []
+      taken.forEach((file, index) => {
+        const entry: UploadEntry = {
+          id: `${Date.now()}-${index}-${file.name}`,
+          file,
+          phase: "queued",
+        }
+        // Refused files still get a row. A file that vanishes on being dropped
+        // reads as a bug in the page, where a row saying why reads as an
+        // answer.
+        if (file.size > MAX_FILE_BYTES) {
+          rejected.push({ ...entry, phase: "failed", error: "Too large to upload" })
+        } else {
+          accepted.push(entry)
+        }
+      })
+      overflow.forEach((file, index) => {
+        rejected.push({
+          id: `${Date.now()}-over-${index}-${file.name}`,
+          file,
+          phase: "failed",
+          error: `More than ${MAX_FILES} files in one go`,
+        })
+      })
+
+      const added = [...accepted, ...rejected]
+      if (added.length === 0) return
+      setUploads((current) => [...current, ...added])
+      if (accepted.length === 0) return
+
+      const single = uploads.length === 0 && added.length === 1
       setBusy(true)
-      try {
-        const { video: created } = await api.createYoutubeVideo(url)
-        setVideo(created)
-      } catch (cause) {
-        fail(cause)
-      } finally {
-        setBusy(false)
-      }
+      void Promise.all(accepted.map((entry) => runUpload(entry)))
+        .then((results) => {
+          // A lone file goes on into the theater, as it always did — but
+          // "lone" is re-checked when it lands, not just when it was picked.
+          // Files can be added while this one uploads, and being carried into
+          // the theater while a batch you just started uploads behind you
+          // would read as the page discarding it.
+          const first = results.find((result) => result !== null)
+          if (single && first && uploadsRef.current.length === 1) setVideo(first)
+        })
+        .finally(() => setBusy(false))
     },
-    [fail],
+    [runUpload, uploads.length],
   )
+
+  const retryUpload = useCallback(
+    (id: string) => {
+      const entry = uploads.find((candidate) => candidate.id === id)
+      // A file refused for its size or for overflowing the batch has nothing
+      // to retry — trying again would fail the same way.
+      if (!entry || entry.file.size > MAX_FILE_BYTES) return
+      setBusy(true)
+      void runUpload(entry).finally(() => setBusy(false))
+    },
+    [runUpload, uploads],
+  )
+
+  const removeUpload = useCallback((id: string) => {
+    setUploads((current) => current.filter((entry) => entry.id !== id))
+  }, [])
+
+  // The YouTube-URL path used to start here, from a tab above the drop zone.
+  // The owner removed that tab; `api.createYoutubeVideo` and the route behind
+  // it are untouched, so bringing it back is a UI change and nothing more.
+
+  /**
+   * How far along the video currently on screen is.
+   *
+   * Derived from that one file's row rather than held separately: with several
+   * uploads running there is no single "the" progress, and the theater only
+   * ever shows one video. Null once its bytes have landed, which is also what
+   * releases the poller below.
+   */
+  const activeUpload = uploads.find((entry) => entry.videoId !== undefined && entry.videoId === video?.id)
+  const uploadFraction =
+    activeUpload?.phase === "uploading" ? activeUpload.progress ?? 0 : null
 
   // --- polling ------------------------------------------------------------
 
@@ -402,20 +518,43 @@ export default function StartPage() {
       <div className="flex w-full flex-1 flex-col px-6 py-6">
       {!video ? (
         <motion.div
-          className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center py-10"
+          className="mx-auto flex w-full max-w-[42rem] flex-1 flex-col justify-center py-10"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
         >
-          <Heading level={1}>Add a video</Heading>
-          <div className="mt-2">
-            <Text as="p" type="supporting">
-              Upload a file or paste a YouTube link. The video takes the stage while it is read once, end to end —
-              then ask it anything.
+          {/* Centred, per the mockup — the page has one thing to do and the
+              heading sits over it rather than off to one side. */}
+          <div className="text-center">
+            <Heading level={1}>Add a video</Heading>
+          </div>
+          <div className="mx-auto mt-3 max-w-[20rem] text-center">
+            <Text as="p" type="large" color="secondary">
+              Upload a file. We&apos;ll read the video, then you can ask it anything.
             </Text>
           </div>
           <div className="mt-8">
-            <SourceStep onUpload={startUpload} onYoutube={startYoutube} busy={busy} uploadFraction={uploadFraction} />
+            <UploadPackage
+              entries={uploads}
+              onAdd={startUploads}
+              onRemove={removeUpload}
+              onRetry={retryUpload}
+              // Only offered once there is a choice to make. With one file the
+              // page opens it for you.
+              //
+              // Fetched by id rather than looked up in `library`: that list is
+              // loaded once, before any of these uploads existed, and is not
+              // refreshed when they land — so searching it found nothing and
+              // the button did nothing at all. Asking the server for the video
+              // is also what the library rows do.
+              onOpen={
+                uploads.length > 1
+                  ? (entry) => {
+                      if (entry.videoId) void openFromLibrary(entry.videoId)
+                    }
+                  : undefined
+              }
+            />
           </div>
 
           {library.length > 0 && (
