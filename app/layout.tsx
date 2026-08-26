@@ -29,13 +29,12 @@ const instrumentSerif = Instrument_Serif({
  * The site's own address, needed to turn /og.png into the absolute URL that
  * social apps require — a relative one is ignored and no card is drawn.
  *
- * Read from the environment rather than hardcoded, because the real domain is
- * the owner's to name and this file should not guess it. Set
- * NEXT_PUBLIC_SITE_URL on the deployment; until then previews resolve against
- * localhost, which is correct for local work and simply produces no card
- * anywhere else.
+ * clipit.space is the real domain, given by the owner, so it is the default
+ * rather than something a deployment has to remember to set. The environment
+ * variable still wins, which is what makes staging and preview deployments
+ * able to point at themselves instead of claiming to be production.
  */
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://clipit.space";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

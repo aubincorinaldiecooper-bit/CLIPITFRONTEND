@@ -29,8 +29,15 @@ export const metadata: Metadata = {
   title: 'Clipit — one video in, a week of posts out',
   description: DESC,
   // TODO: set metadataBase in the root layout, add /public/og.png (1200x630)
+  // Resolved against metadataBase in the root layout, so these become
+  // https://clipit.space/... — social apps ignore relative URLs and draw no
+  // card at all. `url` and the canonical give the page one address rather
+  // than letting a shared link with tracking parameters look like a
+  // different page.
+  alternates: { canonical: '/' },
   openGraph: { title: 'Clipit — one video in, a week of posts out', description: DESC, type: 'website',
-               images: [{ url: '/og.png', width: 1200, height: 630 }] },
+               url: '/', siteName: 'Clipit',
+               images: [{ url: '/og.png', width: 1200, height: 630, alt: 'Clipit — one video in, a week of posts out' }] },
   twitter: { card: 'summary_large_image', images: ['/og.png'] },
 };
 

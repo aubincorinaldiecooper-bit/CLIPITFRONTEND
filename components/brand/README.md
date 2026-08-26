@@ -17,8 +17,9 @@ any of them by hand.
 The wordmark is Inter ExtraBold (800) at -0.025em, cased `Clipit`, per the
 owner's spec of -2% to -3% tracking. Inter is loaded by the root layout.
 
-## Not yet set
+## The domain
 
-`NEXT_PUBLIC_SITE_URL` — the real domain. Until it is set, `og:image`
-resolves against localhost and no social card is drawn. Nothing else depends
-on it.
+`https://clipit.space` is the default in `app/layout.tsx`, so a share card
+works without anything being configured. `NEXT_PUBLIC_SITE_URL` still
+overrides it, which is what lets a staging or preview deployment point at
+itself instead of claiming to be production.
