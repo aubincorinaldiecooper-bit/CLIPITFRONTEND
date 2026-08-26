@@ -4,11 +4,18 @@ export const SIGNUP_URL = '/start';
 /**
  * Where an Enterprise enquiry goes.
  *
- * NOT a verified mailbox. It follows the usual convention on the live domain
- * rather than an address anyone has confirmed exists. A dead address here loses
- * enterprise leads in silence — the visitor sees their mail client open and
- * assumes it arrived — so this must be pointed at a real monitored inbox, or at
- * a contact form, before the page is launched.
+ * NOT LIVE YET. The owner's decision is that this becomes a forwarding address
+ * rather than a mailbox — mail to it is redirected straight to the inbox they
+ * already read — set up either through the DNS host's email routing or the
+ * registrar's own forwarding. Until that redirect exists the address does not
+ * resolve, and a dead address here loses enterprise leads in silence: the
+ * visitor's mail client opens, they send, and they assume it arrived.
+ *
+ * So this must not ship to production before the forwarding is confirmed
+ * working by sending a test message to it.
+ *
+ * Deliberately a company address and not a personal one, both so replies can
+ * later be sent from it and so a personal inbox is not published to scrapers.
  */
 export const CONTACT_URL = 'mailto:sales@clipit.space?subject=Clipit%20for%20teams';
 
