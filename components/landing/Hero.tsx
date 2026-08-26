@@ -42,8 +42,15 @@ export default function Hero() {
         <VideoPlayer src="/landing/source.mp4" poster="/landing/poster-source.jpg" />
       </motion.div>
 
-      {/* the deck, with metrics floating around it */}
-      <motion.div {...seq(3)} className="relative flex w-full max-w-[880px] justify-center">
+      {/* The deck, with metrics floating around it.
+          The top margin is not decoration. ClipStack's cards start at the very
+          top of its stage and this wrapper carried no margin at all, so the
+          fan of vertical cards began on the exact pixel the landscape video
+          ended — measured at 0px across every width, while the rhythm above it
+          runs 16px then 32px. The two read as one broken object rather than a
+          video and the clips cut from it. This is the widest gap in the hero
+          because it is its biggest change of subject. */}
+      <motion.div {...seq(3)} className="relative mt-10 flex w-full max-w-[880px] justify-center sm:mt-14">
         <ClipStack items={CLIPS} />
         {METRICS.map(m => (
           <span key={m.unit + m.n}

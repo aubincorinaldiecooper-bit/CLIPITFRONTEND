@@ -39,7 +39,16 @@ export default function ApproveDeck() {
             <div
               key={c.id}
               aria-hidden={!front}
-              className="absolute left-1/2 top-1/2 h-[176px] w-[141px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl bg-[#141110] transition-all duration-500 ease-[cubic-bezier(.25,.8,.3,1)]"
+              /* No -translate-x-1/2 / -translate-y-1/2 here, deliberately.
+                 Tailwind v4 emits those as the standalone `translate` CSS
+                 property, which does not conflict with `transform` — it
+                 COMPOSES with it. Together with the inline transform below,
+                 every card was being centred twice: shifted a full width left
+                 and a full height up instead of half of each. That lifted the
+                 whole deck up over "Keep this moment?" and left the heading
+                 sticking out to its right. The inline transform is the single
+                 source of the card's position. */
+              className="absolute left-1/2 top-1/2 h-[176px] w-[141px] overflow-hidden rounded-xl bg-[#141110] transition-all duration-500 ease-[cubic-bezier(.25,.8,.3,1)]"
               style={{
                 transform: `translate(-50%, -50%) translateX(${sg * p.x}%) scale(${p.s})`,
                 filter: `brightness(${p.b})`,
