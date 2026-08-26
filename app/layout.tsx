@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+// The landing's two faces. next/font downloads and self-hosts them at build
+// time, so they do not depend on the running server reaching Google — which
+// is also why the HTML preview fell back to system fonts in a sandbox and
+// this will not. Archivo is loaded with its width axis because the landing
+// pushes it between 108 and 118; a static Archivo Bold cannot do that.
+import { archivo, inter } from "@/lib/fonts";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
@@ -29,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} ${archivo.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
