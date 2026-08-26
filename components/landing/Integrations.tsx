@@ -30,7 +30,7 @@ export default function Integrations() {
           Post directly to YouTube Shorts, TikTok and Instagram Reels. Connect your accounts once and every approved clip knows where to go.
         </p>
         <a href={SIGNUP_URL} className="inline-block rounded-full bg-[#121212] px-6 py-3 text-[.95rem] font-semibold text-white transition-transform hover:scale-[1.03]">
-          Try Clipit free &rarr;
+          Try Clipit &rarr;
         </a>
       </Reveal>
     </section>

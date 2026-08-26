@@ -29,7 +29,7 @@ export default function SiteHeader() {
         </nav>
         <a href={SIGNUP_URL}
            className="rounded-full bg-[#121212] px-6 py-3 text-[.95rem] font-semibold text-white transition-transform hover:scale-[1.03] active:scale-[.98]">
-          Try free
+          Try Clipit
         </a>
       </div>
     </header>
