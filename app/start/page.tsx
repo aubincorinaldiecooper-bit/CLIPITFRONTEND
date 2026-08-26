@@ -535,11 +535,16 @@ export default function StartPage() {
               onRetry={retryUpload}
               // Only offered once there is a choice to make. With one file the
               // page opens it for you.
+              //
+              // Fetched by id rather than looked up in `library`: that list is
+              // loaded once, before any of these uploads existed, and is not
+              // refreshed when they land — so searching it found nothing and
+              // the button did nothing at all. Asking the server for the video
+              // is also what the library rows do.
               onOpen={
                 uploads.length > 1
                   ? (entry) => {
-                      const ready = library.find((item) => item.id === entry.videoId)
-                      if (ready) setVideo(ready)
+                      if (entry.videoId) void openFromLibrary(entry.videoId)
                     }
                   : undefined
               }

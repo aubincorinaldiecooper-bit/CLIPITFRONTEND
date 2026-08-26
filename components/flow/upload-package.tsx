@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils"
  */
 
 /** Where one file has got to. */
-export type UploadPhase = "queued" | "uploading" | "reading" | "ready" | "failed"
+export type UploadPhase = "queued" | "uploading" | "ready" | "failed"
 
 export type UploadEntry = {
   /** Stable per pick, so React keeps the row identity across re-renders. */
@@ -60,7 +60,15 @@ export type UploadEntry = {
  */
 export const MAX_FILES = 12
 
-/** Matches the server's own ceiling. */
+/**
+ * The largest file this screen will start an upload for.
+ *
+ * A client-side guard and nothing more: the API issues a presigned PUT with no
+ * size condition on it, so the server does not enforce a ceiling of its own.
+ * Refusing here means a five-hour mistake fails in a second with a reason on
+ * the row, instead of after a long upload. If a real server-side limit is
+ * added, this should be made to match it rather than guessing again.
+ */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024 * 1024
 
 export function formatBytes(bytes: number | undefined): string | null {
@@ -83,7 +91,6 @@ function fileKind(file: File): string {
 function statusLine(entry: UploadEntry): string {
   const parts = [fileKind(entry.file), formatBytes(entry.file.size)].filter(Boolean)
   if (entry.phase === "failed") parts.push(entry.error ?? "Upload failed")
-  if (entry.phase === "reading") parts.push("Reading the video")
   if (entry.phase === "queued") parts.push("Waiting")
   return parts.join(" · ")
 }
@@ -274,23 +281,16 @@ export function UploadPackage({
                       }
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-valuenow={
-                        entry.phase === "reading" ? undefined : Math.round((entry.progress ?? 0) * 100)
-                      }
+                      aria-valuenow={Math.round((entry.progress ?? 0) * 100)}
                       className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-white/10"
                     >
                       <span
                         className={cn(
                           "block h-full rounded-full transition-[width] duration-200",
                           entry.phase === "ready" ? "w-full bg-success" : "bg-primary",
-                          // Reading has no percentage to report — the server is
-                          // working and there is no honest number for it — so
-                          // the bar sits full and quiet rather than inventing
-                          // progress.
-                          entry.phase === "reading" && "w-full opacity-60",
                         )}
                         style={
-                          entry.phase === "reading" || entry.phase === "ready"
+                          entry.phase === "ready"
                             ? undefined
                             : { width: `${Math.round((entry.progress ?? 0) * 100)}%` }
                         }

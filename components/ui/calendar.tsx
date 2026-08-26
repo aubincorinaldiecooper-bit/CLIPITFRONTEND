@@ -21,15 +21,19 @@ export function Calendar({ className, classNames, ...props }: DayPickerProps) {
     <DayPicker
       className={cn("[--rdp-cell-size:34px]", className)}
       classNames={{
-        months: "flex flex-col",
+        // `relative` lives HERE, not on `month`: react-day-picker puts the
+        // nav inside `months` as a sibling of the month grid, so anchoring to
+        // the month left the buttons resolving against the viewport and
+        // sitting thousands of pixels off screen.
+        months: "relative flex flex-col",
         month: "space-y-2",
         month_caption: "flex h-8 items-center justify-center",
         caption_label: "text-[.82rem] font-semibold text-[#121212]",
-        nav: "flex items-center gap-1",
+        nav: "absolute inset-x-0 top-0 flex h-8 items-center justify-between",
         button_previous:
-          "absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-md text-[#6b6965] hover:bg-[#f7f5f2] disabled:opacity-40",
+          "grid h-7 w-7 place-items-center rounded-md text-[#6b6965] hover:bg-[#f7f5f2] disabled:opacity-40",
         button_next:
-          "absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-md text-[#6b6965] hover:bg-[#f7f5f2] disabled:opacity-40",
+          "grid h-7 w-7 place-items-center rounded-md text-[#6b6965] hover:bg-[#f7f5f2] disabled:opacity-40",
         month_grid: "w-full border-collapse",
         weekdays: "flex",
         weekday: "w-[34px] text-[.66rem] font-medium uppercase tracking-wide text-[#6b6965]",
