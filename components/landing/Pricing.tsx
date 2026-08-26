@@ -28,12 +28,15 @@ export default function Pricing() {
           </div>
         </Reveal>
 
-        {/* Three columns, not four — a four-column grid with three tiers in it
-            leaves a hole on the right. Two up at sm so the cards keep a
-            readable width on a tablet. */}
-        <Reveal className="mx-auto grid max-w-[980px] items-start gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        {/* One column per tier, so the grid never leaves a hole on the right.
+            Two up at sm — four across a tablet would squeeze every card below a
+            readable width. */}
+        <Reveal className="mx-auto grid items-start gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           {TIERS.map(t => {
             const price = yearly ? t.yr : t.mo;
+            // A quoted tier has no number to show and nothing for the
+            // monthly/yearly switch to reprice.
+            const quoted = price === null;
             return (
               <div key={t.name}
                 className={'relative flex h-full flex-col rounded-[20px] bg-white p-6 ' +
@@ -43,21 +46,36 @@ export default function Pricing() {
                     Most popular
                   </span>
                 )}
-                <span aria-hidden className="text-[2rem] leading-none">{t.veh}</span>
-                <h3 style={disp(110, 800)} className="mb-0.5 mt-3 text-[1.25rem]">{t.name}</h3>
+                <h3 style={disp(110, 800)} className="mb-0.5 text-[1.25rem]">{t.name}</h3>
                 <span className="text-[.88rem] text-[#6b6965]">{t.who}</span>
-                <div style={disp(110, 700)} className="mb-1 mt-4 text-[2.4rem] tracking-[-.03em]">
-                  ${price}
-                  <em className="text-[.9rem] font-medium not-italic tracking-normal text-[#6b6965]" style={{ fontFamily: 'var(--font-inter)' }}> / month</em>
+                {/* The quoted tier keeps the same block height as a priced one,
+                    so all four price lines sit on one row. */}
+                <div style={disp(110, 700)} className="mb-1 mt-4 flex min-h-[2.9rem] items-end text-[2.4rem] leading-none tracking-[-.03em]">
+                  {quoted ? (
+                    <span className="text-[1.55rem]">Let&rsquo;s talk</span>
+                  ) : (
+                    <span>
+                      ${price}
+                      <em className="text-[.9rem] font-medium not-italic tracking-normal text-[#6b6965]" style={{ fontFamily: 'var(--font-inter)' }}> / month</em>
+                    </span>
+                  )}
                 </div>
-                <span className="min-h-[1.2em] text-[.78rem] text-[#6b6965]">
-                  {yearly && t.mo > 0 ? `billed yearly ($${t.yr * 12})` : ''}
+                {/* leading pinned to the same 1.2 as the min-height: without it
+                    a card with text here is 4px taller than one with an empty
+                    line, and the row of buttons stops being a row. */}
+                <span className="min-h-[1.2em] text-[.78rem] leading-[1.2] text-[#6b6965]">
+                  {quoted ? 'Priced to your volume' : yearly && t.mo ? `billed yearly ($${t.yr! * 12})` : ''}
                 </span>
-                <a href={SIGNUP_URL}
+                <a href={t.cta?.href ?? SIGNUP_URL}
                    className="my-4 block rounded-full bg-[#121212] py-3 text-center text-[.93rem] font-semibold text-white transition-transform hover:scale-[1.02]">
-                  {t.mo === 0 ? 'Get started' : `Start ${t.name}`}
+                  {t.cta?.label ?? (t.mo === 0 ? 'Get started' : `Start ${t.name}`)}
                 </a>
-                <ul className="mt-auto">
+                {/* Anchored to the TOP of the space under the button, not the
+                    bottom of the card. The cards stretch to a common height, so
+                    bottom-anchoring left the four lists starting at four
+                    different heights — and a pricing table is read across, one
+                    line against another. Slack falls to the bottom instead. */}
+                <ul className="mb-auto">
                   {t.feats.map(f => (
                     <li key={f} className="relative py-1.5 pl-6 text-[.9rem] text-[#3c3a36] before:absolute before:left-0 before:font-bold before:content-['\2713']">{f}</li>
                   ))}
@@ -68,6 +86,7 @@ export default function Pricing() {
         </Reveal>
 
         <p className="mt-7 text-center text-[.82rem] text-[#6b6965]">
+          Minutes count the video you upload, not the clips that come out of it.
           You approve every clip before it publishes, on every plan. Prices in USD.
           Cancel any time &mdash; your approved clips stay published.
         </p>

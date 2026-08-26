@@ -1,6 +1,17 @@
 // Clipping is open to guests, so the product's real front door is /start
 export const SIGNUP_URL = '/start';
 
+/**
+ * Where an Enterprise enquiry goes.
+ *
+ * NOT a verified mailbox. It follows the usual convention on the live domain
+ * rather than an address anyone has confirmed exists. A dead address here loses
+ * enterprise leads in silence — the visitor sees their mail client open and
+ * assumes it arrived — so this must be pointed at a real monitored inbox, or at
+ * a contact form, before the page is launched.
+ */
+export const CONTACT_URL = 'mailto:sales@clipit.space?subject=Clipit%20for%20teams';
+
 export const RUNTIME = 47 * 60 + 32; // the demo source video, 47:32
 
 export interface Clip {
@@ -30,33 +41,62 @@ export const AUDIENCES: Audience[] = [
 ];
 
 export interface Tier {
-  veh: string; name: string; who: string;
-  mo: number; yr: number;   // yr = per-month equivalent, billed yearly
-  hot?: boolean; feats: string[];
+  name: string; who: string;
+  /**
+   * Dollars a month, and the per-month figure when billed yearly. Both are
+   * null on a tier that is quoted rather than listed — the card then shows an
+   * invitation to talk instead of a number, and the monthly/yearly switch has
+   * nothing to reprice on it.
+   */
+  mo: number | null; yr: number | null;
+  hot?: boolean;
+  /** Overrides the card's button. Defaults to signing up. */
+  cta?: { label: string; href: string };
+  feats: string[];
 }
 
 /**
- * The three plans, from the owner.
+ * The plans.
  *
- * Given directly: Free carries 3 videos a month, Creator is $17 and Team is
- * $49, both monthly. Yearly is the two-months-free discount the page already
- * advertises — ten months' money for twelve — which is $14 and $41 a month
- * billed yearly, and the badge sits on Team.
+ * WHAT IS BEING SOLD IS MINUTES OF VIDEO GOING IN, not clips coming out. That
+ * is how the cost is actually incurred — a video is split into chunks of
+ * ANALYSIS_CHUNK_SECONDS and every chunk is read by a model, so a six-hour
+ * upload costs roughly eighteen times what a twenty-minute one does. A plain
+ * "videos a month" cap hides that: at the six-hour ceiling the upload screen
+ * accepts, three videos could mean anything from forty-five minutes of
+ * processing to eighteen hours of it, at the same price.
  *
- * The feature lines describe things the product actually does today: the
- * watermark, publishing to the four connected platforms, captions, shared
- * workspaces and invitations. Nothing here promises a capability that does not
- * exist. The one number still to come from the owner is how many videos a
- * month Creator and Team allow — until it is given, those tiers say what they
- * unlock rather than inventing a limit.
+ * It is also what every comparable product settled on. Opus Clip and Vizard
+ * both meter one credit per minute of source video, and Klap counts videos but
+ * pins a maximum length to each tier. All three have this cost structure and
+ * all three arrived at the same answer.
+ *
+ * So each tier carries three numbers: a monthly allowance in minutes, a ceiling
+ * on any single video, and — above Free — how many people can use it.
+ *
+ * Free publishes. It is watermarked and 720p rather than blocked, which is
+ * again what the category does: a watermarked clip on someone's feed is the
+ * product advertising itself, and blocking publishing only removes the
+ * watermark from a clip they would download and post anyway. Creator's reason
+ * to exist is then a clean export, not permission to post.
+ *
+ * Yearly is the two-months-free discount the page already advertises — ten
+ * months' money for twelve.
+ *
+ * Every feature line describes something the product does today. Enterprise is
+ * the exception in kind rather than in honesty: its lines are commitments about
+ * service, which is what an enterprise tier sells.
  */
 export const TIERS: Tier[] = [
-  { veh: '🛹', name: 'Free',    who: 'Trying it out',        mo: 0,  yr: 0,
-    feats: ['3 videos a month','Clips carry a Clipit watermark','No card needed'] },
-  { veh: '🏍️', name: 'Creator', who: 'Posting on your own',  mo: 17, yr: 14,
-    feats: ['Everything in Free, plus','No watermark','Publish straight to TikTok, Reels, Shorts and X','Auto captions and scheduling'] },
-  { veh: '🚀', name: 'Team',    who: 'Posting with a team',  mo: 49, yr: 41, hot: true,
-    feats: ['Everything in Creator, plus','Shared workspaces','Invite people to review clips','Priority processing'] },
+  { name: 'Free',       who: 'Trying it out',       mo: 0,    yr: 0,
+    feats: ['60 minutes of video a month','Up to 30 minutes per video','Publish to every channel you connect','Clips are watermarked, at 720p','No card needed'] },
+  { name: 'Creator',    who: 'Posting on your own', mo: 17,   yr: 14,
+    feats: ['Everything in Free, plus','300 minutes of video a month','Up to 2 hours per video','No watermark, full 1080p','Auto captions and scheduling'] },
+  { name: 'Team',       who: 'Posting with a team', mo: 49,   yr: 41, hot: true,
+    feats: ['Everything in Creator, plus','900 minutes of video a month','Up to 6 hours per video','5 seats and shared workspaces','Priority processing'] },
+  { name: 'Enterprise', who: 'Posting at scale',    mo: null, yr: null,
+    cta: { label: 'Get in touch', href: CONTACT_URL },
+    feats: ['Everything in Team, plus','Minutes and seats to fit your library','A dedicated contact, on call','Sessions to tune Clipit to your footage','Invoicing and security review'] },
 ];
 
 export const FAQ: [string, string][] = [
@@ -64,6 +104,8 @@ export const FAQ: [string, string][] = [
    'Clipit watches your full-length video, finds the moments worth posting, and cuts them into vertical clips. You approve the ones you like and they publish to YouTube Shorts, TikTok and Instagram Reels.'],
   ['What footage works best?',
    'Anything long-form: talking-head videos, podcasts, vlogs, shoots, event coverage. The more distinct moments your video holds, the more clips come out of it.'],
+  ['How are the minutes counted?',
+   'By the length of the video you upload, not by how many clips come out of it. A 40-minute video costs 40 minutes of your monthly allowance whether Clipit finds three clips in it or thirty.'],
   ['Does Clipit ever post without me?',
    'No. Every clip waits in your review queue until you approve it. Nothing publishes on its own.'],
   ['Which platforms can I publish to?',
