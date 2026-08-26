@@ -257,13 +257,21 @@ export function UploadPackage({
                   <Text as="span" type="supporting" display="block" className="truncate">
                     {statusLine(entry)}
                   </Text>
-                  {/* The bar is only drawn while there is something to
-                      report. A full bar on a finished row says "working" when
-                      the tick beside it already said "done". */}
-                  {(entry.phase === "uploading" || entry.phase === "reading") && (
+                  {/* The bar stays on a finished row, full and green, as the
+                      reference keeps it — the owner's call. It was dropped at
+                      first on the reasoning that a full bar reads as "still
+                      working" beside a tick that already says "done"; the
+                      colour is what settles that, and a row that keeps its bar
+                      also keeps the whole list the same shape as it fills up
+                      rather than having rows change height one by one. */}
+                  {entry.phase !== "queued" && entry.phase !== "failed" && (
                     <span
                       role="progressbar"
-                      aria-label={`Uploading ${entry.file.name}`}
+                      aria-label={
+                        entry.phase === "ready"
+                          ? `${entry.file.name} uploaded`
+                          : `Uploading ${entry.file.name}`
+                      }
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={
@@ -273,15 +281,16 @@ export function UploadPackage({
                     >
                       <span
                         className={cn(
-                          "block h-full rounded-full bg-primary transition-[width] duration-200",
-                          // Reading has no percentage to report — the server
-                          // is working and there is no honest number for it —
-                          // so the bar sits full and quiet rather than
-                          // inventing progress.
+                          "block h-full rounded-full transition-[width] duration-200",
+                          entry.phase === "ready" ? "w-full bg-success" : "bg-primary",
+                          // Reading has no percentage to report — the server is
+                          // working and there is no honest number for it — so
+                          // the bar sits full and quiet rather than inventing
+                          // progress.
                           entry.phase === "reading" && "w-full opacity-60",
                         )}
                         style={
-                          entry.phase === "reading"
+                          entry.phase === "reading" || entry.phase === "ready"
                             ? undefined
                             : { width: `${Math.round((entry.progress ?? 0) * 100)}%` }
                         }
