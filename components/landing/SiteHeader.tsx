@@ -1,12 +1,17 @@
+import { Logo } from '@/components/brand/logo';
 import { SIGNUP_URL } from '@/lib/landing-data';
-import { disp } from '@/lib/landing-tokens';
 
 const NAV = [['#who','Who it\u2019s for'], ['#how','How it works'], ['#pricing','Pricing'], ['#faq','FAQ']];
 
 export default function SiteHeader() {
   return (
     <header className="flex items-center justify-between px-5 py-5 sm:px-10">
-      <a href="#" style={disp(118, 800)} className="text-[1.35rem] tracking-tight text-[#121212]">clipit</a>
+      {/* The real lockup now — mark plus wordmark — rather than the word set
+          in the display face. Same component as the footer and the app rail,
+          so they cannot drift apart. */}
+      <a href="#" aria-label="Clipit — home" className="text-[#121212]">
+        <Logo size={26} />
+      </a>
       <div className="flex items-center">
         <nav aria-label="Sections" className="mr-6 hidden gap-6 text-[.93rem] font-semibold sm:flex">
           {NAV.map(([href, label]) => (
