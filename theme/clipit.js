@@ -453,7 +453,7 @@ export const clipitTheme = {
     "side-nav-item": {
       "base": {
         "fontSize": "1.0625rem",
-        "minHeight": "3.5rem",
+        "minHeight": "4.25rem",
         "gap": "1.125rem",
         "paddingInline": "1.125rem",
         "borderRadius": "0.875rem"

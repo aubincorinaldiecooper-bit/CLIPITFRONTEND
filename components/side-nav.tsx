@@ -8,7 +8,6 @@ import {
   SideNavSection,
 } from "@astryxdesign/core/SideNav"
 import { Logo } from "@/components/brand/logo"
-import { AccountControl } from "@/components/account-control"
 import { api } from "@/lib/api"
 
 /**
@@ -240,14 +239,10 @@ export function SideNav({
       // resizable mode does.
       className={collapsed ? undefined : "w-[var(--rail-open-width)]"}
       collapsible={{ isCollapsed: collapsed, onCollapsedChange: handleCollapsedChange }}
-      // The account, pinned to the bottom of the rail — Astryx's own footer
-      // slot, and the shape the owner's reference uses: destinations at the
-      // top, the person at the bottom. Before this the rail held five items
-      // and then ~490px of empty column with a lone collapse chevron at the
-      // foot of it, which is what read as dead space. Hidden while collapsed:
-      // at 48px there is no room for an email address, and the account is
-      // still reachable by opening the rail.
-      footer={collapsed ? undefined : <AccountControl />}
+      // No footer. The account was briefly moved down here to anchor the
+      // rail's empty lower half; that was not asked for, and it put the
+      // address and Sign out in the bottom corner in small type. It lives in
+      // the header, where the owner put it.
       header={
         // The mark rides Astryx's own icon slot and the word its heading slot,
         // so the rail keeps the component's spacing and collapse behaviour
