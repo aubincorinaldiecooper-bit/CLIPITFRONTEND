@@ -17,15 +17,24 @@
   --background: #08080a;
   --foreground: #f4f4f5;
   /*
-   * The open rail's width. The owner's designs draw it at 333px (Astryx's
-   * default is 260), measured off the mockup by the vertical rule between
-   * rail and content. A token here, NOT a side-nav override in the theme:
-   * a component override applies in the collapsed state too, and Astryx
-   * collapses by narrowing — pinning the width there froze the fold. The
-   * theme's typed token map takes no custom names, so the app's own root
-   * carries it; components/side-nav.tsx applies it only while open.
+   * The open rail's width, matching Instagram's desktop rail at the owner's
+   * direction.
+   *
+   * It was 333px, measured off the owner's mockup by the vertical rule
+   * between rail and content — but at 1440 that is 23% of the screen for
+   * five short words, and the widest label ("Workspaces") ended at 158px,
+   * leaving 175px of every row blank. Instagram's is 244, about 17%, which
+   * is what the owner asked us to match. Our longest row needs roughly 173px
+   * (24px icon + 18px gap + the label + 18px padding either side), so 244
+   * keeps a comfortable margin rather than crowding.
+   *
+   * A token here, NOT a side-nav override in the theme: a component override
+   * applies in the collapsed state too, and Astryx collapses by narrowing —
+   * pinning the width there froze the fold once already. The theme's typed
+   * token map takes no custom names, so the app's own root carries it;
+   * components/side-nav.tsx applies it only while open.
    */
-  --rail-open-width: 333px;
+  --rail-open-width: 244px;
 }
 
 @theme inline {

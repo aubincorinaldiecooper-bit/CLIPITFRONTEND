@@ -71,12 +71,14 @@ export function SignedOutState({
    * A box drawn around nothing makes the nothing louder; the emptiness reads
    * as a broken panel rather than as a page waiting for you.
    *
-   * Center at full height takes the room the page gives it, so the message
-   * sits in the optical middle of whatever is left instead of clinging to the
-   * top with a void underneath. The page ground shows through.
+   * A FIXED band rather than the whole remaining page. Centring in everything
+   * left under the heading put 214px of nothing between the subtitle and the
+   * message — the void moved rather than closed. 420px holds the 280px block
+   * with about 70px either side: close enough to the heading to read as one
+   * composition, with enough air not to look cramped.
    */
   return (
-    <Center height="100%" minHeight={360}>
+    <Center minHeight={420}>
       <EmptyState
         icon={<IconWell icon={icon} />}
         title={title}

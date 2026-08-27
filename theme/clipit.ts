@@ -154,17 +154,20 @@ export const clipitTheme = defineTheme({
     // owner's designs draw lives in components/side-nav.tsx instead, applied
     // only while the rail is open — the same shape as the component's own
     // resizable mode, which also writes its width only when not collapsed.
-    // The rail rows, at the proportions of the owner's designs: the label
-    // bands in the mockup sit on a 76px pitch, against the 52px minimum here,
-    // and the labels measure about 17px against 15. A wider rail with the old
-    // row height would have been a wider rail with more empty space in it, not
-    // the rail that was drawn. Structure and behaviour stay Astryx's — only
-    // the scale changes. The icon half lives in components/side-nav.tsx; the
-    // two move together.
+    // The rail rows, at Instagram's proportions, by the owner's direction.
+    //
+    // They were 68px tall (4.25rem) to match a 76px pitch measured off the
+    // owner's mockup. Against Instagram's ~56px that read loose: five rows of
+    // 68 in an 860px column is a lot of air between short words, and it was
+    // half of why the rail looked empty. 3.5rem is 56px.
+    //
+    // The label size stays at 17px. It is what the mockup draws, it still fits
+    // the narrower 244px rail with room to spare, and shrinking it was not
+    // part of what was asked for.
     "side-nav-item": {
       base: {
         fontSize: "1.0625rem",
-        minHeight: "4.25rem",
+        minHeight: "3.5rem",
         gap: "1.125rem",
         paddingInline: "1.125rem",
         borderRadius: "0.875rem",
