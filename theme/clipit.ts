@@ -64,6 +64,12 @@ export const clipitTheme = defineTheme({
     // the zinc family so quiet text is gray, not tan.
     "--color-text-secondary": ["#52525b", "#a1a1aa"],
 
+    // The open rail's width is NOT here. It lives as --rail-open-width in
+    // app/globals.css (this map's TokenName type takes no custom names), and
+    // components/side-nav.tsx applies it only while the rail is open — a
+    // token or override here would apply in the collapsed state too, and
+    // Astryx collapses by narrowing, so it froze the fold once already.
+
     // === Structure, from gothic ==========================================
     "--radius-inner": "0.25rem",
     "--radius-element": "0.5rem",

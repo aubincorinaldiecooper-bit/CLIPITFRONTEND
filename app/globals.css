@@ -16,6 +16,16 @@
 :root {
   --background: #08080a;
   --foreground: #f4f4f5;
+  /*
+   * The open rail's width. The owner's designs draw it at 333px (Astryx's
+   * default is 260), measured off the mockup by the vertical rule between
+   * rail and content. A token here, NOT a side-nav override in the theme:
+   * a component override applies in the collapsed state too, and Astryx
+   * collapses by narrowing — pinning the width there froze the fold. The
+   * theme's typed token map takes no custom names, so the app's own root
+   * carries it; components/side-nav.tsx applies it only while open.
+   */
+  --rail-open-width: 333px;
 }
 
 @theme inline {

@@ -230,13 +230,14 @@ export function SideNav({
 
   return (
     <AstryxSideNav
-      // The owner's designs draw the open rail at 333px (Astryx's default is
-      // 260). Inline and only while open, NOT in the theme: a theme width
-      // applies in the collapsed state too, and since Astryx collapses by
-      // narrowing, pinning it there froze the fold — the chevron stored its
-      // preference and the rail never moved. Collapsed leaves width to the
-      // component, exactly as its own resizable mode does.
-      style={collapsed ? undefined : { width: 333 }}
+      // The open rail's width, from the theme's --rail-open-width token,
+      // applied ONLY while the rail is open. Not a side-nav override in the
+      // theme: a component override applies in the collapsed state too, and
+      // since Astryx collapses by narrowing, pinning the width there froze
+      // the fold — the chevron stored its preference and the rail never
+      // moved. Collapsed leaves width to the component, exactly as its own
+      // resizable mode does.
+      className={collapsed ? undefined : "w-[var(--rail-open-width)]"}
       collapsible={{ isCollapsed: collapsed, onCollapsedChange: handleCollapsedChange }}
       header={
         // The mark rides Astryx's own icon slot and the word its heading slot,

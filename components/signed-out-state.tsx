@@ -1,12 +1,11 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Button } from "@astryxdesign/core/Button"
 import { Card } from "@astryxdesign/core/Card"
 import { Center } from "@astryxdesign/core/Center"
-import { Heading } from "@astryxdesign/core/Heading"
-import { Text } from "@astryxdesign/core/Text"
-import { VStack } from "@astryxdesign/core/Stack"
+import { EmptyState } from "@astryxdesign/core/EmptyState"
+import { IconWell } from "@/components/section-card"
 import { useSignInGate } from "@/components/sign-in-gate"
 
 /**
@@ -18,49 +17,65 @@ import { useSignInGate } from "@/components/sign-in-gate"
  * the app's own empty-state standard twice over — every other empty moment
  * here gets the centred card, the mark on its own ground and an action, and
  * this one pointed at a control in a far corner instead of carrying one.
- * The corner it pointed at isn't even guaranteed: on a deployment without
- * sign-in configured, the header renders no button there at all.
  *
- * So: the same furniture as the app's other empty states, with the action in
- * it. The button opens the same sign-in dialog every gated action uses —
- * email in, link back to this exact page, signed in.
+ * So: Astryx's EmptyState inside the same muted card the app's other quiet
+ * moments use, with the action in it. The button opens the same sign-in
+ * dialog every gated action uses — email in, link back to this exact page,
+ * signed in.
+ *
+ * On a deployment where sign-in is not configured, there is no button — the
+ * same rule AccountControl follows, because a Sign in that opens a form
+ * whose send can only fail is a broken promise, not an action. The page
+ * still says plainly why it is empty.
  */
 export function SignedOutState({
   icon,
   title,
   line,
 }: {
-  /** The mark for the round well — same glyph components the pages already use. */
+  /** The mark for the well — same glyph components the pages already use. */
   icon: (props: { className?: string }) => ReactNode
   title: string
   /** One sentence on why this page needs a person. */
   line: string
 }) {
   const { askToSignIn } = useSignInGate()
-  const Glyph = icon
+  /**
+   * Whether this deployment can sign anyone in. Null while unknown — the
+   * words render immediately either way; only the button waits for a yes,
+   * so nothing flashes and nothing broken is ever offered.
+   */
+  const [configured, setConfigured] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/auth-configured")
+      .then((response) => response.json() as Promise<{ configured: boolean }>)
+      .then((body) => {
+        if (!cancelled) setConfigured(body.configured)
+      })
+      .catch(() => {
+        if (!cancelled) setConfigured(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <Card variant="muted" padding={6}>
       <Center minHeight={280}>
-        <VStack gap={2} align="center">
-          {/* The same 72px well the Recent-activity empty state stands its
-              mark in, so the app's quiet moments all look related. */}
-          <span
-            aria-hidden
-            className="mb-2 flex h-[72px] w-[72px] items-center justify-center rounded-full bg-surface text-primary ring-1 ring-border"
-          >
-            <Glyph className="h-7 w-7" />
-          </span>
-          <Heading level={2} accessibilityLevel={2}>
-            {title}
-          </Heading>
-          <Text as="p" type="body" color="secondary" display="block" className="max-w-[44ch] text-center">
-            {line}
-          </Text>
-          <span className="mt-3">
-            <Button label="Sign in" variant="primary" onClick={askToSignIn} />
-          </span>
-        </VStack>
+        <EmptyState
+          icon={<IconWell icon={icon} />}
+          title={title}
+          description={
+            configured === false
+              ? `${line} Sign-in isn't switched on for this deployment yet.`
+              : line
+          }
+          headingLevel={2}
+          actions={configured ? <Button label="Sign in" variant="primary" onClick={askToSignIn} /> : undefined}
+        />
       </Center>
     </Card>
   )
