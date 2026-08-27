@@ -16,7 +16,7 @@ import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
 import { StatusDot } from "@astryxdesign/core/StatusDot"
-import { HStack, VStack } from "@astryxdesign/core/Stack"
+import { HStack, StackItem, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { useToast } from "@astryxdesign/core/Toast"
 import { api, ApiError } from "@/lib/api"
@@ -643,9 +643,12 @@ function ConnectDialog({
 export default function PublishingPage() {
   return (
     <AppShell active="publishing">
-      <Layout height="auto" contentWidth={1213}>
+      <Layout height="fill" contentWidth={1213}>
         <LayoutContent padding={6}>
-          <VStack gap={4} align="stretch">
+          {/* Full height, with the body as the filling item: a screen holding
+              only an empty state should centre it in the room left under the
+              heading rather than draw it in a band at the top. */}
+          <VStack gap={4} align="stretch" height="100%">
             <VStack gap={1.5}>
               <Heading level={1}>Publishing</Heading>
               <Text as="p" type="supporting" display="block">
@@ -656,7 +659,9 @@ export default function PublishingPage() {
             <Suspense fallback={null}>
               <CallbackBanner />
             </Suspense>
-            <PublishingBody />
+            <StackItem size="fill">
+              <PublishingBody />
+            </StackItem>
           </VStack>
         </LayoutContent>
       </Layout>

@@ -87,7 +87,7 @@ export default function HomePage() {
 
   return (
     <AppShell active="home">
-      <Layout height="auto" contentWidth={1360}>
+      <Layout height="fill" contentWidth={1360}>
         <LayoutContent padding={6}>
           <VStack gap={6} align="stretch">
             <HStack justify="between" align="end" gap={4} wrap="wrap">

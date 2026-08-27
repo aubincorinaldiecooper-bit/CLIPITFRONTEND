@@ -33,8 +33,15 @@ export function AppShell({
   children: ReactNode
 }) {
   return (
-    <AstryxAppShell height="auto" variant="section" contentPadding={0} mobileNav={false} sideNav={<SideNav active={active} activeWorkspaceId={activeWorkspaceId} />}>
-      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
+    <AstryxAppShell height="fill" variant="section" contentPadding={0} mobileNav={false} sideNav={<SideNav active={active} activeWorkspaceId={activeWorkspaceId} />}>
+      {/* Two rows — the header at its own height, the page taking everything
+          left — rather than a flex column. In a flex column the page below the
+          header is only as tall as its own content, so a screen holding one
+          empty state drew it in a 500px band at the top of an 860px window and
+          left 360px of dead ground beneath it. `Layout height="fill"` fills
+          its container; this is what finally gives it a container worth
+          filling. */}
+      <div className="grid min-h-dvh min-w-0 flex-1 grid-rows-[auto_1fr]">
         {/* The shell no longer pads the content area: each page's Layout owns
             its own inset now, and double horizontal padding pushed content
             out of line with this header. The header pads itself instead. */}

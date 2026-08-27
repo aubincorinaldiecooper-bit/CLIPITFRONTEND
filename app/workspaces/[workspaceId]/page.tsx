@@ -416,7 +416,7 @@ export default function WorkspaceScreen({ params }: { params: Promise<{ workspac
 
   return (
     <AppShell active="workspaces" activeWorkspaceId={workspaceId}>
-      <Layout height="auto" contentWidth={1152}>
+      <Layout height="fill" contentWidth={1152}>
         <LayoutContent padding={6}>
           {/* The heading lives inside the body: one fetch names the room and
               fills it, so the title is never a guess. */}

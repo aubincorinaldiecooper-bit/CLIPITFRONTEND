@@ -62,21 +62,32 @@ export function SignedOutState({
     }
   }, [])
 
+  /**
+   * No Card around it, and no fixed height.
+   *
+   * This used to be an EmptyState inside a full-width muted Card. Measured at
+   * 1440x860 that card came out 1058px wide holding 408px of content — 61% of
+   * the box empty — and it stopped 364px short of the bottom of the screen.
+   * A box drawn around nothing makes the nothing louder; the emptiness reads
+   * as a broken panel rather than as a page waiting for you.
+   *
+   * Center at full height takes the room the page gives it, so the message
+   * sits in the optical middle of whatever is left instead of clinging to the
+   * top with a void underneath. The page ground shows through.
+   */
   return (
-    <Card variant="muted" padding={6}>
-      <Center minHeight={280}>
-        <EmptyState
-          icon={<IconWell icon={icon} />}
-          title={title}
-          description={
-            configured === false
-              ? `${line} Sign-in isn't switched on for this deployment yet.`
-              : line
-          }
-          headingLevel={2}
-          actions={configured ? <Button label="Sign in" variant="primary" onClick={askToSignIn} /> : undefined}
-        />
-      </Center>
-    </Card>
+    <Center height="100%" minHeight={360}>
+      <EmptyState
+        icon={<IconWell icon={icon} />}
+        title={title}
+        description={
+          configured === false
+            ? `${line} Sign-in isn't switched on for this deployment yet.`
+            : line
+        }
+        headingLevel={2}
+        actions={configured ? <Button label="Sign in" variant="primary" onClick={askToSignIn} /> : undefined}
+      />
+    </Center>
   )
 }

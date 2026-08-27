@@ -12,7 +12,7 @@ import { Icon } from "@astryxdesign/core/Icon"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import { List, ListItem } from "@astryxdesign/core/List"
 import { Skeleton } from "@astryxdesign/core/Skeleton"
-import { HStack, VStack } from "@astryxdesign/core/Stack"
+import { HStack, StackItem, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { useToast } from "@astryxdesign/core/Toast"
@@ -231,18 +231,23 @@ function WorkspacesBody() {
   }
   if (page.signInRequired) {
     return (
-      <VStack gap={5} align="stretch">
+      <VStack gap={5} align="stretch" height="100%">
         {header}
         {/* The app's empty-state shape, with the action IN it. This used to be
             one grey sentence ending "sign in (top right)" over an otherwise
             empty screen — pointing at a corner control that a guest-only
             deployment doesn't even render, on the one page every other empty
             moment of which gets a designed card. */}
-        <SignedOutState
-          icon={LockGlyph}
-          title="Your workspaces are waiting"
-          line="Workspaces belong to you, not to a browser tab. Sign in and yours will be here every time you come back."
-        />
+        {/* size="fill" so the state takes the room under the heading rather
+            than sitting in a band at the top with the rest of the screen
+            empty beneath it. */}
+        <StackItem size="fill">
+          <SignedOutState
+            icon={LockGlyph}
+            title="Your workspaces are waiting"
+            line="Workspaces belong to you, not to a browser tab. Sign in and yours will be here every time you come back."
+          />
+        </StackItem>
       </VStack>
     )
   }
@@ -510,7 +515,7 @@ function WorkspacesBody() {
 export default function WorkspacesScreen() {
   return (
     <AppShell active="workspaces">
-      <Layout height="auto" contentWidth={1213}>
+      <Layout height="fill" contentWidth={1213}>
         <LayoutContent padding={6}>
           <WorkspacesBody />
         </LayoutContent>

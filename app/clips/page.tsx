@@ -400,7 +400,7 @@ export default function ClipsPage() {
 
   return (
     <AppShell active="clips">
-      <Layout height="auto" contentWidth={1360}>
+      <Layout height="fill" contentWidth={1360}>
         <LayoutContent padding={6}>
           <VStack gap={5} align="stretch">
             <VStack gap={1.5}>

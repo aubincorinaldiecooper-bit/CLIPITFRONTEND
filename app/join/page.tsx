@@ -124,7 +124,7 @@ function JoinBody() {
 export default function JoinPage() {
   return (
     <AppShell active="workspaces">
-      <Layout height="auto" contentWidth={560}>
+      <Layout height="fill" contentWidth={560}>
         <LayoutContent padding={6}>
           <VStack gap={4} align="stretch">
             <Heading level={1}>Join a workspace</Heading>
