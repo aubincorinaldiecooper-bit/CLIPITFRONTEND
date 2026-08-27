@@ -1,6 +1,13 @@
 import { Logo } from '@/components/brand/logo';
-import { SHOW_PRICING } from '@/lib/landing-data';
 
+/**
+ * The footer is the mark and the copyright, and nothing else.
+ *
+ * It carried the same section links as the header — How it works, FAQ, and
+ * Pricing while that was shown. Repeating the header's nav at the bottom of a
+ * single-page site adds nothing: the reader has just scrolled past every one of
+ * those sections to arrive here, and the links only send them back up.
+ */
 export default function SiteFooter() {
   return (
     <footer className="bg-[#f7f5f2] pb-10">
@@ -8,11 +15,6 @@ export default function SiteFooter() {
         <a href="#" aria-label="Clipit — home" className="text-[#121212]">
           <Logo size={21} />
         </a>
-        <nav aria-label="Footer" className="hidden gap-6 font-medium sm:flex">
-          <a href="#how" className="hover:text-[#121212]">How it works</a>
-          {SHOW_PRICING && <a href="#pricing" className="hover:text-[#121212]">Pricing</a>}
-          <a href="#faq" className="hover:text-[#121212]">FAQ</a>
-        </nav>
         <span>&copy; 2026 Clipit</span>
       </div>
     </footer>
