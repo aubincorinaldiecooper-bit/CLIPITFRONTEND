@@ -74,9 +74,16 @@ export function AppShell({
             </nav>
           </span>
 
+          {/* The account has moved to the foot of the rail — destinations at
+              the top, the person at the bottom, which is the shape the
+              owner's reference uses and what stops the rail's lower half
+              reading as an empty column. On a phone the rail is not on
+              screen, so the header keeps it there. */}
           <span className="ml-auto flex shrink-0 items-center gap-3">
             {headerExtra}
-            <AccountControl />
+            <span className="lg:hidden">
+              <AccountControl />
+            </span>
           </span>
         </header>
 
