@@ -1,17 +1,18 @@
 import { Logo } from '@/components/brand/logo';
-import { SHOW_PRICING, SIGNUP_URL } from '@/lib/landing-data';
+import { SIGNUP_URL } from '@/lib/landing-data';
 
-// Pricing drops out of the nav with the section itself. A link to an anchor
-// that is not on the page does nothing at all when clicked \u2014 the reader gets no
-// movement and no explanation, which reads as a broken site rather than a
-// deliberately absent section.
-const NAV = [
-  ['#who', 'Who it\u2019s for'],
-  ['#how', 'How it works'],
-  ...(SHOW_PRICING ? [['#pricing', 'Pricing']] : []),
-  ['#faq', 'FAQ'],
-];
-
+/**
+ * The header is the mark and one action.
+ *
+ * It carried section links — Who it's for, How it works, FAQ, and Pricing while
+ * that was shown. They are gone, along with the matching set in the footer.
+ * On a page this short the links compete with the only thing the header is
+ * there to offer, and a reader who wants a section finds it by scrolling
+ * through it rather than by jumping past the rest.
+ *
+ * The section ids they pointed at (#who, #how, #faq) are left on the sections
+ * themselves: they cost nothing and they still work in a shared link.
+ */
 export default function SiteHeader() {
   return (
     <header className="flex items-center justify-between px-5 py-5 sm:px-10">
@@ -21,17 +22,10 @@ export default function SiteHeader() {
       <a href="#" aria-label="Clipit — home" className="text-[#121212]">
         <Logo size={26} />
       </a>
-      <div className="flex items-center">
-        <nav aria-label="Sections" className="mr-6 hidden gap-6 text-[.93rem] font-semibold sm:flex">
-          {NAV.map(([href, label]) => (
-            <a key={href} href={href} className="text-[#121212] hover:text-[#6b6965]">{label}</a>
-          ))}
-        </nav>
-        <a href={SIGNUP_URL}
-           className="rounded-full bg-[#121212] px-6 py-3 text-[.95rem] font-semibold text-white transition-transform hover:scale-[1.03] active:scale-[.98]">
-          Try Clipit
-        </a>
-      </div>
+      <a href={SIGNUP_URL}
+         className="rounded-full bg-[#121212] px-6 py-3 text-[.95rem] font-semibold text-white transition-transform hover:scale-[1.03] active:scale-[.98]">
+        Try Clipit
+      </a>
     </header>
   );
 }
