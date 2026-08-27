@@ -230,6 +230,13 @@ export function SideNav({
 
   return (
     <AstryxSideNav
+      // The owner's designs draw the open rail at 333px (Astryx's default is
+      // 260). Inline and only while open, NOT in the theme: a theme width
+      // applies in the collapsed state too, and since Astryx collapses by
+      // narrowing, pinning it there froze the fold — the chevron stored its
+      // preference and the rail never moved. Collapsed leaves width to the
+      // component, exactly as its own resizable mode does.
+      style={collapsed ? undefined : { width: 333 }}
       collapsible={{ isCollapsed: collapsed, onCollapsedChange: handleCollapsedChange }}
       header={
         // The mark rides Astryx's own icon slot and the word its heading slot,

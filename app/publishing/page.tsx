@@ -27,6 +27,7 @@ import { Grid } from "@astryxdesign/core/Grid"
 import { ArrowRightGlyph, LockGlyph, PlusGlyph } from "@/components/glyphs"
 import { BarsGlyph, BoltGlyph, BroadcastGlyph, PersonGlyph, SparkGlyph } from "@/components/feature-glyphs"
 import { IconWell, SectionCard } from "@/components/section-card"
+import { SignedOutState } from "@/components/signed-out-state"
 import { PlatformGlyph } from "@/components/platform-glyphs"
 import { PlatformLogo } from "@/components/platform-logos"
 import { useResumeIntent, useSignInGate } from "@/components/sign-in-gate"
@@ -309,11 +310,14 @@ function PublishingBody() {
     )
   }
   if (page.signInRequired) {
+    // The app's empty-state shape, with the action in it — the same reasoning
+    // as the Workspaces page, which had the identical one-grey-sentence state.
     return (
-      <Text as="p" type="body" color="secondary" display="block">
-        Connected accounts belong to you, not to a browser tab — sign in (top right) and they'll
-        be here every time you come back.
-      </Text>
+      <SignedOutState
+        icon={BroadcastGlyph}
+        title="Your accounts are waiting"
+        line="Connected accounts belong to you, not to a browser tab. Sign in and they'll be here every time you come back."
+      />
     )
   }
 

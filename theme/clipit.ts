@@ -141,13 +141,13 @@ export const clipitTheme = defineTheme({
         gap: "0.875rem",
       },
     },
-    // The rail's own width. Astryx defaults to 260px; the owner's designs draw
-    // it at 333, measured off the mockup by finding the vertical rule between
-    // rail and content. It was tuned to a different reference earlier — that
-    // reference is superseded.
-    "side-nav": {
-      base: { width: "333px" },
-    },
+    // The rail's WIDTH is deliberately not set here. A theme width applies in
+    // every state — including collapsed — and Astryx folds the rail by
+    // narrowing it, so pinning 333px here froze the collapse control: the
+    // chevron saved its preference and nothing on screen moved. The 333px the
+    // owner's designs draw lives in components/side-nav.tsx instead, applied
+    // only while the rail is open — the same shape as the component's own
+    // resizable mode, which also writes its width only when not collapsed.
     // The rail rows, at the proportions of the owner's designs: the label
     // bands in the mockup sit on a 76px pitch, against the 52px minimum here,
     // and the labels measure about 17px against 15. A wider rail with the old

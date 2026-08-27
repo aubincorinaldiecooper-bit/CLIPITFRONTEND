@@ -450,11 +450,6 @@ export const clipitTheme = {
         "gap": "0.875rem"
       }
     },
-    "side-nav": {
-      "base": {
-        "width": "333px"
-      }
-    },
     "side-nav-item": {
       "base": {
         "fontSize": "1.0625rem",

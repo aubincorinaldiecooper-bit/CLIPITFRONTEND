@@ -105,9 +105,27 @@ function clearToken(): void {
   window.sessionStorage.removeItem(TOKEN_KIND_KEY)
 }
 
+/**
+ * A response whose body is never going to be used still has to be drained.
+ *
+ * fetch resolves as soon as the headers arrive; the body stays queued on the
+ * connection until somebody reads or cancels it. Walking away from a non-ok
+ * response after checking only its status — which this file did in three
+ * places — leaves that connection held open with an unread body on it. Nothing
+ * visibly broke, but each one pinned one of the browser's six connections to
+ * the site for as long as the browser cared to wait, and the page never
+ * reached network-idle, which is also how it was caught.
+ */
+function discardBody(response: Response): void {
+  void response.body?.cancel().catch(() => {
+    // Failing to tidy a connection is not worth failing anything else over.
+  })
+}
+
 async function createSession(): Promise<string> {
   const response = await fetch(`${API_BASE}/api/sessions`, { method: "POST" })
   if (!response.ok) {
+    discardBody(response)
     throw new ApiError(response.status, "session_failed", "Could not start a session with the backend")
   }
   const body = (await response.json()) as { token: string }
@@ -176,6 +194,7 @@ function exchangeSignedInToken(): Promise<string | null> {
         body: JSON.stringify(guestToken ? { guestToken } : {}),
       })
       if (!response.ok) {
+        discardBody(response)
         // 401 is the server, holding the httpOnly cookie, saying plainly that
         // nobody is signed in. A stored "user" token is then stale and must
         // not be used — dropping it downgrades this tab to a guest, which is
@@ -276,6 +295,7 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
   })
 
   if (response.status === 401 && retryOn401) {
+    discardBody(response)
     // The stored token is no longer valid. Forget it AND the settled exchange:
     // a signed-in person's expired token must be replaced by asking the
     // sign-in cookie again, not by quietly minting a guest session — that

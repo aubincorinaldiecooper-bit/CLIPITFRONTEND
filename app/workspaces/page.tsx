@@ -29,6 +29,7 @@ import { ArrowRightGlyph, CirclePlusGlyph, PlusGlyph } from "@/components/glyphs
 import { ClockGlyph, InboxGlyph, PersonPlusGlyph, ShareGlyph } from "@/components/feature-glyphs"
 import { LockGlyph } from "@/components/glyphs"
 import { IconWell, SectionCard } from "@/components/section-card"
+import { SignedOutState } from "@/components/signed-out-state"
 import { WorkspaceIllustration } from "@/components/workspace-illustration"
 import { SplitModal } from "@/components/split-modal"
 
@@ -230,11 +231,18 @@ function WorkspacesBody() {
   }
   if (page.signInRequired) {
     return (
-      <VStack gap={4} align="stretch">
+      <VStack gap={5} align="stretch">
         {header}
-        <Text as="p" type="body" color="secondary" display="block">
-          Workspaces belong to you, not to a browser tab — sign in (top right) and yours will be here.
-        </Text>
+        {/* The app's empty-state shape, with the action IN it. This used to be
+            one grey sentence ending "sign in (top right)" over an otherwise
+            empty screen — pointing at a corner control that a guest-only
+            deployment doesn't even render, on the one page every other empty
+            moment of which gets a designed card. */}
+        <SignedOutState
+          icon={LockGlyph}
+          title="Your workspaces are waiting"
+          line="Workspaces belong to you, not to a browser tab. Sign in and yours will be here every time you come back."
+        />
       </VStack>
     )
   }
