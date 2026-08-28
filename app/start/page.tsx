@@ -10,6 +10,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon, ScissorsIcon } from "@hugeicons/core
 import { UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
+import { VideoCard, videoTitle } from "@/components/flow/video-card"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
 import { WorkspaceShell } from "@/components/workspace/shell"
@@ -454,29 +455,18 @@ export default function StartPage() {
           </div>
 
           {library.length > 0 && (
-            <div className="mt-10">
-              <p className="text-[13px] font-medium text-muted-foreground">Your videos</p>
-              <div className="mt-2 flex flex-col gap-1">
+            <div className="mt-12">
+              <h2 className="text-base font-semibold">Your videos</h2>
+              {/* Cards, not a filename list: the frame is what tells two cuts
+                  of the same shoot apart at a glance. */}
+              <div className="mt-4 grid grid-cols-1 gap-x-5 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
                 {library.map((entry) => (
-                  <button
+                  <VideoCard
                     key={entry.id}
-                    type="button"
-                    onClick={() => void openFromLibrary(entry.id)}
+                    video={entry}
                     disabled={busy}
-                    className="flex w-full items-center gap-3 rounded-xl bg-shcard px-3 py-2.5 text-left ring-1 ring-shborder transition-colors hover:bg-shaccent disabled:opacity-50"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm">
-                      {entry.title ?? entry.originalFilename ?? entry.sourceUrl ?? "Untitled video"}
-                    </span>
-                    {entry.durationTimecode && (
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                        {entry.durationTimecode}
-                      </span>
-                    )}
-                    <span className="shrink-0 text-[12px] text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleDateString()}
-                    </span>
-                  </button>
+                    onOpen={() => void openFromLibrary(entry.id)}
+                  />
                 ))}
               </div>
             </div>
@@ -525,7 +515,7 @@ export default function StartPage() {
           <VideoStage video={video} uploadFraction={uploadFraction} matches={matches} seekRequest={seekRequest} />
 
           <p className="mx-auto mt-3 max-w-xl truncate text-center text-xs text-muted-foreground">
-            {video.title ?? video.originalFilename ?? video.sourceUrl}
+            {videoTitle(video)}
             {video.durationTimecode ? ` · ${video.durationTimecode}` : ""}
           </p>
 
