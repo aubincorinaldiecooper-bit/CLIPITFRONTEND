@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -18,7 +19,9 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
+  ArrowRight01Icon,
   Clock01Icon,
+  Folder01Icon,
   FolderOpenIcon,
   InboxIcon,
   PlusSignIcon,
@@ -34,17 +37,16 @@ import {
   useWorkspaceSignInGate,
 } from "@/components/workspace/sign-in-gate"
 import { StatusButton, type StatusButtonState } from "@/components/workspace/uselayouts/status-button"
-import { WorkspaceFolder } from "@/components/workspace/uselayouts/workspace-folder"
 
 /**
  * The Workspaces overview, on the shadcn/uselayouts pilot stack.
  *
- * Everything the Astryx version did, restated on the new furniture:
- * the rooms you share (now uselayouts folders that open on hover), creating a
- * room with its first invitations in the same breath, the honest per-address
- * outcome of those invitations, and the handoff of any invitation link that
- * could not be emailed — those links exist and work, and closing the dialog
- * without handing them over would throw them away.
+ * Everything the Astryx version did, restated on the new furniture: the rooms
+ * you share as a list of rows, creating a room with its first invitations in
+ * the same breath, the honest per-address outcome of those invitations, and
+ * the handoff of any invitation link that could not be emailed — those links
+ * exist and work, and closing the dialog without handing them over would throw
+ * them away.
  */
 
 const CREATE_FORM_ID = "create-workspace-form"
@@ -199,10 +201,8 @@ function WorkspacesBody() {
     return (
       <div className="flex flex-col gap-6">
         {header}
-        <div className="flex flex-wrap gap-6">
-          <Skeleton className="h-52 w-80 rounded-xl" />
-          <Skeleton className="h-52 w-80 rounded-xl" />
-        </div>
+        {/* The same shape the rows will be, so nothing jumps when they land. */}
+        <Skeleton className="h-[212px] w-full rounded-xl" />
       </div>
     )
   }
@@ -250,20 +250,46 @@ function WorkspacesBody() {
       </div>
 
       {shared.length > 0 ? (
-        <div className="flex flex-wrap gap-8 pt-4">
-          {shared.map((room) => (
-            <WorkspaceFolder
-              key={room.id}
-              name={room.isOwner ? room.name : `${personName(room.ownerEmail) ?? "Shared"} · ${room.name}`}
-              meta={
-                `${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
-                `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
-                (room.isOwner ? " · yours" : "")
-              }
-              href={`/workspaces/${room.id}`}
-            />
-          ))}
-        </div>
+        /* Rows, not cards — the shape this page had before the pilot, and what
+           a list of places to go into wants: one line each, the whole row a
+           real link so it can be opened in a new tab, middle-clicked and
+           copied. The animated folder that stood here briefly was never asked
+           for; it also drew three sheets of paper for a room holding nothing,
+           and threw them over the heading above on hover. */
+        <Card className="overflow-hidden py-0">
+          <ul>
+            {shared.map((room, index) => (
+              <li key={room.id}>
+                <Link
+                  href={`/workspaces/${room.id}`}
+                  className={`flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-shaccent focus-visible:bg-shaccent focus-visible:outline-none ${
+                    index > 0 ? "border-t border-shborder" : ""
+                  }`}
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-shmuted text-muted-foreground">
+                    <HugeiconsIcon icon={Folder01Icon} className="size-[18px]" />
+                  </span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm font-medium">
+                      {room.isOwner
+                        ? room.name
+                        : `${personName(room.ownerEmail) ?? "Shared"} · ${room.name}`}
+                    </span>
+                    <span className="truncate text-[13px] text-muted-foreground">
+                      {`${room.clipCount} ${room.clipCount === 1 ? "clip" : "clips"} · ` +
+                        `${room.memberCount} ${room.memberCount === 1 ? "person" : "people"}` +
+                        (room.isOwner ? " · yours" : "")}
+                    </span>
+                  </span>
+                  <HugeiconsIcon
+                    icon={ArrowRight01Icon}
+                    className="ml-auto size-4 shrink-0 text-muted-foreground"
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
