@@ -111,7 +111,7 @@ function WorkspacesBody() {
     setHandoff(null)
     setCreateOpen(false)
     resetForm()
-    if (target) router.push(`/workspaces/${target}`)
+    if (target) router.push(`/shared/${target}`)
   }
 
   const create = async (event: React.FormEvent) => {
@@ -172,17 +172,17 @@ function WorkspacesBody() {
       setTimeout(() => {
         setCreateOpen(false)
         resetForm()
-        router.push(`/workspaces/${workspace.id}`)
+        router.push(`/shared/${workspace.id}`)
       }, 650)
     } catch (cause) {
       setCreating("idle")
-      setFormError(cause instanceof ApiError ? cause.message : "Couldn't create that workspace. Try again.")
+      setFormError(cause instanceof ApiError ? cause.message : "Couldn't create that room. Try again.")
     }
   }
 
   const header = (
     <div className="flex flex-col gap-1">
-      <h1 className="text-2xl font-semibold tracking-tight">Workspaces</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Shared</h1>
       <p className="text-sm text-muted-foreground">
         Rooms you share with other people. Your own clips live under Your clips.
       </p>
@@ -193,7 +193,7 @@ function WorkspacesBody() {
     return (
       <div className="flex flex-col gap-6">
         {header}
-        <p className="text-sm text-destructive">Couldn&apos;t load your workspaces. Refresh to try again.</p>
+        <p className="text-sm text-destructive">Couldn&apos;t load your shared rooms. Refresh to try again.</p>
       </div>
     )
   }
@@ -215,7 +215,7 @@ function WorkspacesBody() {
             <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
               <HugeiconsIcon icon={SquareLock01Icon} className="size-6" />
             </span>
-            <h2 className="text-lg font-semibold">Your workspaces are waiting</h2>
+            <h2 className="text-lg font-semibold">Your shared rooms are waiting</h2>
             <p className="text-sm text-muted-foreground">
               Workspaces belong to you, not to a browser tab.{" "}
               {authConfigured === false
@@ -245,7 +245,7 @@ function WorkspacesBody() {
         {header}
         <Button onClick={askToCreate}>
           <HugeiconsIcon icon={PlusSignIcon} />
-          Create workspace
+          Create a room
         </Button>
       </div>
 
@@ -261,7 +261,7 @@ function WorkspacesBody() {
             {shared.map((room, index) => (
               <li key={room.id}>
                 <Link
-                  href={`/workspaces/${room.id}`}
+                  href={`/shared/${room.id}`}
                   className={`flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-shaccent focus-visible:bg-shaccent focus-visible:outline-none ${
                     index > 0 ? "border-t border-shborder" : ""
                   }`}
@@ -296,14 +296,14 @@ function WorkspacesBody() {
             <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
               <HugeiconsIcon icon={FolderOpenIcon} className="size-6" />
             </span>
-            <h2 className="text-lg font-semibold">No workspaces yet</h2>
+            <h2 className="text-lg font-semibold">No shared rooms yet</h2>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Create a workspace to share clips with your team. Invite collaborators, share selected
+              Create a room to share clips with other people. Invite them, send selected
               clips, and keep your own library separate.
             </p>
             <Button className="mt-2" onClick={askToCreate}>
               <HugeiconsIcon icon={PlusSignIcon} />
-              Create workspace
+              Create a room
             </Button>
           </CardContent>
         </Card>
@@ -315,7 +315,7 @@ function WorkspacesBody() {
             <HugeiconsIcon icon={Clock01Icon} className="size-4 text-muted-foreground" />
             Recent activity
           </CardTitle>
-          <CardDescription>What happens in your workspaces shows up here.</CardDescription>
+          <CardDescription>What happens in your shared rooms shows up here.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center gap-2 py-8 text-center">
@@ -324,7 +324,7 @@ function WorkspacesBody() {
             </span>
             <p className="text-sm font-medium">Nothing here yet.</p>
             <p className="text-sm text-muted-foreground">
-              Activity from your workspaces will appear here.
+              Activity from your shared rooms will appear here.
             </p>
           </div>
         </CardContent>
@@ -341,7 +341,7 @@ function WorkspacesBody() {
       >
         <DialogContent className="shadcn-scope sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create a workspace</DialogTitle>
+            <DialogTitle>Create a room</DialogTitle>
             <DialogDescription>Share clips with your team.</DialogDescription>
           </DialogHeader>
           <form id={CREATE_FORM_ID} onSubmit={create} className="flex flex-col gap-4">
@@ -351,7 +351,7 @@ function WorkspacesBody() {
               </p>
             )}
             <div className="flex flex-col gap-2">
-              <Label htmlFor="ws-name">Workspace name</Label>
+              <Label htmlFor="ws-name">Room name</Label>
               <Input
                 id="ws-name"
                 value={name}
@@ -397,7 +397,7 @@ function WorkspacesBody() {
             </Button>
             <StatusButton
               state={creating}
-              idleLabel="Create workspace"
+              idleLabel="Create a room"
               loadingLabel="Creating"
               successLabel="Created"
               type="submit"

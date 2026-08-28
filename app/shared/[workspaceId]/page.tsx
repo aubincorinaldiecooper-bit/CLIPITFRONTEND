@@ -120,7 +120,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     setBusyId(clipId)
     try {
       await api.removeClipFromWorkspace(workspaceId, clipId)
-      toast.success("Taken out of this workspace. The clip itself is untouched.")
+      toast.success("Taken out of this room. The clip itself is untouched.")
       // Drop the card in place rather than refetching: a refetch re-signs
       // every clip's URL, which restarts whatever video is playing.
       setPage((current) =>
@@ -163,9 +163,9 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     try {
       await api.leaveWorkspace(workspaceId)
       window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
-      router.push("/workspaces")
+      router.push("/shared")
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : "Couldn't leave this workspace.")
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't leave this room.")
       setBusyId(null)
     }
   }
@@ -201,7 +201,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     )
   }
   if (failed === "error") {
-    return <p className="text-sm text-destructive">Couldn&apos;t load this workspace. Refresh to try again.</p>
+    return <p className="text-sm text-destructive">Couldn&apos;t load this room. Refresh to try again.</p>
   }
   if (page === null) {
     return (
@@ -364,7 +364,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
             </span>
             <h2 className="text-lg font-semibold">Nothing sent here yet</h2>
             <p className="text-sm text-muted-foreground">
-              In Your clips, every ready clip has a &quot;Send to workspace&quot; option — what you
+              In Your clips, every ready clip has a &quot;Send to a room&quot; option — what you
               send lands here for everyone in the workspace.
             </p>
             <Button variant="secondary" className="mt-2" onClick={() => router.push("/clips")}>

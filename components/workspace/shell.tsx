@@ -51,7 +51,7 @@ const DESTINATIONS = [
   { key: "start", label: "New clip", href: "/start", icon: ScissorsIcon },
   { key: "clips", label: "Your clips", href: "/clips", icon: VideoReplayIcon },
   { key: "publishing", label: "Publishing", href: "/publishing", icon: PodcastIcon },
-  { key: "workspaces", label: "Workspaces", href: "/workspaces", icon: UserGroupIcon },
+  { key: "workspaces", label: "Shared", href: "/shared", icon: UserGroupIcon },
 ] as const
 
 export function WorkspaceShell({
@@ -148,13 +148,13 @@ export function WorkspaceShell({
               </SidebarGroup>
               {rooms.length > 0 && (
                 <SidebarGroup>
-                  <SidebarGroupLabel>Your workspaces</SidebarGroupLabel>
+                  <SidebarGroupLabel>Rooms</SidebarGroupLabel>
                   <SidebarGroupContent>
                     <SidebarMenu>
                       {rooms.map((room) => (
                         <SidebarMenuItem key={room.id}>
                           <SidebarMenuButton asChild isActive={room.id === activeWorkspaceId}>
-                            <Link href={`/workspaces/${room.id}`}>
+                            <Link href={`/shared/${room.id}`}>
                               <HugeiconsIcon icon={Folder01Icon} />
                               <span>{room.label}</span>
                             </Link>

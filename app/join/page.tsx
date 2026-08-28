@@ -63,7 +63,7 @@ function JoinBody() {
       // Already a member: the invitation was not spent, and saying "you're
       // in" would be true but confusing. Say which it was.
       setAlready(Boolean(result.alreadyMember))
-      router.push("/workspaces")
+      router.push("/shared")
     } catch (cause) {
       // The API's refusals are already written for people — "sign in first",
       // "that invitation has expired" — so repeat them rather than rephrase.
@@ -101,22 +101,22 @@ function JoinBody() {
       {joined && (
         <Banner
           status="success"
-          title={already ? "You're already in this workspace" : "You're in"}
-          description="Taking you to your workspaces…"
+          title={already ? "You're already in this room" : "You're in"}
+          description="Taking you to your shared rooms…"
         />
       )}
       <Text as="p" type="body" display="block">
         You've been invited to join <strong>{preview.workspaceName}</strong> on CLIPIT.
       </Text>
       <Text as="p" type="supporting" display="block">
-        Joining means you see the clips people send to this workspace, and you can send clips there
+        Joining means you see the clips people send to this room, and you can send clips there
         from your own library. Your library itself stays yours — joining shares nothing automatically.
       </Text>
       <Text as="p" type="supporting" display="block">
         You'll need to be signed in as the person accepting — use Sign in at the top right first if you
         aren't. You'll come straight back here.
       </Text>
-      <Button label="Join the workspace" variant="primary" isLoading={joining} onClick={() => void join()} />
+      <Button label="Join the room" variant="primary" isLoading={joining} onClick={() => void join()} />
     </VStack>
   )
 }
@@ -127,7 +127,7 @@ export default function JoinPage() {
       <Layout height="fill" contentWidth={560}>
         <LayoutContent padding={6}>
           <VStack gap={4} align="stretch">
-            <Heading level={1}>Join a workspace</Heading>
+            <Heading level={1}>Join a room</Heading>
             {/* useSearchParams needs a Suspense boundary in the app router. */}
             <Suspense fallback={<Skeleton height={100} radius={3} />}>
               <JoinBody />

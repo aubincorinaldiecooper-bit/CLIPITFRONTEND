@@ -137,7 +137,7 @@ export const NAV_ITEMS: Array<{
   { key: "start", label: "New clip", href: "/start", icon: ScissorsGlyph },
   { key: "clips", label: "Your clips", href: "/clips", icon: LibraryGlyph },
   { key: "publishing", label: "Publishing", href: "/publishing", icon: BroadcastGlyph },
-  { key: "workspaces", label: "Workspaces", href: "/workspaces", icon: TeamGlyph },
+  { key: "workspaces", label: "Shared", href: "/shared", icon: TeamGlyph },
 ]
 
 /**
@@ -285,7 +285,7 @@ export function SideNav({
                   <SideNavItem
                     key={room.id}
                     label={room.label}
-                    href={`/workspaces/${room.id}`}
+                    href={`/shared/${room.id}`}
                     icon={FolderGlyph}
                     isSelected={activeWorkspaceId === room.id}
                     size="sm"
