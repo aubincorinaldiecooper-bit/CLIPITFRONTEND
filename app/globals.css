@@ -7,6 +7,9 @@
 @import "../theme/clipit.css";
 @import "@astryxdesign/core/tailwind-theme.css";
 @import "tailwindcss/utilities.css" layer(utilities);
+/* Enter/exit animation utilities the vendored shadcn components use
+   (animate-in, fade-in, data-[state]…). Additive names only. */
+@import "tw-animate-css";
 
 /*
  * The landing page is a dark, cinematic surface in both schemes: the orbit
@@ -43,6 +46,105 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+
+  /*
+   * shadcn's token names, for the workspace pilot (the owner's call: the
+   * workspace screens move to shadcn/ui + uselayouts; the rest of the app
+   * stays Astryx for now).
+   *
+   * ONLY the names Astryx's own tailwind-theme.css does NOT define are mapped
+   * here. Seven of shadcn's names collide with Astryx tokens this app already
+   * wears everywhere — primary, secondary, border, card, muted, popover,
+   * accent (text-primary alone appears on every screen) — and a mapping here
+   * is global, so redefining those would repaint every Astryx screen. The
+   * colliding seven are overridden inside .shadcn-scope below instead, where
+   * the cascade confines them to the workspace subtree.
+   */
+  /*
+   * The seven names that collide with Astryx wear a pilot-private "sh"
+   * prefix instead (bg-shprimary, border-shborder…), and the vendored
+   * components were renamed to match. A scoped override of --color-primary
+   * was tried first and CANNOT work: this block is `@theme inline`, so
+   * Tailwind bakes each utility's value at build time — text-secondary
+   * compiles straight to Astryx's ink variable, and no runtime override of
+   * --color-secondary is ever read. Namespacing is the only clean cut.
+   */
+  --color-shprimary: var(--primary);
+  --color-shsecondary: var(--secondary);
+  --color-shmuted: var(--muted);
+  --color-shaccent: var(--accent);
+  --color-shborder: var(--border);
+  --color-shcard: var(--card);
+  --color-shpopover: var(--popover);
+
+  --color-card-foreground: var(--card-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/*
+ * The workspace pilot's ground: shadcn's default (neutral, light) palette,
+ * verbatim from shadcn's own stylesheet, confined to this class. Custom
+ * properties cascade, so everything inside a .shadcn-scope subtree resolves
+ * to these values and nothing outside it changes.
+ *
+ * The colliding names (see the note above) are re-pointed here, scope-only:
+ * inside the workspace, text-primary is shadcn's primary; everywhere else it
+ * stays Astryx's ink. Same trick for the radius scale — the app's radius
+ * tokens are Astryx's, so shadcn's ladder applies only in here.
+ */
+.shadcn-scope {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  /* shadcn's radius ladder, scope-only. */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  color-scheme: light;
 }
 
 body {

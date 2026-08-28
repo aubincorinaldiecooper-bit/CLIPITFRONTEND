@@ -2,34 +2,41 @@
 
 import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@astryxdesign/core/Button"
-import { Center } from "@astryxdesign/core/Center"
-import { Grid } from "@astryxdesign/core/Grid"
-import { Heading } from "@astryxdesign/core/Heading"
-import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
-import { EmptyState } from "@astryxdesign/core/EmptyState"
-import { Popover } from "@astryxdesign/core/Popover"
-import { List, ListItem } from "@astryxdesign/core/List"
-import { Skeleton } from "@astryxdesign/core/Skeleton"
-import { HStack, VStack } from "@astryxdesign/core/Stack"
-import { Text } from "@astryxdesign/core/Text"
-import { TextInput } from "@astryxdesign/core/TextInput"
-import { useToast } from "@astryxdesign/core/Toast"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
+import { HugeiconsIcon } from "@hugeicons/react"
+import {
+  FolderOpenIcon,
+  SquareLock01Icon,
+  UserAdd01Icon,
+  UserGroupIcon,
+} from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
 import type { WorkspaceDetail } from "@/lib/types"
-import { AppShell } from "@/components/app-shell"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
-import { GhostCards } from "@/components/empty-illustrations"
+import { WorkspaceShell } from "@/components/workspace/shell"
+import { useAuthConfigured, useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
+import { StatusButton, type StatusButtonState } from "@/components/workspace/uselayouts/status-button"
+import { ConfirmDeleteButton } from "@/components/workspace/uselayouts/confirm-delete-button"
 
 /**
- * One workspace: the clips people have sent here.
+ * One workspace, on the shadcn/uselayouts pilot stack.
  *
- * The room exists for its clips, so the clips ARE the page. Everything
- * administrative — who is here, inviting, pending invitations, leaving —
- * lives in two small controls in the header (People, Invite), each opening a
- * popover. Management is a visit, not a resident: it stops fighting the
- * clips for space.
+ * The room exists for its clips, so the clips ARE the page. Administration —
+ * who is here, inviting, pending invitations, leaving — stays in two small
+ * header controls (People, Invite), each a popover, exactly as before. The
+ * clip cards themselves are unchanged: they carry the video, and video is the
+ * one carve-out every stack decision has kept.
+ *
+ * Destructive actions wear uselayouts' two-press confirm: the first press
+ * arms, the second removes, and an armed button disarms itself. Nobody loses
+ * a teammate to a stray click.
  */
 
 function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
@@ -37,15 +44,14 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
   const [failed, setFailed] = useState<"missing" | "signin" | "error" | null>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [email, setEmail] = useState("")
-  const [inviting, setInviting] = useState(false)
+  const [inviting, setInviting] = useState<StatusButtonState>("idle")
   const [formError, setFormError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   /** A link to pass on by hand when no email could be sent. */
   const [linkToShare, setLinkToShare] = useState<{ email: string; url: string } | null>(null)
-  const [peopleOpen, setPeopleOpen] = useState(false)
-  const [inviteOpen, setInviteOpen] = useState(false)
   const router = useRouter()
-  const toast = useToast()
+  const { askToSignIn } = useWorkspaceSignInGate()
+  const authConfigured = useAuthConfigured()
 
   const load = () =>
     api
@@ -61,17 +67,16 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
 
   /**
    * Refresh AFTER an action that already succeeded. A blip here must not
-   * replace the whole page with a failure screen — the action worked, and
-   * the page may be holding something unrecoverable (the one-time invite
-   * link shown when email couldn't be sent). Keep what's on screen and say
-   * the refresh missed.
+   * replace the page with a failure screen — the action worked, and the page
+   * may be holding something unrecoverable (the one-time invite link shown
+   * when email couldn't be sent). Keep what's on screen and say so.
    */
   const refresh = () =>
     api
       .getWorkspace(workspaceId)
       .then(setPage)
       .catch(() => {
-        toast({ type: "error", body: "Couldn't refresh the room — showing the last loaded view." })
+        toast.error("Couldn't refresh the room — showing the last loaded view.")
       })
 
   useEffect(() => {
@@ -83,31 +88,31 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
   const invite = async (event: React.FormEvent) => {
     event.preventDefault()
     const address = email.trim()
-    if (!address || inviting) return
+    if (!address || inviting !== "idle") return
     setFormError(null)
-    setInviting(true)
+    setInviting("loading")
     try {
       const result = await api.inviteToWorkspace(workspaceId, address)
       setEmail("")
       if (result.emailed) {
-        toast({ body: `Invitation sent to ${address}.` })
+        toast.success(`Invitation sent to ${address}.`)
         setLinkToShare(null)
+        setInviting("success")
       } else {
         // Never claim an email arrived that did not.
-        toast({
-          type: "error",
-          body:
-            result.emailProblem === "email_domain_unverified"
-              ? "The invitation exists, but email could not be sent — the sending domain isn't verified yet."
-              : "The invitation exists, but the email could not be sent. Pass the link on instead.",
-        })
+        toast.error(
+          result.emailProblem === "email_domain_unverified"
+            ? "The invitation exists, but email could not be sent — the sending domain isn't verified yet."
+            : "The invitation exists, but the email could not be sent. Pass the link on instead.",
+        )
         setLinkToShare({ email: address, url: result.acceptUrl })
+        setInviting("idle")
       }
       await refresh()
+      setTimeout(() => setInviting("idle"), 1200)
     } catch (cause) {
+      setInviting("idle")
       setFormError(cause instanceof ApiError ? cause.message : "Couldn't send that invitation. Try again.")
-    } finally {
-      setInviting(false)
     }
   }
 
@@ -115,18 +120,14 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     setBusyId(clipId)
     try {
       await api.removeClipFromWorkspace(workspaceId, clipId)
-      toast({ body: "Taken out of this workspace. The clip itself is untouched." })
+      toast.success("Taken out of this workspace. The clip itself is untouched.")
       // Drop the card in place rather than refetching: a refetch re-signs
-      // every clip's URL, which reloads — and restarts — whatever video the
-      // person is watching in this room right now.
+      // every clip's URL, which restarts whatever video is playing.
       setPage((current) =>
         current ? { ...current, clips: current.clips.filter((clip) => clip.id !== clipId) } : current,
       )
     } catch (cause) {
-      toast({
-        type: "error",
-        body: cause instanceof ApiError ? cause.message : "Couldn't take that clip out.",
-      })
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't take that clip out.")
     } finally {
       setBusyId(null)
     }
@@ -138,10 +139,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
       await api.revokeInvite(workspaceId, inviteId)
       await refresh()
     } catch (cause) {
-      toast({
-        type: "error",
-        body: cause instanceof ApiError ? cause.message : "Couldn't withdraw that invitation.",
-      })
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't withdraw that invitation.")
     } finally {
       setBusyId(null)
     }
@@ -151,13 +149,10 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     setBusyId(userId)
     try {
       await api.removeWorkspaceMember(workspaceId, userId)
-      toast({ body: `${label} no longer has access.` })
+      toast.success(`${label} no longer has access.`)
       await refresh()
     } catch (cause) {
-      toast({
-        type: "error",
-        body: cause instanceof ApiError ? cause.message : "Couldn't remove that person.",
-      })
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't remove that person.")
     } finally {
       setBusyId(null)
     }
@@ -170,215 +165,215 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
       window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT))
       router.push("/workspaces")
     } catch (cause) {
-      toast({
-        type: "error",
-        body: cause instanceof ApiError ? cause.message : "Couldn't leave this workspace.",
-      })
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't leave this workspace.")
       setBusyId(null)
     }
   }
 
   if (failed === "missing") {
     return (
-      <Text as="p" type="body" color="secondary" display="block">
-        This workspace doesn't exist, or you're not in it. Sign in (top right) if you haven't.
-      </Text>
+      <p className="text-sm text-muted-foreground">
+        This workspace doesn&apos;t exist, or you&apos;re not in it. Sign in (top right) if you haven&apos;t.
+      </p>
     )
   }
   if (failed === "signin") {
     return (
-      <Text as="p" type="body" color="secondary" display="block">
-        Workspaces belong to you, not to a browser tab — sign in (top right) and this page will open.
-      </Text>
+      <Card className="flex flex-1 items-center justify-center border-dashed">
+        <CardContent className="flex max-w-md flex-col items-center gap-3 py-12 text-center">
+          <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
+            <HugeiconsIcon icon={SquareLock01Icon} className="size-6" />
+          </span>
+          <h2 className="text-lg font-semibold">This room is waiting</h2>
+          <p className="text-sm text-muted-foreground">
+            Workspaces belong to you, not to a browser tab.{" "}
+            {authConfigured === false
+              ? "Sign-in isn't switched on for this deployment yet."
+              : "Sign in and this page will open."}
+          </p>
+          {authConfigured && (
+            <Button className="mt-2" onClick={askToSignIn}>
+              Sign in
+            </Button>
+          )}
+        </CardContent>
+      </Card>
     )
   }
   if (failed === "error") {
-    return <p className="text-sm text-error">Couldn't load this workspace. Refresh to try again.</p>
+    return <p className="text-sm text-destructive">Couldn&apos;t load this workspace. Refresh to try again.</p>
   }
   if (page === null) {
-    return <Skeleton height={160} radius={3} />
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-9 w-64" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Skeleton className="aspect-video rounded-xl" />
+          <Skeleton className="aspect-video rounded-xl" />
+          <Skeleton className="aspect-video rounded-xl" />
+        </div>
+      </div>
+    )
   }
 
-  // Your personal room and "Your clips" are one place. It is no longer listed
-  // as a workspace, so a link that still points here — a bookmark, a URL
-  // someone kept — lands on the page that place actually has, rather than on
-  // a second view of it wearing a different name.
+  // The personal room and "Your clips" are one place; a kept URL lands on the
+  // page that place actually has.
   if (page.workspace.isPersonal) {
     router.replace("/clips")
-    return <Skeleton height={160} radius={3} />
+    return <Skeleton className="h-40 w-full rounded-xl" />
   }
 
   const { isOwner } = page.workspace
 
-  const peopleContent = (
-    <VStack gap={2} align="stretch">
-      <List hasDividers density="compact">
-        {page.members.map((member) => (
-          <ListItem
-            key={member.userId}
-            label={member.email ?? "Teammate"}
-            description={(member.role === "owner" ? "Owner" : "Member") + (member.isYou ? " — that's you" : "")}
-            endContent={
-              isOwner && !member.isYou ? (
-                <Button
-                  label="Remove"
-                  variant="secondary"
-                  size="sm"
-                  isLoading={busyId === member.userId}
-                  onClick={() => void removePerson(member.userId, member.email ?? "That person")}
-                />
-              ) : member.isYou && !isOwner ? (
-                <Button
-                  label="Leave"
-                  variant="ghost"
-                  size="sm"
-                  isLoading={busyId === "leave"}
-                  onClick={() => void leave()}
-                />
-              ) : undefined
-            }
-          />
-        ))}
-      </List>
-    </VStack>
-  )
-
-  const inviteContent = (
-    <VStack gap={2} align="stretch">
-      <form onSubmit={invite}>
-        <VStack gap={2} align="stretch">
-          <TextInput
-            label="Email address"
-            isLabelHidden
-            type="email"
-            isRequired
-            value={email}
-            onChange={(value) => setEmail(value)}
-            placeholder="teammate@example.com"
-            hasAutoFocus
-          />
-          <Button label="Send invitation" variant="primary" size="sm" type="submit" isLoading={inviting} />
-        </VStack>
-      </form>
-      {formError ? (
-        <Text as="p" type="supporting" display="block" className="text-error">
-          {formError}
-        </Text>
-      ) : linkToShare ? (
-        <VStack gap={0.5} align="stretch">
-          <Text as="p" type="supporting" display="block" className="text-warning">
-            Email couldn't be sent — pass this link to {linkToShare.email}:
-          </Text>
-          {/* A long URL scrolls inside its own line rather than widening the popover. */}
-          <Text as="p" type="supporting" display="block" className="overflow-x-auto whitespace-nowrap">
-            {linkToShare.url}
-          </Text>
-        </VStack>
-      ) : (
-        <Text as="p" type="supporting" display="block">
-          The link works once and expires in seven days. Everyone here sees the clips sent to this
-          workspace.
-        </Text>
-      )}
-      {page.invites.length > 0 && (
-        <VStack gap={1} align="stretch">
-          <Text as="p" type="supporting" display="block" weight="medium">
-            Waiting to be accepted
-          </Text>
-          <List hasDividers density="compact">
-            {page.invites.map((pending) => (
-              <ListItem
-                key={pending.id}
-                label={pending.email}
-                description={`Invited ${new Date(pending.invitedAt).toLocaleDateString()}`}
-                endContent={
-                  <Button
-                    label="Withdraw"
-                    variant="ghost"
-                    size="sm"
-                    isLoading={busyId === pending.id}
-                    onClick={() => void withdraw(pending.id)}
-                  />
-                }
-              />
-            ))}
-          </List>
-        </VStack>
-      )}
-    </VStack>
-  )
-
   return (
-    <VStack gap={5} align="stretch">
-      {/* The header owns the administration: the room's name, and two small
-          doors — People and Invite. The page below is the clips, uncontested. */}
-      <HStack justify="between" align="start" gap={4} wrap="wrap">
-        <VStack gap={1.5}>
-          <Heading level={1}>{page.workspace.name}</Heading>
-          <Text as="p" type="supporting" display="block">
-            {page.workspace.isPersonal
-              ? "Your workspace — every clip you cut lives here. Create a workspace to share clips with people."
-              : "Clips people have sent here."}
-          </Text>
-        </VStack>
-        {!page.workspace.isPersonal && (
-        <HStack gap={2} align="center">
-          <Popover
-            isOpen={peopleOpen}
-            onOpenChange={setPeopleOpen}
-            placement="below"
-            alignment="end"
-            width={340}
-            label="People in this workspace"
-            content={peopleContent}
-          >
-            <Button label={`People · ${page.members.length}`} variant="secondary" size="sm" />
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{page.workspace.name}</h1>
+          <p className="text-sm text-muted-foreground">Clips people have sent here.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="secondary" size="sm">
+                <HugeiconsIcon icon={UserGroupIcon} />
+                People · {page.members.length}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="shadcn-scope w-[340px]">
+              <div className="flex flex-col gap-1">
+                {page.members.map((member, index) => (
+                  <div key={member.userId} className="flex flex-col">
+                    {index > 0 && <Separator className="my-1" />}
+                    <div className="flex items-center justify-between gap-3 py-1.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm">{member.email ?? "Teammate"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(member.role === "owner" ? "Owner" : "Member") +
+                            (member.isYou ? " — that's you" : "")}
+                        </p>
+                      </div>
+                      {isOwner && !member.isYou ? (
+                        <ConfirmDeleteButton
+                          id={`remove-${member.userId}`}
+                          label="Remove"
+                          confirmLabel="Confirm"
+                          busy={busyId === member.userId}
+                          onConfirm={() => void removePerson(member.userId, member.email ?? "That person")}
+                        />
+                      ) : member.isYou && !isOwner ? (
+                        <ConfirmDeleteButton
+                          id="leave"
+                          label="Leave"
+                          confirmLabel="Confirm"
+                          busy={busyId === "leave"}
+                          onConfirm={() => void leave()}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
           </Popover>
           {isOwner && (
-            <Popover
-              isOpen={inviteOpen}
-              onOpenChange={setInviteOpen}
-              placement="below"
-              alignment="end"
-              width={340}
-              label="Invite someone to this workspace"
-              content={inviteContent}
-            >
-              <Button label="Invite" variant="primary" size="sm" />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm">
+                  <HugeiconsIcon icon={UserAdd01Icon} />
+                  Invite
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="shadcn-scope w-[340px]">
+                <form onSubmit={invite} className="flex flex-col gap-2">
+                  <Input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="teammate@example.com"
+                    aria-label="Email address"
+                    autoFocus
+                  />
+                  <StatusButton
+                    state={inviting}
+                    idleLabel="Send invitation"
+                    loadingLabel="Sending"
+                    successLabel="Sent"
+                    type="submit"
+                    className="h-9 min-w-[120px] text-sm"
+                  />
+                </form>
+                <div className="mt-2 flex flex-col gap-2">
+                  {formError ? (
+                    <p className="text-xs text-destructive">{formError}</p>
+                  ) : linkToShare ? (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-xs text-amber-600">
+                        Email couldn&apos;t be sent — pass this link to {linkToShare.email}:
+                      </p>
+                      <p className="select-all overflow-x-auto whitespace-nowrap rounded-md bg-shmuted px-2 py-1.5 font-mono text-xs">
+                        {linkToShare.url}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      The link works once and expires in seven days. Everyone here sees the clips
+                      sent to this workspace.
+                    </p>
+                  )}
+                  {page.invites.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-xs font-medium">Waiting to be accepted</p>
+                      {page.invites.map((pending) => (
+                        <div key={pending.id} className="flex items-center justify-between gap-3 py-1">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm">{pending.email}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Invited {new Date(pending.invitedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busyId === pending.id}
+                            onClick={() => void withdraw(pending.id)}
+                          >
+                            Withdraw
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
             </Popover>
           )}
-        </HStack>
-        )}
-      </HStack>
+        </div>
+      </div>
 
       {page.hasMoreClips && (
-        <Text as="p" type="supporting" display="block">
-          {page.workspace.isPersonal
-            ? "Showing the newest 60 — your full library is in Your clips."
-            : "Showing the newest 60 clips sent here."}
-        </Text>
+        <p className="text-sm text-muted-foreground">Showing the newest 60 clips sent here.</p>
       )}
 
       {page.clips.length === 0 ? (
-        <Center minHeight="50vh">
-          {page.workspace.isPersonal ? (
-            <EmptyState
-              icon={<GhostCards />}
-              title="No clips yet"
-              description="Cut a moment from any video and it lands here — this workspace is your library."
-              actions={<Button label="Clip a video" variant="primary" href="/start" />}
-            />
-          ) : (
-            <EmptyState
-              icon={<GhostCards />}
-              title="Nothing sent here yet"
-              description='In Your clips, every ready clip has a "Send to workspace" option — what you send lands here for everyone in the workspace.'
-              actions={<Button label="Open Your clips" variant="secondary" href="/clips" />}
-            />
-          )}
-        </Center>
+        <Card className="flex flex-1 items-center justify-center border-dashed">
+          <CardContent className="flex max-w-md flex-col items-center gap-3 py-12 text-center">
+            <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
+              <HugeiconsIcon icon={FolderOpenIcon} className="size-6" />
+            </span>
+            <h2 className="text-lg font-semibold">Nothing sent here yet</h2>
+            <p className="text-sm text-muted-foreground">
+              In Your clips, every ready clip has a &quot;Send to workspace&quot; option — what you
+              send lands here for everyone in the workspace.
+            </p>
+            <Button variant="secondary" className="mt-2" onClick={() => router.push("/clips")}>
+              Open Your clips
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
-        <Grid columns={{ minWidth: 280, max: 3 }} gap={3}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {page.clips.map((clip) => (
             <ClipCard
               key={clip.id}
@@ -388,26 +383,24 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
               actions={
                 <>
                   {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
-                  {/* "Take out" removes a SHARE. The personal workspace holds
-                      the clips themselves — nothing was sent there, so there
-                      is nothing to take out, and offering it would be
-                      offering an operation that cannot apply. */}
-                  {!page.workspace.isPersonal && (
-                    <Button
-                      label="Take out"
-                      variant="secondary"
-                      size="sm"
-                      isLoading={busyId === clip.id}
-                      onClick={() => void takeOut(clip.id)}
-                    />
-                  )}
+                  {/* "Take out" removes a SHARE — the clip itself is untouched,
+                      so a plain button is honest; the two-press confirm is
+                      reserved for taking away people. */}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busyId === clip.id}
+                    onClick={() => void takeOut(clip.id)}
+                  >
+                    Take out
+                  </Button>
                 </>
               }
             />
           ))}
-        </Grid>
+        </div>
       )}
-    </VStack>
+    </div>
   )
 }
 
@@ -415,14 +408,10 @@ export default function WorkspaceScreen({ params }: { params: Promise<{ workspac
   const { workspaceId } = use(params)
 
   return (
-    <AppShell active="workspaces" activeWorkspaceId={workspaceId}>
-      <Layout height="fill" contentWidth={1152}>
-        <LayoutContent padding={6}>
-          {/* The heading lives inside the body: one fetch names the room and
-              fills it, so the title is never a guess. */}
-          <WorkspaceBody workspaceId={workspaceId} />
-        </LayoutContent>
-      </Layout>
-    </AppShell>
+    <WorkspaceShell active="workspaces" activeWorkspaceId={workspaceId}>
+      {/* The heading lives inside the body: one fetch names the room and
+          fills it, so the title is never a guess. */}
+      <WorkspaceBody workspaceId={workspaceId} />
+    </WorkspaceShell>
   )
 }
