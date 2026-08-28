@@ -263,7 +263,7 @@ export function VideoStage({
   return (
     <motion.div
       layout
-      className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-2xl bg-black/50 shadow-[0_0_40px_rgba(0,0,0,0.45)] ring-1 ring-white/10"
+      className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-2xl bg-[#0b0b0d] shadow-[0_18px_50px_rgba(18,18,18,0.18)] ring-1 ring-black/10"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: EASE }}
@@ -449,11 +449,11 @@ function StageWaiting({ activity }: { activity: StageActivity }) {
             style={{ transition: "stroke-dashoffset 600ms cubic-bezier(0.23,1,0.32,1)" }}
           />
         </svg>
-        <span className="absolute inset-0 flex items-center justify-center text-2xl font-medium tabular-nums">
+        <span className="absolute inset-0 flex items-center justify-center text-2xl font-medium tabular-nums text-white">
           {activity.percent}%
         </span>
       </div>
-      <p className="max-w-sm px-6 text-center text-sm text-foreground/60">{activity.label}</p>
+      <p className="max-w-sm px-6 text-center text-sm text-white/60">{activity.label}</p>
     </div>
   )
 }

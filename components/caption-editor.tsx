@@ -1,19 +1,17 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Banner } from "@astryxdesign/core/Banner"
-import { Button } from "@astryxdesign/core/Button"
-import { Card } from "@astryxdesign/core/Card"
-import { IconButton } from "@astryxdesign/core/IconButton"
-import { NumberInput } from "@astryxdesign/core/NumberInput"
-import { Popover } from "@astryxdesign/core/Popover"
-import { Selector } from "@astryxdesign/core/Selector"
-import { Skeleton } from "@astryxdesign/core/Skeleton"
-import { HStack, VStack } from "@astryxdesign/core/Stack"
-import { Text } from "@astryxdesign/core/Text"
-import { ToggleButton } from "@astryxdesign/core/ToggleButton"
-import { Toolbar } from "@astryxdesign/core/Toolbar"
-import { useToast } from "@astryxdesign/core/Toast"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Notice } from "@/components/workspace/notice"
 import { api, ApiError } from "@/lib/api"
 import { charWidthFactor, LINE_HEIGHT_RATIO, maxCharsPerLine, usableWidthFraction, wrapCaptionText } from "@/lib/captions"
 import type { Clip, ClipCaption } from "@/lib/types"
@@ -235,7 +233,6 @@ export function CaptionEditor({
   /** True while the editor is open; the render poll checks it so a finished
    *  render never acts on a modal that was closed mid-wait. */
   const aliveRef = useRef(true)
-  const toast = useToast()
 
   const frame = aspectRatio ?? 16 / 9
 
@@ -339,12 +336,11 @@ export function CaptionEditor({
         const { clip: current } = await api.getClip(targetId)
         if (!aliveRef.current) return
         if (current.status === "ready" && !current.error) {
-          toast({
-            body:
-              mode === "new"
-                ? "Saved — the captioned clip is in your library."
-                : "Replaced — the clip now carries these captions.",
-          })
+          toast.success(
+            mode === "new"
+              ? "Saved — the captioned clip is in your library."
+              : "Replaced — the clip now carries these captions.",
+          )
           onDone({ mode, clipId: targetId })
           return
         }
@@ -353,13 +349,11 @@ export function CaptionEditor({
         if (current.status === "failed" || (current.status === "ready" && current.error)) {
           setRendering(null)
           setSaving(null)
-          toast({
-            type: "error",
-            body:
-              mode === "replace" && current.status === "ready"
-                ? `The render failed and your clip is unchanged. ${current.error ?? ""}`.trim()
-                : current.error ?? "The render failed. Try again.",
-          })
+          toast.error(
+            mode === "replace" && current.status === "ready"
+              ? `The render failed and your clip is unchanged. ${current.error ?? ""}`.trim()
+              : current.error ?? "The render failed. Try again.",
+          )
           return
         }
       } catch {
@@ -368,7 +362,7 @@ export function CaptionEditor({
     }
     setRendering(null)
     setSaving(null)
-    toast({ type: "error", body: "The render is taking unusually long. Check your library in a minute." })
+    toast.error("The render is taking unusually long. Check your library in a minute.")
   }
 
   const save = async (mode: "new" | "replace") => {
@@ -383,10 +377,7 @@ export function CaptionEditor({
       await waitForRender(target.id, mode)
     } catch (cause) {
       setSaving(null)
-      toast({
-        type: "error",
-        body: cause instanceof ApiError ? cause.message : "Couldn't start the render. Try again.",
-      })
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't start the render. Try again.")
     }
   }
 
@@ -428,7 +419,7 @@ export function CaptionEditor({
    */
   const addCaptionAt = (xPct: number, yPct: number) => {
     if (captions.length >= 6) {
-      toast({ body: "Six pieces of text is the most one clip can carry." })
+      toast.info("Six pieces of text is the most one clip can carry.")
       return
     }
     pushHistory()
@@ -634,47 +625,46 @@ export function CaptionEditor({
   }
 
   if (failed) {
-    return <p className="text-sm text-error">Couldn't load this clip. Refresh to try again.</p>
+    return <p className="text-sm text-destructive">Couldn&apos;t load this clip. Refresh to try again.</p>
   }
   if (clip === null) {
-    return <Skeleton height={320} radius={3} />
+    return <Skeleton className="h-[320px] w-full rounded-xl" />
   }
 
   const current = selected !== null ? captions[selected] : undefined
 
   return (
-    <VStack gap={3} align="stretch">
+    <div className="flex flex-col gap-3">
       {/* The Dialog's own header carries the title; this row holds the
           working subtitle and the two ways out. */}
-      <HStack justify="between" align="center" gap={4} wrap="wrap">
-        <Text as="p" type="supporting" display="block">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <p className="text-[13px] text-muted-foreground">
           {isBusyElsewhere
             ? "A render from this clip is still running — it'll land in your library when it's done."
             : "Drag text to place it. Double-click to type — on empty space to add more."}
-        </Text>
-        <HStack gap={2} align="center">
+        </p>
+        <div className="flex items-center gap-2">
           <Button
-            label="Save as new clip"
-            variant="primary"
-            isLoading={saving === "new"}
-            isDisabled={captions.length === 0 || isBusyElsewhere || (saving !== null && saving !== "new")}
+            disabled={captions.length === 0 || isBusyElsewhere || saving !== null}
             onClick={() => void save("new")}
-          />
+          >
+            {saving === "new" ? "Saving…" : "Save as new clip"}
+          </Button>
           {clip.canReplace && (
             <Button
-              label="Replace this clip"
               variant="secondary"
-              isLoading={saving === "replace"}
-              isDisabled={isBusyElsewhere || (saving !== null && saving !== "replace")}
+              disabled={isBusyElsewhere || saving !== null}
               onClick={() => void save("replace")}
-            />
+            >
+              {saving === "replace" ? "Replacing…" : "Replace this clip"}
+            </Button>
           )}
-        </HStack>
-      </HStack>
+        </div>
+      </div>
 
       {rendering && (
-        <Banner
-          status="info"
+        <Notice
+          tone="success"
           title={rendering}
           description="The text is being drawn onto the footage from the original source. This usually takes a few seconds."
         />
@@ -684,125 +674,124 @@ export function CaptionEditor({
           directly over the thing they control rather than floating wider
           than it. */}
       <div className="mx-auto w-full" style={{ maxWidth: `calc(52vh * ${frame})` }}>
-      <VStack gap={2} align="stretch">
+      <div className="flex flex-col gap-2">
       {/* The contextual bar: what it shows depends on what is selected, but
           its height never changes, so nothing below it moves when you click
-          a caption (the AGENTS.md no-reflow rule). */}
-      <Card elevation="low" padding={1}>
-        <Toolbar
-          label="Caption style"
-          size="sm"
-          startContent={
-            current ? (
-              <HStack gap={1} align="center" wrap="wrap">
-                <Selector
-                  label="Font"
-                  isLabelHidden
-                  variant="ghost"
-                  size="sm"
-                  width={124}
-                  value={current.font}
-                  onChange={(value) => selected !== null && styleUpdate(selected, { font: value as ClipCaption["font"] })}
-                  options={FONT_CHOICES.map((choice) => ({ value: choice.value, label: choice.label }))}
-                  renderOption={(option) => (
-                    <span
-                      style={{
-                        fontFamily: FONT_STACKS[option.value as ClipCaption["font"]].family,
-                        fontWeight: FONT_STACKS[option.value as ClipCaption["font"]].weight,
-                        fontSize: "15px",
-                      }}
+          a caption (the no-reflow rule). */}
+      <div
+        role="toolbar"
+        aria-label="Caption style"
+        className="flex min-h-[46px] items-center justify-between gap-2 rounded-xl bg-shcard px-2 py-1 ring-1 ring-shborder"
+      >
+        {current && selected !== null ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* The font, each choice drawn in its own face. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" aria-label="Font" className="w-[104px] justify-between">
+                  <span
+                    style={{
+                      fontFamily: FONT_STACKS[current.font].family,
+                      fontWeight: FONT_STACKS[current.font].weight,
+                    }}
+                  >
+                    {FONT_CHOICES.find((choice) => choice.value === current.font)?.label}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="shadcn-scope" align="start">
+                {FONT_CHOICES.map((choice) => (
+                  <DropdownMenuItem
+                    key={choice.value}
+                    onSelect={() => styleUpdate(selected, { font: choice.value })}
+                    style={{
+                      fontFamily: FONT_STACKS[choice.value].family,
+                      fontWeight: FONT_STACKS[choice.value].weight,
+                      fontSize: "15px",
+                    }}
+                  >
+                    {choice.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Text size, % of the frame's height — the renderer's unit. */}
+            <input
+              type="number"
+              aria-label="Text size, % of frame height"
+              min={2}
+              max={15}
+              step={0.5}
+              value={current.sizePct}
+              onChange={(event) => {
+                const value = Number(event.target.value)
+                if (Number.isFinite(value)) styleUpdate(selected, { sizePct: Math.min(15, Math.max(2, value)) })
+              }}
+              className="h-8 w-[72px] rounded-md border border-shborder bg-transparent px-2 text-sm tabular-nums outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            />
+
+            {/* The colour well. */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="Text colour" title="Text colour">
+                  <ColorChip color={current.color} isSelected={false} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="shadcn-scope w-auto p-2" align="start">
+                <div className="flex items-center gap-1">
+                  {COLORS.map((color) => (
+                    <Button
+                      key={color.value}
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={color.label}
+                      title={color.label}
+                      onClick={() => styleUpdate(selected, { color: color.value })}
                     >
-                      {option.label}
-                    </span>
-                  )}
-                />
-                <NumberInput
-                  label="Text size, % of frame height"
-                  isLabelHidden
-                  size="sm"
-                  width={104}
-                  isWheelEnabled={false}
-                  hasNumberSteppers
-                  min={2}
-                  max={15}
-                  step={0.5}
-                  value={current.sizePct}
-                  onChange={(value) => selected !== null && styleUpdate(selected, { sizePct: value })}
-                />
-                <Popover
-                  content={
-                    <HStack gap={1} align="center" wrap="wrap">
-                      {COLORS.map((color) => (
-                        <IconButton
-                          key={color.value}
-                          label={color.label}
-                          tooltip={color.label}
-                          variant="ghost"
-                          size="sm"
-                          icon={<ColorChip color={color.value} isSelected={current.color === color.value} />}
-                          onClick={() => selected !== null && styleUpdate(selected, { color: color.value })}
-                        />
-                      ))}
-                    </HStack>
-                  }
-                >
-                  <IconButton
-                    label="Text colour"
-                    tooltip="Text colour"
-                    variant="ghost"
-                    size="sm"
-                    icon={<ColorChip color={current.color} isSelected={false} />}
-                  />
-                </Popover>
-                <ToggleButton
-                  label="Outline"
-                  size="sm"
-                  isPressed={current.outline}
-                  onPressedChange={(isPressed) => selected !== null && styleUpdate(selected, { outline: isPressed })}
-                />
-              </HStack>
-            ) : (
-              <Text as="p" type="supporting" display="block">
-                {captions.length === 0
-                  ? "Double-click the clip to add text."
-                  : "Click text on the clip to restyle it — double-click empty space to add more."}
-              </Text>
-            )
-          }
-          endContent={
-            <HStack gap={0.5} align="center">
-              <IconButton
-                label="Undo"
-                tooltip="Undo (Ctrl+Z)"
-                variant="ghost"
-                size="sm"
-                isDisabled={historyDepth === 0}
-                icon={
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M9 14 4 9l5-5" />
-                    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
-                  </svg>
-                }
-                onClick={undo}
-              />
-              <IconButton
-                label="Redo"
-                tooltip="Redo (Ctrl+Shift+Z)"
-                variant="ghost"
-                size="sm"
-                isDisabled={redoDepth === 0}
-                icon={
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="m15 14 5-5-5-5" />
-                    <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
-                  </svg>
-                }
-                onClick={redo}
-              />
-            </HStack>
-          }
-        />
-      </Card>
+                      <ColorChip color={color.value} isSelected={current.color === color.value} />
+                    </Button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* The dark outline that keeps text readable over bright footage. */}
+            <Button
+              variant={current.outline ? "secondary" : "ghost"}
+              size="sm"
+              aria-pressed={current.outline}
+              onClick={() => styleUpdate(selected, { outline: !current.outline })}
+            >
+              Outline
+            </Button>
+          </div>
+        ) : (
+          <p className="px-1 text-[13px] text-muted-foreground">
+            {captions.length === 0
+              ? "Double-click the clip to add text."
+              : "Click text on the clip to restyle it — double-click empty space to add more."}
+          </p>
+        )}
+
+        <div className="flex items-center gap-0.5">
+          <Button variant="ghost" size="icon-sm" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={historyDepth === 0} onClick={undo}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9 14 4 9l5-5" />
+              <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+            </svg>
+          </Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={redoDepth === 0} onClick={redo}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="m15 14 5-5-5-5" />
+              <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+            </svg>
+          </Button>
+        </div>
+      </div>
 
       {/* The canvas: the media carve-out. Its width is capped by HEIGHT so a
           portrait clip cannot push the toolbar and the buttons off-screen. */}
@@ -826,15 +815,15 @@ export function CaptionEditor({
             ((event.clientY - box.top) / box.height) * 100,
           )
         }}
-        className="relative w-full touch-none select-none overflow-hidden rounded-xl bg-black ring-1 ring-white/10"
+        className="relative w-full touch-none select-none overflow-hidden rounded-xl bg-black ring-1 ring-black/15"
         style={{ containerType: "size", aspectRatio: frame }}
       >
         {!clip.url && (
-          <Text as="p" type="supporting" display="block" className="pointer-events-none absolute inset-x-0 top-3 text-center">
+          <p className="pointer-events-none absolute inset-x-0 top-3 text-center text-[13px] text-white/55">
             {aspectRatio
               ? "The clip file isn't available to preview right now — the text still sits where it will be burned in."
               : "The clip file isn't available to preview right now — caption positions are approximate until it is."}
-          </Text>
+          </p>
         )}
         {clip.url && (
           <video
@@ -852,8 +841,8 @@ export function CaptionEditor({
         )}
 
         {/* Centre guides, shown only while a drag is snapped to them. */}
-        {guides.x && <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-accent/70" />}
-        {guides.y && <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-accent/70" />}
+        {guides.x && <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-amber-400/80" />}
+        {guides.y && <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-amber-400/80" />}
 
         {captions.map((caption, index) => {
           const { lines, widthPct, heightPct, xPct } = measure(caption, frame)
@@ -875,7 +864,7 @@ export function CaptionEditor({
               onKeyDown={onCaptionKeyDown(index)}
               className={`absolute -translate-x-1/2 -translate-y-1/2 ${
                 isEditing ? "cursor-text" : "cursor-grab active:cursor-grabbing"
-              } ${isSelected ? "outline outline-1 outline-accent" : "hover:outline hover:outline-1 hover:outline-accent/50"}`}
+              } ${isSelected ? "outline outline-1 outline-amber-400" : "hover:outline hover:outline-1 hover:outline-amber-400/50"}`}
               style={{
                 left: `${xPct}%`,
                 top: `${caption.yPct}%`,
@@ -941,36 +930,26 @@ export function CaptionEditor({
                   onPointerDown={(event) => event.stopPropagation()}
                   onDoubleClick={(event) => event.stopPropagation()}
                 >
-                  <Card elevation="high" padding={0.5}>
-                    <HStack gap={0.5} align="center">
-                      <IconButton
-                        label="Duplicate"
-                        tooltip="Duplicate (Ctrl+D)"
-                        variant="ghost"
-                        size="sm"
-                        isDisabled={captions.length >= 6}
-                        icon={
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                            <rect x="9" y="9" width="12" height="12" rx="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        }
-                        onClick={() => duplicate(index)}
-                      />
-                      <IconButton
-                        label="Delete"
-                        tooltip="Delete"
-                        variant="ghost"
-                        size="sm"
-                        icon={
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                            <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                          </svg>
-                        }
-                        onClick={() => remove(index)}
-                      />
-                    </HStack>
-                  </Card>
+                  <div className="flex items-center gap-0.5 rounded-lg bg-shcard p-0.5 shadow-md ring-1 ring-shborder">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Duplicate"
+                      title="Duplicate (Ctrl+D)"
+                      disabled={captions.length >= 6}
+                      onClick={() => duplicate(index)}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <rect x="9" y="9" width="12" height="12" rx="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" aria-label="Delete" title="Delete" onClick={() => remove(index)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      </svg>
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -1003,13 +982,13 @@ export function CaptionEditor({
           )
         })}
       </div>
-      </VStack>
       </div>
-    </VStack>
+      </div>
+    </div>
   )
 }
 
-/** A colour square: the swatch Astryx does not ship, kept to one place. */
+/** A colour square: the swatch, kept to one place. */
 function ColorChip({ color, isSelected }: { color: string; isSelected: boolean }) {
   return (
     <span
@@ -1020,7 +999,7 @@ function ColorChip({ color, isSelected }: { color: string; isSelected: boolean }
         height: 16,
         borderRadius: 4,
         background: color,
-        boxShadow: isSelected ? "0 0 0 2px var(--astryx-color-accent, #fcd34d)" : "inset 0 0 0 1px rgba(255,255,255,0.25)",
+        boxShadow: isSelected ? "0 0 0 2px #f59e0b" : "inset 0 0 0 1px rgba(18,18,18,0.25)",
       }}
     />
   )

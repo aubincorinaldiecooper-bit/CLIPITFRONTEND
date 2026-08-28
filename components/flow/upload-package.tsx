@@ -1,28 +1,24 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Button } from "@astryxdesign/core/Button"
-import { Heading } from "@astryxdesign/core/Heading"
-import { Icon } from "@astryxdesign/core/Icon"
-import { IconButton } from "@astryxdesign/core/IconButton"
-import { HStack, VStack } from "@astryxdesign/core/Stack"
-import { Text } from "@astryxdesign/core/Text"
-import { LockGlyph, UploadGlyph } from "@/components/glyphs"
+import { Button } from "@/components/ui/button"
+import { HugeiconsIcon } from "@hugeicons/react"
+import {
+  Alert02Icon,
+  Cancel01Icon,
+  CheckmarkCircle02Icon,
+  RefreshIcon,
+  SquareLock01Icon,
+  Upload01Icon,
+} from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 
 /**
- * Dropping several videos in at once.
+ * Dropping several videos in at once — on the app's light look now.
  *
  * Modelled on the block the owner linked (beui.dev's file-upload), in its
  * Centered layout: one target, then a row per file underneath carrying its
  * name, what it is, and how it is getting on.
- *
- * It is rebuilt rather than pasted. That component is written against a
- * different stack — lucide-react for its icons, and its own tooltip, easing
- * and presence-gate modules — none of which exist here, and its Tailwind
- * colours are light-mode shadcn tokens that would arrive as unstyled or wrong
- * against this near-black palette. What carries over is the part that matters:
- * the layout, and the behaviour of a row through its whole life.
  *
  * The behaviour it keeps, because each piece earns its place:
  *
@@ -95,7 +91,7 @@ function statusLine(entry: UploadEntry): string {
   return parts.join(" · ")
 }
 
-/** A page in a frame — the mark on every row. */
+/** A page in a frame with a play mark — the mark on every row. */
 function FileGlyph({ className }: { className?: string }) {
   return (
     <svg
@@ -111,33 +107,6 @@ function FileGlyph({ className }: { className?: string }) {
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
       <path d="M14 3v5h5" />
       <path d="M10.4 12.6v3.4l3-1.7-3-1.7Z" />
-    </svg>
-  )
-}
-
-function TickGlyph({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <circle cx="12" cy="12" r="9" />
-      <path d="m8.5 12.3 2.4 2.4 4.6-4.9" />
-    </svg>
-  )
-}
-
-function AlertGlyph({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" aria-hidden>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7.6v5M12 16.2h.01" />
-    </svg>
-  )
-}
-
-function RetryGlyph({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M3.5 12a8.5 8.5 0 1 1 2.9 6.4" />
-      <path d="M3.2 18.6v-5h5" />
     </svg>
   )
 }
@@ -171,16 +140,14 @@ export function UploadPackage({
   }
 
   return (
-    <VStack gap={4} align="stretch">
+    <div className="flex flex-col gap-4">
       {entries.length > 0 && (
-        <HStack justify="between" align="end" gap={3} wrap="wrap">
-          <Heading level={3} accessibilityLevel={2}>
-            Upload package
-          </Heading>
-          <Text as="span" type="body" color="secondary">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-base font-semibold">Upload package</h2>
+          <span className="text-sm text-muted-foreground">
             {readyCount(entries)} of {entries.length} {entries.length === 1 ? "file" : "files"} ready
-          </Text>
-        </HStack>
+          </span>
+        </div>
       )}
 
       <div
@@ -197,35 +164,35 @@ export function UploadPackage({
           take(event.dataTransfer.files)
         }}
         className={cn(
-          "flex flex-col items-center justify-center gap-6 rounded-2xl border border-dashed px-6 py-[4.75rem] text-center transition-colors",
-          dragging ? "border-foreground/50 bg-white/[0.04]" : "border-white/15",
+          "flex flex-col items-center justify-center gap-6 rounded-2xl border border-dashed border-shborder bg-shcard px-6 py-[4.75rem] text-center transition-colors",
+          dragging && "border-ring bg-shaccent",
           full && "opacity-55",
         )}
       >
-        <span className="flex h-24 w-24 items-center justify-center rounded-full bg-surface text-primary ring-1 ring-border">
-          <Icon icon={UploadGlyph} size="lg" className="scale-125" />
+        <span className="flex h-24 w-24 items-center justify-center rounded-full bg-shmuted text-muted-foreground ring-1 ring-shborder">
+          <HugeiconsIcon icon={Upload01Icon} className="size-9" />
         </span>
-        <VStack gap={1}>
-          <Heading level={2} accessibilityLevel={2}>
+        <div className="flex flex-col gap-1">
+          <h2 className="text-xl font-semibold">
             {full ? "That's as many as one go takes" : "Drop videos to upload"}
-          </Heading>
-          <Text as="p" type="body" color="secondary">
+          </h2>
+          <p className="text-sm text-muted-foreground">
             {full
               ? `${entries.length} of ${MAX_FILES} added — upload these, then add more`
               : "MP4, MOV, MKV, WebM — up to 6 hours each"}
-          </Text>
-        </VStack>
+          </p>
+        </div>
         <Button
-          label="Browse"
-          variant="primary"
           size="lg"
           // Full is the only gate. It used to also disable while uploads ran,
           // which quietly disagreed with drag-and-drop — a drop mid-batch was
           // accepted while Browse refused. Adding to a running batch is fine:
           // every file runs its own upload and reports on its own row.
-          isDisabled={full}
+          disabled={full}
           onClick={() => fileInput.current?.click()}
-        />
+        >
+          Browse
+        </Button>
         <input
           ref={fileInput}
           type="file"
@@ -247,32 +214,28 @@ export function UploadPackage({
             <li
               key={entry.id}
               className={cn(
-                "rounded-[14px] bg-surface/60 px-4 py-3 ring-1 ring-border",
-                entry.phase === "failed" && "ring-error/40",
+                "rounded-[14px] bg-shcard px-4 py-3 ring-1 ring-shborder",
+                entry.phase === "failed" && "ring-destructive/40",
               )}
             >
-              <HStack gap={3} align="center">
+              <div className="flex items-center gap-3">
                 <span
                   aria-hidden
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-surface text-secondary ring-1 ring-border"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-shmuted text-muted-foreground ring-1 ring-shborder"
                 >
                   <FileGlyph className="h-5 w-5" />
                 </span>
 
-                <VStack gap={1} align="stretch" className="min-w-0 flex-1">
-                  <Text as="span" weight="medium" display="block" className="truncate">
-                    {entry.file.name}
-                  </Text>
-                  <Text as="span" type="supporting" display="block" className="truncate">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="truncate text-sm font-medium">{entry.file.name}</span>
+                  <span className="truncate text-[13px] text-muted-foreground">
                     {statusLine(entry)}
-                  </Text>
+                  </span>
                   {/* The bar stays on a finished row, full and green, as the
-                      reference keeps it — the owner's call. It was dropped at
-                      first on the reasoning that a full bar reads as "still
-                      working" beside a tick that already says "done"; the
-                      colour is what settles that, and a row that keeps its bar
-                      also keeps the whole list the same shape as it fills up
-                      rather than having rows change height one by one. */}
+                      reference keeps it — the owner's call. The colour is what
+                      says "done", and a row that keeps its bar keeps the whole
+                      list the same shape as it fills up rather than having
+                      rows change height one by one. */}
                   {entry.phase !== "queued" && entry.phase !== "failed" && (
                     <span
                       role="progressbar"
@@ -284,12 +247,12 @@ export function UploadPackage({
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={Math.round((entry.progress ?? 0) * 100)}
-                      className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-white/10"
+                      className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-shmuted"
                     >
                       <span
                         className={cn(
                           "block h-full rounded-full transition-[width] duration-200",
-                          entry.phase === "ready" ? "w-full bg-success" : "bg-primary",
+                          entry.phase === "ready" ? "w-full bg-emerald-600" : "bg-shprimary",
                         )}
                         style={
                           entry.phase === "ready"
@@ -299,53 +262,65 @@ export function UploadPackage({
                       />
                     </span>
                   )}
-                </VStack>
+                </div>
 
-                <HStack gap={1} align="center" className="shrink-0">
+                <div className="flex shrink-0 items-center gap-1">
                   {entry.phase === "ready" && (
                     <>
-                      <span aria-label={`${entry.file.name} is ready`} role="status" className="text-success">
-                        <TickGlyph className="h-5 w-5" />
+                      <span
+                        aria-label={`${entry.file.name} is ready`}
+                        role="status"
+                        className="text-emerald-600"
+                      >
+                        <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-5" />
                       </span>
                       {onOpen && (
-                        <Button label="Open" variant="secondary" size="sm" onClick={() => onOpen(entry)} />
+                        <Button variant="secondary" size="sm" onClick={() => onOpen(entry)}>
+                          Open
+                        </Button>
                       )}
                     </>
                   )}
                   {entry.phase === "failed" && (
                     <>
-                      <span aria-label={`${entry.file.name} failed`} role="status" className="text-error">
-                        <AlertGlyph className="h-5 w-5" />
+                      <span
+                        aria-label={`${entry.file.name} failed`}
+                        role="status"
+                        className="text-destructive"
+                      >
+                        <HugeiconsIcon icon={Alert02Icon} className="size-5" />
                       </span>
-                      <IconButton
-                        icon={<RetryGlyph className="h-4 w-4" />}
-                        label={`Try ${entry.file.name} again`}
-                        tooltip="Try again"
+                      <Button
                         variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Try ${entry.file.name} again`}
+                        title="Try again"
                         onClick={() => onRetry(entry.id)}
-                      />
+                      >
+                        <HugeiconsIcon icon={RefreshIcon} />
+                      </Button>
                     </>
                   )}
-                  <IconButton
-                    icon={<Icon icon="close" />}
-                    label={`Remove ${entry.file.name}`}
-                    tooltip="Remove"
+                  <Button
                     variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove ${entry.file.name}`}
+                    title="Remove"
                     onClick={() => onRemove(entry.id)}
-                  />
-                </HStack>
-              </HStack>
+                  >
+                    <HugeiconsIcon icon={Cancel01Icon} />
+                  </Button>
+                </div>
+              </div>
             </li>
           ))}
         </ul>
       ) : (
-        <HStack gap={1.5} justify="center" align="center">
-          <Icon icon={LockGlyph} size="sm" />
-          <Text as="span" type="body" color="secondary">
-            Your video is private and secure.
-          </Text>
-        </HStack>
+        <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+          <HugeiconsIcon icon={SquareLock01Icon} className="size-4" />
+          Your video is private and secure.
+        </p>
       )}
-    </VStack>
+    </div>
   )
 }

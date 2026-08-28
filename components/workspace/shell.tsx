@@ -35,15 +35,18 @@ import { WorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { WorkspaceAccount } from "@/components/workspace/account"
 
 /**
- * The frame for the WORKSPACE screens — the shadcn/uselayouts pilot, by the
- * owner's decision. Everything else in the app keeps the Astryx shell; these
- * routes get shadcn's own sidebar, header and light look, scoped under
- * .shadcn-scope so nothing leaks outward.
+ * The app's frame — every signed-in screen wears it.
  *
- * The same five destinations as the Astryx rail, in the same order, with the
- * shared rooms listed under Workspaces — navigation does not change because
- * the furniture did. The account stays in the header's top-right, where the
- * owner has kept it.
+ * It began as the frame for the Shared screens alone (the shadcn pilot), and
+ * the owner's verdict on that pilot was to roll it out: "shared is what we
+ * need the rest of the workspace to look like." So Home, New clip, Your
+ * clips, Publishing and Join now mount this same shell — off-white ground,
+ * shadcn sidebar, header account — and the Astryx shell retires. Only the
+ * landing page keeps its own look.
+ *
+ * The five destinations, in the order the rail has always had, with the
+ * shared rooms listed under Rooms. The account stays in the header's
+ * top-right, where the owner has kept it.
  */
 
 const DESTINATIONS = [
@@ -54,12 +57,14 @@ const DESTINATIONS = [
   { key: "workspaces", label: "Shared", href: "/shared", icon: UserGroupIcon },
 ] as const
 
+export type AppDestination = (typeof DESTINATIONS)[number]["key"]
+
 export function WorkspaceShell({
   active,
   activeWorkspaceId,
   children,
 }: {
-  active: "workspaces"
+  active: AppDestination
   activeWorkspaceId?: string
   children: React.ReactNode
 }) {
@@ -161,9 +166,7 @@ export function WorkspaceShell({
                           {/* New clip stays a full navigation: landing on
                               /start fresh is what resets the theater. */}
                           {item.key === "start" ? (
-                            /* No aria-current: "New clip" is never the page
-                               you are on when this shell is rendering. */
-                            <a href={item.href}>
+                            <a href={item.href} aria-current={item.key === active ? "page" : undefined}>
                               <HugeiconsIcon icon={item.icon} />
                               <span>{item.label}</span>
                             </a>

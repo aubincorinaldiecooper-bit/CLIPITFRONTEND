@@ -2,20 +2,16 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Banner } from "@astryxdesign/core/Banner"
-import { Button } from "@astryxdesign/core/Button"
-import { Heading } from "@astryxdesign/core/Heading"
-import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
-import { Skeleton } from "@astryxdesign/core/Skeleton"
-import { VStack } from "@astryxdesign/core/Stack"
-import { Text } from "@astryxdesign/core/Text"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import type { InvitePreview } from "@/lib/types"
-import { AppShell } from "@/components/app-shell"
+import { WorkspaceShell } from "@/components/workspace/shell"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
+import { Notice } from "@/components/workspace/notice"
 
 /**
- * Where an invitation link lands.
+ * Where an invitation link lands — on the app shell, like every screen now.
  *
  * The token is read but not spent until someone presses Join, so a person can
  * see which room they are being asked into — and sign in first if they need
@@ -74,21 +70,21 @@ function JoinBody() {
 
   if (!token) {
     return (
-      <Text as="p" type="body" color="secondary" display="block">
+      <p className="text-sm text-muted-foreground">
         This page needs an invitation link. Ask whoever invited you to send it again.
-      </Text>
+      </p>
     )
   }
   if (failed) {
-    return <p className="text-sm text-error">Couldn't check that invitation. Refresh to try again.</p>
+    return <p className="text-sm text-destructive">Couldn&apos;t check that invitation. Refresh to try again.</p>
   }
   if (preview === null) {
-    return <Skeleton height={100} radius={3} />
+    return <Skeleton className="h-[100px] w-full rounded-xl" />
   }
   if (!preview.valid) {
     return (
-      <Banner
-        status="warning"
+      <Notice
+        tone="warning"
         title="That invitation is no longer good"
         description="It may have expired, been withdrawn, or already been used. Ask for a fresh one."
       />
@@ -96,45 +92,43 @@ function JoinBody() {
   }
 
   return (
-    <VStack gap={4} align="start">
-      {problem && <Banner status="error" title="Couldn't join" description={problem} />}
+    <div className="flex flex-col items-start gap-4">
+      {problem && <Notice tone="error" title="Couldn't join" description={problem} />}
       {joined && (
-        <Banner
-          status="success"
+        <Notice
+          tone="success"
           title={already ? "You're already in this room" : "You're in"}
           description="Taking you to your shared rooms…"
         />
       )}
-      <Text as="p" type="body" display="block">
-        You've been invited to join <strong>{preview.workspaceName}</strong> on CLIPIT.
-      </Text>
-      <Text as="p" type="supporting" display="block">
+      <p className="text-sm">
+        You&apos;ve been invited to join <strong>{preview.workspaceName}</strong> on CLIPIT.
+      </p>
+      <p className="text-sm text-muted-foreground">
         Joining means you see the clips people send to this room, and you can send clips there
         from your own library. Your library itself stays yours — joining shares nothing automatically.
-      </Text>
-      <Text as="p" type="supporting" display="block">
-        You'll need to be signed in as the person accepting — use Sign in at the top right first if you
-        aren't. You'll come straight back here.
-      </Text>
-      <Button label="Join the room" variant="primary" isLoading={joining} onClick={() => void join()} />
-    </VStack>
+      </p>
+      <p className="text-sm text-muted-foreground">
+        You&apos;ll need to be signed in as the person accepting — use Sign in at the top right first
+        if you aren&apos;t. You&apos;ll come straight back here.
+      </p>
+      <Button onClick={() => void join()} disabled={joining}>
+        {joining ? "Joining…" : "Join the room"}
+      </Button>
+    </div>
   )
 }
 
 export default function JoinPage() {
   return (
-    <AppShell active="workspaces">
-      <Layout height="fill" contentWidth={560}>
-        <LayoutContent padding={6}>
-          <VStack gap={4} align="stretch">
-            <Heading level={1}>Join a room</Heading>
-            {/* useSearchParams needs a Suspense boundary in the app router. */}
-            <Suspense fallback={<Skeleton height={100} radius={3} />}>
-              <JoinBody />
-            </Suspense>
-          </VStack>
-        </LayoutContent>
-      </Layout>
-    </AppShell>
+    <WorkspaceShell active="workspaces">
+      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Join a room</h1>
+        {/* useSearchParams needs a Suspense boundary in the app router. */}
+        <Suspense fallback={<Skeleton className="h-[100px] w-full rounded-xl" />}>
+          <JoinBody />
+        </Suspense>
+      </div>
+    </WorkspaceShell>
   )
 }

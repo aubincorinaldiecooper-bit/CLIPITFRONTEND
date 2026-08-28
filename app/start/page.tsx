@@ -4,13 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
 import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
-import { Button } from "@astryxdesign/core/Button"
-import { Heading } from "@astryxdesign/core/Heading"
-import { Text } from "@astryxdesign/core/Text"
+import { Button } from "@/components/ui/button"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { ArrowLeft01Icon, ArrowRight01Icon, ScissorsIcon } from "@hugeicons/core-free-icons"
 import { MAX_FILES, MAX_FILE_BYTES, UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
-import { AppShell } from "@/components/app-shell"
+import { WorkspaceShell } from "@/components/workspace/shell"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
@@ -478,14 +478,29 @@ export default function StartPage() {
 
   if (!configured) {
     return (
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-16">
-        <Heading level={1}>Backend not configured</Heading>
-        <p className="mt-3 text-sm text-foreground/60">
-          Set <code className="rounded bg-white/10 px-1.5 py-0.5">NEXT_PUBLIC_API_URL</code> to the CLIPIT API
+      <main className="shadcn-scope mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center bg-background px-6 py-16 text-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight">Backend not configured</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Set <code className="rounded bg-shmuted px-1.5 py-0.5">NEXT_PUBLIC_API_URL</code> to the CLIPIT API
           URL and redeploy.
         </p>
       </main>
     )
+  }
+
+  /**
+   * The batch, for the carousel: every file from this drop that has landed,
+   * in the order it was dropped. When more than one is up, the theater offers
+   * previous/next so the batch can be walked through without going back to
+   * the upload screen. Flipping opens the neighbour the same way the library
+   * rows do — the conversation belongs to one video, so it starts fresh.
+   */
+  const batch = uploads.filter((entry) => entry.phase === "ready" && entry.videoId)
+  const batchIndex = video ? batch.findIndex((entry) => entry.videoId === video.id) : -1
+  const flipTo = (offset: number) => {
+    if (batchIndex < 0) return
+    const next = batch[batchIndex + offset]
+    if (next?.videoId) void openFromLibrary(next.videoId)
   }
 
   // Seek-bar ticks come from the newest completed exchange.
@@ -493,29 +508,8 @@ export default function StartPage() {
     [...exchanges].reverse().find((exchange) => exchange.request.status === "completed")?.request.matches ?? []
 
   return (
-    <AppShell
-      active="start"
-      headerExtra={
-        video ? (
-          <Button
-            label="Clip another video"
-            variant="primary"
-            size="sm"
-            onClick={reset}
-            icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="6" cy="6" r="3" />
-                <circle cx="6" cy="18" r="3" />
-                <line x1="20" y1="4" x2="8.12" y2="15.88" />
-                <line x1="14.47" y1="14.48" x2="20" y2="20" />
-                <line x1="8.12" y1="8.12" x2="12" y2="12" />
-              </svg>
-            }
-          />
-        ) : undefined
-      }
-    >
-      <div className="flex w-full flex-1 flex-col px-6 py-6">
+    <WorkspaceShell active="start">
+      <div className="flex w-full flex-1 flex-col">
       {!video ? (
         <motion.div
           className="mx-auto flex w-full max-w-[42rem] flex-1 flex-col justify-center py-10"
@@ -526,12 +520,12 @@ export default function StartPage() {
           {/* Centred, per the mockup — the page has one thing to do and the
               heading sits over it rather than off to one side. */}
           <div className="text-center">
-            <Heading level={1}>Add a video</Heading>
+            <h1 className="text-2xl font-semibold tracking-tight">Add a video</h1>
           </div>
           <div className="mx-auto mt-3 max-w-[20rem] text-center">
-            <Text as="p" type="large" color="secondary">
+            <p className="text-base text-muted-foreground">
               Upload a file. We&apos;ll read the video, then you can ask it anything.
-            </Text>
+            </p>
           </div>
           <div className="mt-8">
             <UploadPackage
@@ -559,7 +553,7 @@ export default function StartPage() {
 
           {library.length > 0 && (
             <div className="mt-10">
-              <p className="text-[13px] font-medium text-foreground/40">Your videos</p>
+              <p className="text-[13px] font-medium text-muted-foreground">Your videos</p>
               <div className="mt-2 flex flex-col gap-1">
                 {library.map((entry) => (
                   <button
@@ -567,17 +561,17 @@ export default function StartPage() {
                     type="button"
                     onClick={() => void openFromLibrary(entry.id)}
                     disabled={busy}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ring-1 ring-white/10 transition-colors hover:bg-white/5 disabled:opacity-50"
+                    className="flex w-full items-center gap-3 rounded-xl bg-shcard px-3 py-2.5 text-left ring-1 ring-shborder transition-colors hover:bg-shaccent disabled:opacity-50"
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground/85">
+                    <span className="min-w-0 flex-1 truncate text-sm">
                       {entry.title ?? entry.originalFilename ?? entry.sourceUrl ?? "Untitled video"}
                     </span>
                     {entry.durationTimecode && (
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-foreground/40">
+                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
                         {entry.durationTimecode}
                       </span>
                     )}
-                    <span className="shrink-0 text-[12px] text-foreground/35">
+                    <span className="shrink-0 text-[12px] text-muted-foreground">
                       {new Date(entry.createdAt).toLocaleDateString()}
                     </span>
                   </button>
@@ -588,9 +582,47 @@ export default function StartPage() {
         </motion.div>
       ) : (
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center py-8 lg:pr-[380px]">
+          {/* The Astryx header carried this; the app shell's header is shared
+              across every screen, so the action lives with the stage now. */}
+          <div className="mb-4 flex items-center justify-between gap-3">
+            {/* Walking the batch: only when this video came from a drop of
+                several, so a video opened from the library keeps its plain
+                stage. */}
+            {batch.length > 1 && batchIndex >= 0 ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="icon-sm"
+                  aria-label="Previous video"
+                  disabled={batchIndex <= 0 || busy}
+                  onClick={() => flipTo(-1)}
+                >
+                  <HugeiconsIcon icon={ArrowLeft01Icon} />
+                </Button>
+                <span className="text-[13px] tabular-nums text-muted-foreground">
+                  {batchIndex + 1} of {batch.length}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="icon-sm"
+                  aria-label="Next video"
+                  disabled={batchIndex >= batch.length - 1 || busy}
+                  onClick={() => flipTo(1)}
+                >
+                  <HugeiconsIcon icon={ArrowRight01Icon} />
+                </Button>
+              </div>
+            ) : (
+              <span />
+            )}
+            <Button size="sm" onClick={reset}>
+              <HugeiconsIcon icon={ScissorsIcon} />
+              Clip another video
+            </Button>
+          </div>
           <VideoStage video={video} uploadFraction={uploadFraction} matches={matches} seekRequest={seekRequest} />
 
-          <p className="mx-auto mt-3 max-w-xl truncate text-center text-xs text-foreground/40">
+          <p className="mx-auto mt-3 max-w-xl truncate text-center text-xs text-muted-foreground">
             {video.title ?? video.originalFilename ?? video.sourceUrl}
             {video.durationTimecode ? ` · ${video.durationTimecode}` : ""}
           </p>
@@ -612,12 +644,12 @@ export default function StartPage() {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: EASE }}
-          className="mx-auto mt-4 w-full max-w-xl rounded-lg border border-error px-4 py-3 text-sm text-error"
+          className="mx-auto mt-4 w-full max-w-xl rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
           {error}
         </motion.p>
       )}
       </div>
-    </AppShell>
+    </WorkspaceShell>
   )
 }

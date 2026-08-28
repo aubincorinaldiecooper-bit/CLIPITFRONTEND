@@ -11,6 +11,12 @@ const SUGGESTIONS = [
   "Find the part where they introduce themselves",
 ]
 
+/** m:ss — the same clock the stage player writes. */
+const asPlayerTime = (seconds: number) => {
+  const whole = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
+}
+
 const SOURCE_LABEL: Record<ClipMatch["source"], string> = {
   visual: "seen",
   transcript: "spoken",
@@ -133,10 +139,10 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
 
   return (
     <div
-      className="rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-400/25"
+      className="rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-600/30"
       style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
     >
-      {gapLine && <p className="text-[13px] leading-snug text-amber-200/90">{gapLine}</p>}
+      {gapLine && <p className="text-[13px] leading-snug text-amber-900">{gapLine}</p>}
       {gaps.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {gaps.map((gap) => (
@@ -144,7 +150,7 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
               key={`gap-${gap.startSeconds}-${gap.endSeconds}`}
               type="button"
               onClick={() => onSeek(gap.startSeconds)}
-              className="rounded-lg bg-amber-400/10 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-200/80 transition-colors hover:bg-amber-400/20"
+              className="rounded-lg bg-amber-500/15 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-900 transition-colors hover:bg-amber-500/25"
             >
               {gap.startTimecode} – {gap.endTimecode}
             </button>
@@ -153,8 +159,8 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
       )}
 
       {degraded.length > 0 && (
-        <div className={gapLine ? "mt-3 border-t border-amber-400/15 pt-2.5" : ""}>
-          <p className="text-[13px] leading-snug text-amber-200/90">
+        <div className={gapLine ? "mt-3 border-t border-amber-600/20 pt-2.5" : ""}>
+          <p className="text-[13px] leading-snug text-amber-900">
             {degraded.length === 1 ? "There's a bit" : `There are ${degraded.length} bits`} where I could see the
             video but not hear it, so I'd have missed anything that was only said out loud.
           </p>
@@ -164,7 +170,7 @@ function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (secon
                 key={`degraded-${window.startSeconds}-${window.endSeconds}`}
                 type="button"
                 onClick={() => onSeek(window.startSeconds)}
-                className="rounded-lg bg-amber-400/10 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-200/80 transition-colors hover:bg-amber-400/20"
+                className="rounded-lg bg-amber-500/15 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-900 transition-colors hover:bg-amber-500/25"
               >
                 {window.startTimecode} – {window.endTimecode}
               </button>
@@ -201,8 +207,8 @@ function UncertainMoments({
   if (uncertain.length === 0) return null
 
   return (
-    <div className="rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
-      <p className="text-[12.5px] leading-snug text-foreground/55">
+    <div className="rounded-xl bg-shmuted/60 px-3 py-2.5 ring-1 ring-shborder">
+      <p className="text-[12.5px] leading-snug text-muted-foreground">
         {uncertain.length === 1 ? "There's one moment" : `There are ${uncertain.length} moments`} I spotted but
         wasn't sure about.
       </p>
@@ -212,12 +218,12 @@ function UncertainMoments({
             key={`${moment.startSeconds}-${moment.endSeconds}`}
             type="button"
             onClick={() => onSeek(moment.startSeconds)}
-            className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/5"
+            className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-shaccent"
           >
-            <span className="shrink-0 font-mono text-[11px] tabular-nums text-foreground/45">
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
               {moment.startTimecode}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground/65">
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
               {moment.description || "Something worth a look"}
             </span>
           </button>
@@ -227,7 +233,7 @@ function UncertainMoments({
         <button
           type="button"
           onClick={onLookAgain}
-          className="mt-1.5 rounded-lg px-1.5 py-1 text-[12px] font-medium text-amber-300/80 transition-colors hover:bg-white/5 hover:text-amber-300"
+          className="mt-1.5 rounded-lg px-1.5 py-1 text-[12px] font-medium text-amber-700 transition-colors hover:bg-shaccent hover:text-amber-800"
         >
           Look again, properly
         </button>
@@ -308,7 +314,7 @@ export function QueryDrawer({
             type="button"
             aria-label="Ask the video"
             onClick={() => setOpen(true)}
-            className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-white text-lg font-medium text-black shadow-[0_8px_30px_rgba(0,0,0,0.45)] lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2"
+            className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-shprimary text-lg font-medium text-primary-foreground shadow-[0_8px_30px_rgba(18,18,18,0.25)] lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
@@ -332,16 +338,16 @@ export function QueryDrawer({
                transcript inside it scrolls. On small screens it takes a bounded
                height for the same reason — without one, flex-1 has nothing to
                divide and the composer stops being pinned. */
-            className="z-30 mt-6 flex h-[70vh] w-full flex-col overflow-hidden rounded-2xl bg-white/[0.04] ring-1 ring-white/10 backdrop-blur-md lg:fixed lg:right-6 lg:top-24 lg:bottom-8 lg:mt-0 lg:h-auto lg:w-[350px]"
+            className="z-30 mt-6 flex h-[70vh] w-full flex-col overflow-hidden rounded-2xl bg-shcard shadow-sm ring-1 ring-shborder lg:fixed lg:right-6 lg:top-24 lg:bottom-8 lg:mt-0 lg:h-auto lg:w-[350px]"
           >
             {/* header */}
-            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between border-b border-shborder px-4 py-3">
               <h2 className="text-lg font-semibold">Ask the video</h2>
               <button
                 type="button"
                 aria-label="Collapse"
                 onClick={() => setOpen(false)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-foreground/40 transition-colors hover:bg-white/10 hover:text-foreground"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-shaccent hover:text-foreground"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                   <path d="M9 6l6 6-6 6" />
@@ -352,7 +358,7 @@ export function QueryDrawer({
             {/* transcript — the only scrolling region */}
             <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
               {video.readyForSearch && understanding && exchanges.length === 0 && (
-                <p className="text-xs text-foreground/40" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
+                <p className="text-xs text-muted-foreground" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
                   {video.index?.readThroughSeconds
                     ? `Still watching — ${describeMinutes(video.index.readThroughSeconds)} in so far. Ask away, and I'll answer from what I've seen.`
                     : "Still watching this video. Ask away — I'll answer as soon as I've seen enough."}
@@ -362,7 +368,7 @@ export function QueryDrawer({
               {/* Idle suggestions, reference-style follow-ups. */}
               {video.readyForSearch && exchanges.length === 0 && (
                 <div>
-                  <p className="text-xs font-medium text-foreground/50">Try</p>
+                  <p className="text-xs font-medium text-muted-foreground">Try</p>
                   <div className="mt-1 flex flex-col">
                     {SUGGESTIONS.map((text, i) => (
                       <button
@@ -372,10 +378,10 @@ export function QueryDrawer({
                           setDraft(text)
                           inputRef.current?.focus()
                         }}
-                        className="-mx-1.5 flex items-center gap-2 rounded-lg border-b border-white/5 px-1.5 py-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-white/5"
+                        className="-mx-1.5 flex items-center gap-2 rounded-lg border-b border-shborder px-1.5 py-2 text-left text-[13px] transition-colors hover:bg-shaccent"
                         style={{ animation: `fade-up 350ms cubic-bezier(0.23,1,0.32,1) ${i * 90}ms both` }}
                       >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/30" aria-hidden>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/60" aria-hidden>
                           <path d="M9 10l-5 5 5 5" />
                           <path d="M20 4v7a4 4 0 0 1-4 4H4" />
                         </svg>
@@ -391,6 +397,7 @@ export function QueryDrawer({
                 <ExchangeBlock
                   key={exchange.request.id}
                   exchange={exchange}
+                  playbackUrl={video.playback?.url ?? null}
                   onSeek={onSeek}
                   onClip={onClip}
                   onRate={onRate}
@@ -408,9 +415,9 @@ export function QueryDrawer({
             </div>
 
             {/* composer — pinned, so the place you type never moves */}
-            <div className="mt-auto shrink-0 border-t border-white/10 p-2">
+            <div className="mt-auto shrink-0 border-t border-shborder p-2">
               {!video.readyForSearch && (
-                <p className="px-1 pb-2 text-xs text-foreground/40">Available once processing finishes.</p>
+                <p className="px-1 pb-2 text-xs text-muted-foreground">Available once processing finishes.</p>
               )}
               <form
                 onSubmit={(event) => {
@@ -421,7 +428,7 @@ export function QueryDrawer({
                 <div
                   role="presentation"
                   onClick={() => inputRef.current?.focus()}
-                  className="flex cursor-text items-end gap-2 rounded-xl bg-black/40 p-2 ring-1 ring-white/10 transition-[box-shadow] duration-150 focus-within:ring-white/25"
+                  className="flex cursor-text items-end gap-2 rounded-xl bg-shmuted p-2 ring-1 ring-shborder transition-[box-shadow] duration-150 focus-within:ring-ring"
                 >
                   <textarea
                     ref={inputRef}
@@ -435,7 +442,7 @@ export function QueryDrawer({
                     }}
                     rows={2}
                     placeholder="Ask for a moment in this video"
-                    className="max-h-32 min-h-[3rem] w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-foreground/30"
+                    className="max-h-32 min-h-[3rem] w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-muted-foreground"
                     disabled={!video.readyForSearch}
                   />
                   <button
@@ -445,7 +452,7 @@ export function QueryDrawer({
                     /* Filled only when there is something to send, so the
                        button reads as available rather than merely present. */
                     className={`mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] ${
-                      canSend ? "bg-white text-black" : "bg-white/10 text-foreground/40"
+                      canSend ? "bg-shprimary text-primary-foreground" : "bg-shmuted text-muted-foreground"
                     }`}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -464,6 +471,7 @@ export function QueryDrawer({
 
 function ExchangeBlock({
   exchange,
+  playbackUrl,
   onSeek,
   onClip,
   onRate,
@@ -474,6 +482,8 @@ function ExchangeBlock({
   readThroughSeconds,
 }: {
   exchange: DrawerExchange
+  /** The source video's own stream, for previewing a moment in place. */
+  playbackUrl: string | null
   onSeek: (seconds: number) => void
   onClip: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null) => void
@@ -496,7 +506,7 @@ function ExchangeBlock({
           reads as a conversation rather than a list of results. */}
       <div className="flex justify-end pl-10">
         <div
-          className="rounded-2xl bg-white/10 px-3 py-1.5 text-[13px] leading-[1.4] text-foreground"
+          className="rounded-2xl bg-shmuted px-3 py-1.5 text-[13px] leading-[1.4]"
           style={{ animation: "fade-up 300ms cubic-bezier(0.23,1,0.32,1) both" }}
         >
           {request.instruction}
@@ -504,7 +514,7 @@ function ExchangeBlock({
       </div>
 
       {searching ? (
-        <p className="text-sm text-foreground/70" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
+        <p className="text-sm text-muted-foreground" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
           {/* While a video is still being watched, a search that has not come
               back yet is usually waiting for the next part to be read. Saying
               "searching" there is true but unhelpful — it looks stuck, which
@@ -518,13 +528,13 @@ function ExchangeBlock({
           <StreamedLine
             key={request.id + request.status}
             text={answerLine(request, readThroughSeconds)}
-            className={`text-sm leading-relaxed ${request.status === "failed" ? "text-red-300" : "text-foreground/90"}`}
+            className={`text-sm leading-relaxed ${request.status === "failed" ? "text-destructive" : ""}`}
           />
           {/* Recalled and re-read are different acts, and the difference
               matters to someone deciding whether to trust the answer. Said
               once, quietly, rather than dressed up as a badge. */}
           {request.answeredFrom === "notes" && (
-            <span className="text-[11.5px] text-foreground/35">From what I remember of this video</span>
+            <span className="text-[11.5px] text-muted-foreground/80">From what I remember of this video</span>
           )}
         </div>
       )}
@@ -546,6 +556,7 @@ function ExchangeBlock({
         <EvidencePicker
           matches={matches}
           clipByMatch={clipByMatch}
+          playbackUrl={playbackUrl}
           onSeek={onSeek}
           onClip={(matchId) => onClip(request.id, matchId)}
           onRate={(matchId, verdict) => onRate(request.id, matchId, verdict)}
@@ -571,12 +582,6 @@ function Meter({ confidence }: { confidence: number }) {
       ))}
     </span>
   )
-}
-
-function confidenceLabel(confidence: number): string {
-  if (confidence >= 0.8) return "High confidence"
-  if (confidence >= 0.5) return "Likely"
-  return "Worth checking"
 }
 
 /**
@@ -656,12 +661,14 @@ function usePinnedThumbnails(matches: ClipMatch[]) {
 function EvidencePicker({
   matches,
   clipByMatch,
+  playbackUrl,
   onSeek,
   onClip,
   onRate,
 }: {
   matches: ClipMatch[]
   clipByMatch: Map<string, Clip>
+  playbackUrl: string | null
   onSeek: (seconds: number) => void
   onClip: (matchId: string) => void
   onRate: (matchId: string, verdict: MatchFeedback | null) => void
@@ -700,6 +707,8 @@ function EvidencePicker({
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
+  /** The moment playing IN the card, right where its still was. */
+  const [previewingId, setPreviewingId] = useState<string | null>(null)
 
   // Looked up rather than stored, so the strip cannot outlive the rejection it
   // describes. A failed thumbs-down is rolled back upstream and the moment
@@ -722,14 +731,14 @@ function EvidencePicker({
     // Nothing to float over, so this is not a toast. Inline, quiet, and it
     // stays: it is the only trace of what was removed.
     return undoable ? (
-      <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/10">
-        <span className="truncate text-[12px] text-foreground/45">
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-shmuted/60 px-3 py-2 ring-1 ring-shborder">
+        <span className="truncate text-[12px] text-muted-foreground">
           Removed <span className="font-mono tabular-nums">{undoable.startTimecode}</span>
         </span>
         <button
           type="button"
           onClick={() => rate(undoable, null)}
-          className="shrink-0 whitespace-nowrap text-[12px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
+          className="shrink-0 whitespace-nowrap text-[12px] font-medium text-amber-700 transition-colors hover:text-amber-800"
         >
           Undo
         </button>
@@ -752,34 +761,21 @@ function EvidencePicker({
 
   return (
     <div
-      className="relative overflow-hidden rounded-xl bg-black/35 ring-1 ring-white/10"
+      className="relative overflow-hidden rounded-xl bg-[#101013]"
       style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) 200ms both" }}
     >
       <div className="p-3">
-        <button type="button" onClick={() => onSeek(active.startSeconds)} className="group block w-full text-left">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="font-mono tabular-nums text-amber-300/90 underline-offset-4 group-hover:underline">
-              {active.startTimecode} – {active.endTimecode}
-            </span>
-            <span className="text-foreground/35">{SOURCE_LABEL[active.source]}</span>
-          </div>
-          {/* Fixed min-height: swapping between alternatives must not make the
-              card jump, or the buttons below move as you read. */}
-          <p className="mt-1.5 min-h-[2.5rem] text-[13px] leading-snug text-foreground/85">
-            {active.description || "A moment matching your search."}
-          </p>
-          {active.quote && <p className="mt-1 text-xs italic text-foreground/45">“{active.quote}”</p>}
-        </button>
-
-        {/* Before the clip is cut there is nothing to play, so the still
-            stands in — the promoted match should never be the only one you
-            cannot see. */}
-        {!playable && activeThumbnail && (
+        {/* The moment, watchable right here. The still carries a play mark
+            and the timecode in its corner; pressing it plays THIS moment in
+            place, cued from the source video's own stream, and stops when the
+            moment ends. Before the source is streamable the press falls back
+            to jumping the main player. */}
+        {!playable && activeThumbnail && previewingId !== active.id && (
           <button
             type="button"
-            onClick={() => onSeek(active.startSeconds)}
-            className="mt-2.5 block w-full overflow-hidden rounded-lg ring-1 ring-white/10"
-            aria-label={`Jump to ${active.startTimecode}`}
+            onClick={() => (playbackUrl ? setPreviewingId(active.id) : onSeek(active.startSeconds))}
+            className="group/still relative block w-full overflow-hidden rounded-lg"
+            aria-label={`Play this moment (${asPlayerTime(active.startSeconds)} to ${asPlayerTime(active.endSeconds)})`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -789,7 +785,37 @@ function EvidencePicker({
               className="aspect-video w-full bg-black/50 object-cover"
               style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
             />
+            <span className="absolute inset-0 m-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover/still:scale-105">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
+              </svg>
+            </span>
+            <span className="absolute bottom-1.5 right-1.5 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-white">
+              {asPlayerTime(active.endSeconds - active.startSeconds)}
+            </span>
           </button>
+        )}
+
+        {!playable && previewingId === active.id && playbackUrl && (
+          <span className="relative block overflow-hidden rounded-lg">
+            <video
+              src={playbackUrl}
+              autoPlay
+              controls
+              playsInline
+              onLoadedMetadata={(event) => {
+                event.currentTarget.currentTime = active.startSeconds
+              }}
+              onTimeUpdate={(event) => {
+                // The preview is the MOMENT, not the film: stop at its end.
+                if (event.currentTarget.currentTime >= active.endSeconds) event.currentTarget.pause()
+              }}
+              className="aspect-video w-full bg-black"
+            />
+            <span className="pointer-events-none absolute right-1.5 top-1.5 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-white">
+              {asPlayerTime(active.endSeconds - active.startSeconds)}
+            </span>
+          </span>
         )}
 
         {playable && clip?.url && (
@@ -798,7 +824,7 @@ function EvidencePicker({
             controls
             preload="metadata"
             playsInline
-            className="mt-2.5 w-full rounded-lg bg-black/60"
+            className="w-full rounded-lg bg-black/60"
             style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
           />
         )}
@@ -815,13 +841,14 @@ function EvidencePicker({
       >
         <div className="overflow-hidden">
           <div className="border-t border-white/10 bg-black/20 p-1.5">
-            <p className="px-1.5 pb-1 text-[11px] font-medium text-foreground/40">Other moments</p>
+            <p className="px-1.5 pb-1 text-[11px] font-medium text-white/40">Other moments</p>
             {others.map((match) => (
               <button
                 key={match.id}
                 type="button"
                 onClick={() => {
                   setSelectedId(match.id)
+                  setPreviewingId(null)
                   // Seek too: switching the answer should move the player to it,
                   // otherwise the card and the video disagree about the subject.
                   onSeek(match.startSeconds)
@@ -846,10 +873,10 @@ function EvidencePicker({
                 <span className="shrink-0 font-mono text-[11px] tabular-nums text-amber-300/70">
                   {match.startTimecode}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground/80">
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-white/80">
                   {match.description || SOURCE_LABEL[match.source]}
                 </span>
-                <span className="shrink-0 text-[11px] text-foreground/40">
+                <span className="shrink-0 text-[11px] text-white/45">
                   {shortConfidence(match.confidence)}
                 </span>
               </button>
@@ -859,14 +886,14 @@ function EvidencePicker({
       </div>
 
       {/* Two rows, because six controls do not fit across a 380px column. The
-          previous single row squeezed "Cut this clip" until it wrapped onto
+          previous single row squeezed "Save clip" until it wrapped onto
           three lines inside its own button. */}
       <div className="border-t border-white/10 bg-black/20 px-2.5 py-2">
         <div className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2">
             <Meter confidence={active.confidence} />
-            <span className="truncate text-[12px] font-medium text-foreground/60">
-              {confidenceLabel(active.confidence)}
+            <span className="truncate text-[12px] font-medium text-white/60">
+              {Math.round(active.confidence * 100)}% accuracy
             </span>
           </span>
           <Verdict match={active} onRate={(verdict) => rate(active, verdict)} />
@@ -878,7 +905,7 @@ function EvidencePicker({
               type="button"
               aria-expanded={open}
               onClick={() => setOpen((current) => !current)}
-              className="flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-[12.5px] text-foreground/70 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-foreground"
+              className="flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-[12.5px] text-white/70 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white"
             >
               {open ? "Hide other moments" : `Other moments (${others.length})`}
             </button>
@@ -913,11 +940,11 @@ function EvidencePicker({
               className="flex-1 whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
             >
               {busy ? (
-                <span style={{ animation: "pulse-soft 1.6s ease-in-out infinite" }}>Cutting…</span>
+                <span style={{ animation: "pulse-soft 1.6s ease-in-out infinite" }}>Saving…</span>
               ) : clip?.status === "failed" ? (
                 "Try again"
               ) : (
-                "Cut this clip"
+                "Save clip"
               )}
             </button>
           )}
@@ -981,7 +1008,7 @@ function Verdict({ match, onRate }: { match: ClipMatch; onRate: (verdict: MatchF
         onClick={() => onRate("approved")}
         aria-label="This clip is right"
         title="This clip is right"
-        className="rounded-lg p-1.5 text-foreground/35 transition-colors hover:bg-white/5 hover:text-emerald-300"
+        className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-emerald-300"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="M7 22V10l5-8a2.5 2.5 0 0 1 2.4 3.2L13.5 9H19a2 2 0 0 1 2 2.4l-1.6 8A2 2 0 0 1 17.4 21H7Z" />
@@ -993,7 +1020,7 @@ function Verdict({ match, onRate }: { match: ClipMatch; onRate: (verdict: MatchF
         onClick={() => onRate("rejected")}
         aria-label="This clip is wrong — remove it"
         title="This clip is wrong — remove it"
-        className="rounded-lg p-1.5 text-foreground/35 transition-colors hover:bg-white/5 hover:text-red-300"
+        className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-red-300"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="M17 2v12l-5 8a2.5 2.5 0 0 1-2.4-3.2L10.5 15H5a2 2 0 0 1-2-2.4l1.6-8A2 2 0 0 1 6.6 3H17Z" />
@@ -1015,7 +1042,7 @@ function Verdict({ match, onRate }: { match: ClipMatch; onRate: (verdict: MatchF
 function UndoRejection({ match, onUndo }: { match: ClipMatch; onUndo: () => void }) {
   return (
     <div className="flex items-center gap-3 rounded-full bg-black/85 px-3 py-1.5 shadow-lg ring-1 ring-white/15 backdrop-blur">
-      <span className="whitespace-nowrap text-[11.5px] text-foreground/60">
+      <span className="whitespace-nowrap text-[11.5px] text-white/60">
         Removed <span className="font-mono tabular-nums">{match.startTimecode}</span>
       </span>
       <button

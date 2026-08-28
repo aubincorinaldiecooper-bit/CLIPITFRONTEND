@@ -191,11 +191,18 @@
  * carrying the same low specificity shadcn's own rule has, so any utility that
  * names a colour still wins.
  */
-.shadcn-scope,
-.shadcn-scope *,
-.shadcn-scope *::before,
-.shadcn-scope *::after {
-  border-color: var(--border);
+/* In @layer base deliberately: unlayered, this rule OUTRANKED every
+   border-colour utility inside the scope (unlayered beats layered), so
+   border-white/10 hairlines on the dark evidence card painted paper-white.
+   In the base layer it is the default it was meant to be, and any utility
+   that names a colour wins again. */
+@layer base {
+  .shadcn-scope,
+  .shadcn-scope *,
+  .shadcn-scope *::before,
+  .shadcn-scope *::after {
+    border-color: var(--border);
+  }
 }
 
 body {
