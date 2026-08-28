@@ -187,7 +187,12 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          /* shadcn-scope, because a Sheet is portalled to document.body — outside
+             the pilot's subtree, where --sidebar resolves to nothing. Without it
+             the drawer rendered with NO background on a phone: the page beneath
+             showed straight through and the navigation tangled with the page's
+             own heading and buttons, both unreadable. */
+          className="shadcn-scope w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,

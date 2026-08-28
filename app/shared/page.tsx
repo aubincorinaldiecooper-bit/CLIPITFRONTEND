@@ -103,6 +103,10 @@ function WorkspacesBody() {
     setName("")
     setInviteEmails([""])
     setCreating("idle")
+    // Without this, a failed create left its red message sitting above a
+    // freshly blank form the next time the dialog opened, apparently
+    // complaining about a field nobody had typed in yet.
+    setFormError(null)
   }
 
   /** Close the handoff and go to the workspace that was made. */
@@ -334,10 +338,12 @@ function WorkspacesBody() {
           are two moments and two dialogs. */}
       <Dialog
         open={createOpen && !handoff}
-        onOpenChange={(open) => {
-          setCreateOpen(open)
-          if (!open) resetForm()
-        }}
+        /* Closing does NOT throw the draft away — the shape this dialog had
+           before the pilot. Escape used to wipe it while Cancel kept it: the
+           same box, two outcomes, and the one people press without thinking
+           was the destructive one. A creation that succeeds clears the form
+           itself. */
+        onOpenChange={setCreateOpen}
       >
         <DialogContent className="shadcn-scope sm:max-w-md">
           <DialogHeader>
@@ -368,6 +374,10 @@ function WorkspacesBody() {
                   key={index}
                   id={`ws-invite-${index}`}
                   type="email"
+                  /* Row 0 is named by the visible Label. The rest had no name
+                     at all — a screen reader read them as bare "edit text",
+                     indistinguishable from each other. */
+                  aria-label={index === 0 ? undefined : `Invite someone else (${index + 1})`}
                   value={address}
                   onChange={(event) =>
                     setInviteEmails((current) =>
@@ -401,10 +411,10 @@ function WorkspacesBody() {
               loadingLabel="Creating"
               successLabel="Created"
               type="submit"
-              onClick={() => {
-                const form = document.getElementById(CREATE_FORM_ID) as HTMLFormElement | null
-                form?.requestSubmit()
-              }}
+              /* A real submitter for the form, rather than a fake submit from
+                 onClick — which left the form with no submitter at all, so
+                 typing a name and pressing Enter did nothing. */
+              form={CREATE_FORM_ID}
             />
           </DialogFooter>
         </DialogContent>

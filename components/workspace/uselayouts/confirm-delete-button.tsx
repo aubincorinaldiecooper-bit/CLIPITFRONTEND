@@ -3,7 +3,7 @@
 import { Undo03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { motion, AnimatePresence } from "motion/react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 /**
  * uselayouts' delete-button, put to work.
@@ -24,6 +24,7 @@ export function ConfirmDeleteButton({
   id,
   label,
   confirmLabel,
+  busyLabel = "Working…",
   onConfirm,
   busy = false,
 }: {
@@ -32,17 +33,40 @@ export function ConfirmDeleteButton({
   id: string
   label: string
   confirmLabel: string
+  /** What it says while the request is in flight. */
+  busyLabel?: string
   onConfirm: () => void
   busy?: boolean
 }) {
   const [armed, setArmed] = useState(false)
   const [animating, setAnimating] = useState(false)
+  const armRef = useRef<HTMLButtonElement | null>(null)
+  const confirmRef = useRef<HTMLButtonElement | null>(null)
 
-  // An armed button that nobody presses goes back to safe on its own.
+  // An armed button that nobody presses goes back to safe on its own — but
+  // never while the removal it armed is actually running.
   useEffect(() => {
-    if (!armed) return
+    if (!armed || busy) return
     const timer = setTimeout(() => setArmed(false), 5000)
     return () => clearTimeout(timer)
+  }, [armed, busy])
+
+  /*
+   * Follow the morph with the keyboard.
+   *
+   * The two faces are separate elements: arming unmounts the one under your
+   * finger, so a keyboard user pressing Enter on "Remove" had the button
+   * vanish from beneath them, focus fell to the page body, and their second
+   * Enter did nothing at all — the control could not be operated by keyboard.
+   * Focus moves only when it was already on the face that is leaving, so the
+   * five-second auto-disarm never yanks the cursor from wherever someone has
+   * moved on to.
+   */
+  useEffect(() => {
+    const leaving = armed ? armRef.current : confirmRef.current
+    const arriving = armed ? confirmRef.current : armRef.current
+    if (leaving && document.activeElement === leaving) arriving?.focus()
+    else if (!leaving && document.activeElement === document.body) arriving?.focus()
   }, [armed])
 
   const swap = (next: boolean) => {
@@ -68,11 +92,13 @@ export function ConfirmDeleteButton({
 
   return (
     <AnimatePresence mode="popLayout" initial={false}>
-      {!armed ? (
+      {!armed && !busy ? (
         <motion.button
           key="arm"
+          ref={armRef}
           layoutId={`confirmDelete-${id}`}
           type="button"
+          aria-label={label}
           onClick={() => swap(true)}
           whileTap={{ scale: 0.95 }}
           style={{ pointerEvents: animating ? "none" : "auto" }}
@@ -89,6 +115,7 @@ export function ConfirmDeleteButton({
         >
           <motion.span
             layoutId={`confirmDeleteText-${id}`}
+            aria-hidden="true"
             className="flex"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -101,12 +128,19 @@ export function ConfirmDeleteButton({
       ) : (
         <motion.button
           key="confirm"
+          ref={confirmRef}
           layoutId={`confirmDelete-${id}`}
           type="button"
+          aria-label={busy ? busyLabel : confirmLabel}
+          aria-busy={busy || undefined}
+          disabled={busy}
           onClick={() => {
             if (animating || busy) return
+            /* Do NOT disarm here. It used to flip straight back to "Remove"
+               the instant you confirmed, so the button looked untouched while
+               the request ran and a second press was silently swallowed. The
+               caller's `busy` holds this face until the removal settles. */
             onConfirm()
-            setArmed(false)
           }}
           whileTap={{ scale: 0.95 }}
           style={{ pointerEvents: animating ? "none" : "auto" }}
@@ -124,6 +158,7 @@ export function ConfirmDeleteButton({
           <HugeiconsIcon icon={Undo03Icon} className="size-3.5" />
           <motion.span
             layoutId={`confirmDeleteText-${id}`}
+            aria-hidden="true"
             className="flex"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

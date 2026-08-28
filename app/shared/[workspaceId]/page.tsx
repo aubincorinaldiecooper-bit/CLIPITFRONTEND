@@ -85,6 +85,14 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
 
+  /* Your own room and "Your clips" are one place, so a kept URL for it lands
+     on the page that place actually has. Fired from here rather than during
+     render: React is free to run a render twice, and a navigation is a side
+     effect, not a rendering. */
+  useEffect(() => {
+    if (page?.workspace.isPersonal) router.replace("/clips")
+  }, [page, router])
+
   const invite = async (event: React.FormEvent) => {
     event.preventDefault()
     const address = email.trim()
@@ -217,9 +225,10 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
   }
 
   // The personal room and "Your clips" are one place; a kept URL lands on the
-  // page that place actually has.
+  // page that place actually has. Rendering still shows the skeleton — the
+  // navigation itself is fired from the effect above, because React is free to
+  // run a render twice and a redirect is not something to do during one.
   if (page.workspace.isPersonal) {
-    router.replace("/clips")
     return <Skeleton className="h-40 w-full rounded-xl" />
   }
 
@@ -258,6 +267,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
                           id={`remove-${member.userId}`}
                           label="Remove"
                           confirmLabel="Confirm"
+                          busyLabel="Removing…"
                           busy={busyId === member.userId}
                           onConfirm={() => void removePerson(member.userId, member.email ?? "That person")}
                         />
@@ -266,6 +276,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
                           id="leave"
                           label="Leave"
                           confirmLabel="Confirm"
+                          busyLabel="Leaving…"
                           busy={busyId === "leave"}
                           onConfirm={() => void leave()}
                         />
@@ -376,13 +387,14 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {page.clips.map((clip) => (
             <ClipCard
+              surface="light"
               key={clip.id}
               clip={clip}
               isPlaying={playingId === clip.id}
               onPlay={() => setPlayingId(clip.id)}
               actions={
                 <>
-                  {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
+                  {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} surface="light" />}
                   {/* "Take out" removes a SHARE — the clip itself is untouched,
                       so a plain button is honest; the two-press confirm is
                       reserved for taking away people. */}

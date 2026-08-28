@@ -23,6 +23,7 @@ export function StatusButton({
   loadingLabel,
   successLabel,
   type = "button",
+  form,
   onClick,
   disabled = false,
   className,
@@ -32,6 +33,13 @@ export function StatusButton({
   loadingLabel: string
   successLabel: string
   type?: "button" | "submit"
+  /**
+   * The id of the form this button submits, when it sits outside that form —
+   * a dialog footer, typically. Without it the button had to fake a submit
+   * from its onClick, which meant the form had no real submitter and pressing
+   * Enter in a field did nothing at all.
+   */
+  form?: string
   onClick?: () => void
   disabled?: boolean
   className?: string
@@ -42,7 +50,12 @@ export function StatusButton({
     <div className="group relative inline-flex font-sans">
       <Button
         type={type}
+        form={form}
         onClick={onClick}
+        /* The label is animated one character at a time, which a screen reader
+           reads out as "C, r, e, a, t, e, ..." and voice control cannot address
+           at all. The letters are decoration; the accessible name is here. */
+        aria-label={text}
         className={cn(
           "relative min-w-[140px] rounded-full transition-all duration-300 disabled:opacity-100",
           state !== "idle" &&
@@ -51,7 +64,7 @@ export function StatusButton({
         )}
         disabled={disabled || state !== "idle"}
       >
-        <span className="flex items-center justify-center">
+        <span aria-hidden="true" className="flex items-center justify-center">
           <AnimatePresence mode="popLayout" initial={false}>
             {text.split("").map((char, i) => (
               <motion.span

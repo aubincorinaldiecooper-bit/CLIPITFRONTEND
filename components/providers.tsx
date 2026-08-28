@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { MotionConfig } from "motion/react"
 import { Theme } from "@astryxdesign/core/theme"
 import { LinkProvider } from "@astryxdesign/core/Link"
@@ -18,14 +19,19 @@ import { SignInGate } from "@/components/sign-in-gate"
  *   lives in globals.css.
  * - SignInGate: the one sign-in prompt, so any gated action anywhere in the
  *   app asks the same way and resumes the same way. Inside Theme, because it
- *   renders a dialog.
+ *   renders a dialog. The shared screens bring their own — the owner asked for
+ *   a plain dialog there — so on those routes this one keeps providing the
+ *   context and stops rendering a second dialog behind theirs.
  */
 export function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const sharedScreens = pathname?.startsWith("/shared") ?? false
+
   return (
     <Theme theme={clipitTheme} mode="dark">
       <LinkProvider component={Link}>
         <MotionConfig reducedMotion="user">
-          <SignInGate>{children}</SignInGate>
+          <SignInGate withoutDialog={sharedScreens}>{children}</SignInGate>
         </MotionConfig>
       </LinkProvider>
     </Theme>

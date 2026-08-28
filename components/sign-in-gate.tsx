@@ -99,7 +99,22 @@ export function useSignInGate(): GateValue {
   return value
 }
 
-export function SignInGate({ children }: { children: React.ReactNode }) {
+export function SignInGate({
+  children,
+  withoutDialog = false,
+}: {
+  children: React.ReactNode
+  /**
+   * Provide the context but render no dialog.
+   *
+   * The shared screens carry their own gate (components/workspace/sign-in-gate)
+   * with its own plain dialog, so this one's dialog was mounting underneath it
+   * — a second, invisible "Sign in" heading and a pocket of Astryx markup on a
+   * page that has none. The context still hangs here so nothing anywhere can
+   * call useSignInGate and find no provider.
+   */
+  withoutDialog?: boolean
+}) {
   const { data: session, isPending } = authClient.useSession()
   // "plain" is a sign-in with no errand to resume — see askToSignIn.
   const [asking, setAsking] = useState<SignInIntent | "plain" | null>(null)
@@ -126,7 +141,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   return (
     <SignInGateContext.Provider value={{ requireSignIn, askToSignIn, isSignedIn }}>
       {children}
-      <SignInDialog intent={asking} onClose={() => setAsking(null)} />
+      {!withoutDialog && <SignInDialog intent={asking} onClose={() => setAsking(null)} />}
     </SignInGateContext.Provider>
   )
 }

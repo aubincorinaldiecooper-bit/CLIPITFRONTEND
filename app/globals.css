@@ -110,33 +110,49 @@
  */
 .shadcn-scope {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+
+  /*
+   * Off-white, not white — the owner's call, and the tones are the product's
+   * own rather than invented: this is the warm paper palette the landing page
+   * has worn since it shipped (#f7f5f2 ground, white cards, #e8e5e0 rules,
+   * #121212 ink, #6b6965 for the quieter line).
+   *
+   * Three steps, so things sit on each other instead of dissolving:
+   *   rail    #faf9f7  — lightest
+   *   ground  #f7f5f2  — the page
+   *   card    #ffffff  — paper on the desk
+   *
+   * shadcn's default neutral grey stood here before, with a pure-white ground
+   * that white cards vanished into: the clip cards lost their edges entirely
+   * and the download control disappeared, being a white pill on white.
+   */
+  --background: #f7f5f2;
+  --foreground: #121212;
+  --card: #ffffff;
+  --card-foreground: #121212;
+  --popover: #ffffff;
+  --popover-foreground: #121212;
+  --primary: #121212;
+  --primary-foreground: #faf9f7;
+  --secondary: #f1efeb;
+  --secondary-foreground: #121212;
+  --muted: #f1efeb;
+  --muted-foreground: #6b6965;
+  --accent: #f1efeb;
+  --accent-foreground: #121212;
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --destructive-foreground: #faf9f7;
+  --border: #e8e5e0;
+  --input: #e8e5e0;
+  --ring: #8a8781;
+  --sidebar: #faf9f7;
+  --sidebar-foreground: #121212;
+  --sidebar-primary: #121212;
+  --sidebar-primary-foreground: #faf9f7;
+  --sidebar-accent: #f1efeb;
+  --sidebar-accent-foreground: #121212;
+  --sidebar-border: #e8e5e0;
+  --sidebar-ring: #8a8781;
 
   /* shadcn's radius ladder, scope-only. */
   --radius-sm: calc(var(--radius) - 4px);
@@ -161,6 +177,25 @@
   color: var(--foreground);
 
   color-scheme: light;
+}
+
+/*
+ * shadcn's base layer puts `* { border-color: var(--border) }` on the document,
+ * because its components write `border` with no colour and expect the pale
+ * hairline. Vendoring the components without that rule left every plain border
+ * on these screens drawing in Tailwind's default — near-black, measured at
+ * lab(2.75 0 0) — so the header rule, the rail's edge and every card outline
+ * came out as hard black boxes.
+ *
+ * Scoped to the pilot's subtree so it cannot repaint the Astryx screens, and
+ * carrying the same low specificity shadcn's own rule has, so any utility that
+ * names a colour still wins.
+ */
+.shadcn-scope,
+.shadcn-scope *,
+.shadcn-scope *::before,
+.shadcn-scope *::after {
+  border-color: var(--border);
 }
 
 body {
