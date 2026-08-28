@@ -272,7 +272,6 @@ export function QueryDrawer({
   onClip: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null) => void
 }) {
-  const [open, setOpen] = useState(true)
   const [draft, setDraft] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -306,166 +305,130 @@ export function QueryDrawer({
   }
 
   return (
-    <>
-      <AnimatePresence>
-        {!open && (
-          <motion.button
-            key="opener"
-            type="button"
-            aria-label="Ask the video"
-            onClick={() => setOpen(true)}
-            className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-shprimary text-lg font-medium text-primary-foreground shadow-[0_8px_30px_rgba(18,18,18,0.25)] lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.92 }}
-          >
-            ?
-          </motion.button>
-        )}
-      </AnimatePresence>
+    <motion.aside
+      initial={{ opacity: 0, x: 32 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.45, ease: EASE }}
+      /* Fixed shape, hidden overflow: the shell holds still while the
+         transcript inside it scrolls. On small screens it takes a bounded
+         height for the same reason — without one, flex-1 has nothing to
+         divide and the composer stops being pinned. */
+      className="z-30 mt-6 flex h-[70vh] w-full flex-col overflow-hidden rounded-2xl bg-shcard shadow-sm ring-1 ring-shborder lg:fixed lg:right-6 lg:top-24 lg:bottom-8 lg:mt-0 lg:h-auto lg:w-[350px]"
+    >
+        {/* header — no collapse: the panel is where you ask, and the
+            owner's call is that it stays put rather than folding away. */}
+        <div className="flex shrink-0 items-center border-b border-shborder px-4 py-3">
+          <h2 className="text-lg font-semibold">Ask the video</h2>
+        </div>
 
-      <AnimatePresence>
-        {open && (
-          <motion.aside
-            key="drawer"
-            initial={{ opacity: 0, x: 32 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 32 }}
-            transition={{ duration: 0.45, ease: EASE }}
-            /* Fixed shape, hidden overflow: the shell holds still while the
-               transcript inside it scrolls. On small screens it takes a bounded
-               height for the same reason — without one, flex-1 has nothing to
-               divide and the composer stops being pinned. */
-            className="z-30 mt-6 flex h-[70vh] w-full flex-col overflow-hidden rounded-2xl bg-shcard shadow-sm ring-1 ring-shborder lg:fixed lg:right-6 lg:top-24 lg:bottom-8 lg:mt-0 lg:h-auto lg:w-[350px]"
+        {/* transcript — the only scrolling region */}
+        <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+          {video.readyForSearch && understanding && exchanges.length === 0 && (
+            <p className="text-xs text-muted-foreground" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
+              {video.index?.readThroughSeconds
+                ? `Still watching — ${describeMinutes(video.index.readThroughSeconds)} in so far. Ask away, and I'll answer from what I've seen.`
+                : "Still watching this video. Ask away — I'll answer as soon as I've seen enough."}
+            </p>
+          )}
+
+          {/* Idle suggestions, reference-style follow-ups. */}
+          {video.readyForSearch && exchanges.length === 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Try</p>
+              <div className="mt-1 flex flex-col">
+                {SUGGESTIONS.map((text, i) => (
+                  <button
+                    key={text}
+                    type="button"
+                    onClick={() => {
+                      setDraft(text)
+                      inputRef.current?.focus()
+                    }}
+                    className="-mx-1.5 flex items-center gap-2 rounded-lg border-b border-shborder px-1.5 py-2 text-left text-[13px] transition-colors hover:bg-shaccent"
+                    style={{ animation: `fade-up 350ms cubic-bezier(0.23,1,0.32,1) ${i * 90}ms both` }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/60" aria-hidden>
+                      <path d="M9 10l-5 5 5 5" />
+                      <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+                    </svg>
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* The conversation: every exchange stays, oldest first. */}
+          {exchanges.map((exchange, index) => (
+            <ExchangeBlock
+              key={exchange.request.id}
+              exchange={exchange}
+              playbackUrl={video.playback?.url ?? null}
+              onSeek={onSeek}
+              onClip={onClip}
+              onRate={onRate}
+              onSearch={onSearch}
+              stillWatching={understanding}
+              readThroughSeconds={video.index?.readThroughSeconds ?? null}
+              // "Look again" means the last thing asked, because that is
+              // what it means to the backend and to a person. Offering it
+              // on an older answer would quietly re-run a different
+              // question than the one being looked at.
+              isLatest={index === exchanges.length - 1}
+              canAsk={canSend || (!busy && !searching && video.readyForSearch)}
+            />
+          ))}
+        </div>
+
+        {/* composer — pinned, so the place you type never moves */}
+        <div className="mt-auto shrink-0 border-t border-shborder p-2">
+          {!video.readyForSearch && (
+            <p className="px-1 pb-2 text-xs text-muted-foreground">Available once processing finishes.</p>
+          )}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              submit()
+            }}
           >
-            {/* header */}
-            <div className="flex shrink-0 items-center justify-between border-b border-shborder px-4 py-3">
-              <h2 className="text-lg font-semibold">Ask the video</h2>
+            <div
+              role="presentation"
+              onClick={() => inputRef.current?.focus()}
+              className="flex cursor-text items-end gap-2 rounded-xl bg-shmuted p-2 ring-1 ring-shborder transition-[box-shadow] duration-150 focus-within:ring-ring"
+            >
+              <textarea
+                ref={inputRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault()
+                    submit()
+                  }
+                }}
+                rows={2}
+                placeholder="Ask for a moment in this video"
+                className="max-h-32 min-h-[3rem] w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-muted-foreground"
+                disabled={!video.readyForSearch}
+              />
               <button
-                type="button"
-                aria-label="Collapse"
-                onClick={() => setOpen(false)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-shaccent hover:text-foreground"
+                type="submit"
+                aria-label="Search"
+                disabled={!canSend}
+                /* Filled only when there is something to send, so the
+                   button reads as available rather than merely present. */
+                className={`mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] ${
+                  canSend ? "bg-shprimary text-primary-foreground" : "bg-shmuted text-muted-foreground"
+                }`}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-                  <path d="M9 6l6 6-6 6" />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 19V5M5 12l7-7 7 7" />
                 </svg>
               </button>
             </div>
-
-            {/* transcript — the only scrolling region */}
-            <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-              {video.readyForSearch && understanding && exchanges.length === 0 && (
-                <p className="text-xs text-muted-foreground" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
-                  {video.index?.readThroughSeconds
-                    ? `Still watching — ${describeMinutes(video.index.readThroughSeconds)} in so far. Ask away, and I'll answer from what I've seen.`
-                    : "Still watching this video. Ask away — I'll answer as soon as I've seen enough."}
-                </p>
-              )}
-
-              {/* Idle suggestions, reference-style follow-ups. */}
-              {video.readyForSearch && exchanges.length === 0 && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Try</p>
-                  <div className="mt-1 flex flex-col">
-                    {SUGGESTIONS.map((text, i) => (
-                      <button
-                        key={text}
-                        type="button"
-                        onClick={() => {
-                          setDraft(text)
-                          inputRef.current?.focus()
-                        }}
-                        className="-mx-1.5 flex items-center gap-2 rounded-lg border-b border-shborder px-1.5 py-2 text-left text-[13px] transition-colors hover:bg-shaccent"
-                        style={{ animation: `fade-up 350ms cubic-bezier(0.23,1,0.32,1) ${i * 90}ms both` }}
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/60" aria-hidden>
-                          <path d="M9 10l-5 5 5 5" />
-                          <path d="M20 4v7a4 4 0 0 1-4 4H4" />
-                        </svg>
-                        {text}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* The conversation: every exchange stays, oldest first. */}
-              {exchanges.map((exchange, index) => (
-                <ExchangeBlock
-                  key={exchange.request.id}
-                  exchange={exchange}
-                  playbackUrl={video.playback?.url ?? null}
-                  onSeek={onSeek}
-                  onClip={onClip}
-                  onRate={onRate}
-                  onSearch={onSearch}
-                  stillWatching={understanding}
-                  readThroughSeconds={video.index?.readThroughSeconds ?? null}
-                  // "Look again" means the last thing asked, because that is
-                  // what it means to the backend and to a person. Offering it
-                  // on an older answer would quietly re-run a different
-                  // question than the one being looked at.
-                  isLatest={index === exchanges.length - 1}
-                  canAsk={canSend || (!busy && !searching && video.readyForSearch)}
-                />
-              ))}
-            </div>
-
-            {/* composer — pinned, so the place you type never moves */}
-            <div className="mt-auto shrink-0 border-t border-shborder p-2">
-              {!video.readyForSearch && (
-                <p className="px-1 pb-2 text-xs text-muted-foreground">Available once processing finishes.</p>
-              )}
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  submit()
-                }}
-              >
-                <div
-                  role="presentation"
-                  onClick={() => inputRef.current?.focus()}
-                  className="flex cursor-text items-end gap-2 rounded-xl bg-shmuted p-2 ring-1 ring-shborder transition-[box-shadow] duration-150 focus-within:ring-ring"
-                >
-                  <textarea
-                    ref={inputRef}
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault()
-                        submit()
-                      }
-                    }}
-                    rows={2}
-                    placeholder="Ask for a moment in this video"
-                    className="max-h-32 min-h-[3rem] w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-muted-foreground"
-                    disabled={!video.readyForSearch}
-                  />
-                  <button
-                    type="submit"
-                    aria-label="Search"
-                    disabled={!canSend}
-                    /* Filled only when there is something to send, so the
-                       button reads as available rather than merely present. */
-                    className={`mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] ${
-                      canSend ? "bg-shprimary text-primary-foreground" : "bg-shmuted text-muted-foreground"
-                    }`}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M12 19V5M5 12l7-7 7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-    </>
+          </form>
+        </div>
+    </motion.aside>
   )
 }
 

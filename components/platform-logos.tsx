@@ -80,13 +80,19 @@ function TikTokLogo({ size }: { size: PlatformLogoSize }) {
   )
 }
 
-/** YouTube: the white play in its red rounded rectangle. */
+/**
+ * YouTube: the white play on red, filling the whole mark.
+ *
+ * It used to draw YouTube's red badge INSIDE a near-black square, which on a
+ * pale page read as a black frame around a smaller red shape — the owner's
+ * words, and right: TikTok's and X's black IS their mark, but YouTube's is
+ * red. The shape is one colour now, the way the other three are.
+ */
 function YouTubeLogo({ size }: { size: PlatformLogoSize }) {
   return (
     <svg viewBox="0 0 48 48" className={`${BOX[size]} shrink-0`} aria-hidden>
-      <rect width="48" height="48" rx="12" fill="#0f0f0f" />
-      <rect x="6" y="13.5" width="36" height="21" rx="6" fill="#FF0000" />
-      <path d="M20.5 19.5v9l8-4.5-8-4.5Z" fill="#fff" />
+      <rect width="48" height="48" rx="12" fill="#FF0000" />
+      <path d="M19.5 16.5v15l13-7.5-13-7.5Z" fill="#fff" />
     </svg>
   )
 }

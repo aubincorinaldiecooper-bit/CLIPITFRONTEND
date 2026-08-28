@@ -16,13 +16,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ArrowRight01Icon,
-  ChartLineData01Icon,
-  FlashIcon,
   PlusSignIcon,
   PodcastIcon,
-  SparklesIcon,
   SquareLock01Icon,
-  UserIcon,
 } from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
@@ -59,33 +55,8 @@ const PLATFORM_LABELS: Record<string, string> = {
 }
 const PLATFORMS = ["tiktok", "instagram", "youtube", "x"] as const
 
-/**
- * Why anyone would connect an account at all.
- *
- * Straight from the owner's design. It answers the question somebody asks
- * before handing over access to an account that is often their livelihood, and
- * answering it on the page beats making them guess.
- */
-const WHY_CONNECT = [
-  {
-    icon: FlashIcon,
-    title: "Publish faster",
-    body: "Skip the extra steps and post straight from CLIPIT.",
-  },
-  {
-    icon: ChartLineData01Icon,
-    title: "Track performance",
-    body: "See how your clips perform across connected platforms.",
-  },
-  {
-    icon: UserIcon,
-    title: "Keep accounts saved",
-    body: "We'll keep your accounts secure for effortless publishing.",
-  },
-] as const
-
 /** The icon well every panel on this page leads with. */
-function IconWell({ icon }: { icon: (typeof WHY_CONNECT)[number]["icon"] }) {
+function IconWell({ icon }: { icon: typeof PodcastIcon }) {
   return (
     <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-shmuted text-muted-foreground">
       <HugeiconsIcon icon={icon} className="size-[18px]" />
@@ -385,12 +356,10 @@ function PublishingBody() {
                   }
                 >
                   <PlatformLogo platform={platform} size="sm" />
-                  <div className="flex min-w-0 flex-col">
-                    <span className="text-sm font-medium">{PLATFORM_LABELS[platform]}</span>
-                    <span className="truncate text-[13px] text-muted-foreground">
-                      Publish clips directly to {PLATFORM_LABELS[platform]}
-                    </span>
-                  </div>
+                  {/* The name alone: "Publish clips directly to TikTok" beside
+                      a Connect button on a page called Publishing said nothing
+                      the reader had not already worked out. */}
+                  <span className="text-sm font-medium">{PLATFORM_LABELS[platform]}</span>
                   <Button
                     // Always "Connect" — one word, steady in both states, per
                     // the owner. The platform goes in the accessible name:
@@ -468,35 +437,6 @@ function PublishingBody() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex flex-col gap-6">
-          <div className="flex items-start gap-3">
-            <IconWell icon={SparklesIcon} />
-            <h2 className="text-base font-semibold">Why connect accounts?</h2>
-          </div>
-          {/* Three equal columns that divide the card, collapsing to one on a
-              narrow viewport — a rule between the columns, never before the
-              first. */}
-          <div className="grid grid-cols-1 sm:grid-cols-3">
-            {WHY_CONNECT.map((reason, index) => (
-              <div
-                key={reason.title}
-                className={
-                  "flex items-start gap-3 " +
-                  (index > 0 ? "sm:border-l sm:border-shborder sm:pl-6" : "sm:pr-6")
-                }
-              >
-                <IconWell icon={reason.icon} />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">{reason.title}</span>
-                  <p className="text-sm text-muted-foreground">{reason.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
         </CardContent>
       </Card>
 
