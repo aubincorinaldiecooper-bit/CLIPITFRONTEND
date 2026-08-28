@@ -21,6 +21,7 @@ export function ClipCard({
   isPlaying,
   onPlay,
   showDate = false,
+  surface = "dark",
   actions,
   children,
 }: {
@@ -29,6 +30,16 @@ export function ClipCard({
   onPlay: () => void
   /** The library shows when a clip was cut; a room's feed does not. */
   showDate?: boolean
+  /**
+   * Which ground the card is standing on. The library and the rest of the app
+   * are near-black ("dark"); the shared rooms are the off-white pilot
+   * ("light"). Same card either way — one component is what keeps the two
+   * places identical — but a surface and a hairline drawn for near-black are
+   * invisible on paper: this card's fill and its 7%-white ring both vanished
+   * on the light screens, and the download control, a white pill, went with
+   * them.
+   */
+  surface?: "dark" | "light"
   /** The action row, page-specific: Download, Publish, Send, Take out… */
   actions?: ReactNode
   /** Anything below the actions (the library has nothing today). */
@@ -46,7 +57,14 @@ export function ClipCard({
       : null
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl bg-surface ring-1 ring-white/[0.07]">
+    <div
+      className={
+        "flex flex-col overflow-hidden rounded-2xl " +
+        (surface === "light"
+          ? "bg-shcard ring-1 ring-shborder"
+          : "bg-surface ring-1 ring-white/[0.07]")
+      }
+    >
       {isPlaying && clip.url ? (
         <video src={clip.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
       ) : (
@@ -106,14 +124,26 @@ export function ClipCard({
  * component can stand in for that. Styled to match an IconButton beside it so
  * the row reads as one set of controls rather than one odd one out.
  */
-export function ClipDownloadAction({ href }: { href: string }) {
+export function ClipDownloadAction({
+  href,
+  surface = "dark",
+}: {
+  href: string
+  /** See ClipCard's `surface`: a white pill is invisible on the light ground. */
+  surface?: "dark" | "light"
+}) {
   return (
     <a
       href={href}
       download
       aria-label="Download this clip"
       title="Download"
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform active:scale-[0.94]"
+      className={
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-[0.94] " +
+        (surface === "light"
+          ? "bg-shprimary text-primary-foreground"
+          : "bg-white text-black")
+      }
     >
       <DownloadGlyph />
     </a>

@@ -548,10 +548,6 @@
     gap: 0.875rem;
   }
 
-  .astryx-side-nav {
-    width: 333px;
-  }
-
   .astryx-side-nav-item {
     font-size: 1.0625rem;
     min-height: 4.25rem;

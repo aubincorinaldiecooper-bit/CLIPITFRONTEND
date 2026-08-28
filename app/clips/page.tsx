@@ -400,7 +400,7 @@ export default function ClipsPage() {
 
   return (
     <AppShell active="clips">
-      <Layout height="auto" contentWidth={1360}>
+      <Layout height="fill" contentWidth={1360}>
         <LayoutContent padding={6}>
           <VStack gap={5} align="stretch">
             <VStack gap={1.5}>
@@ -483,7 +483,7 @@ export default function ClipsPage() {
                             }}
                             placement="below"
                             width={280}
-                            label="Send this clip to a workspace"
+                            label="Send this clip to a room"
                             // The list is all buttons; without an input to
                             // take auto-focus, the hidden accessibility close
                             // button is focused first and pops visible below
@@ -493,7 +493,7 @@ export default function ClipsPage() {
                               sendFailed ? (
                                 <VStack gap={2} align="stretch">
                                   <Text as="p" type="supporting" display="block">
-                                    Couldn't load your workspaces just now.
+                                    Couldn't load your rooms just now.
                                   </Text>
                                   <Button
                                     label="Try again"
@@ -506,12 +506,12 @@ export default function ClipsPage() {
                                 <Skeleton height={60} radius={2} />
                               ) : sendSignInRequired ? (
                                 <Text as="p" type="supporting" display="block">
-                                  Workspaces belong to you, not to a browser tab — sign in (top
+                                  Shared rooms belong to you, not to a browser tab — sign in (top
                                   right) to send clips to one.
                                 </Text>
                               ) : rooms.length === 0 ? (
                                 <Text as="p" type="supporting" display="block">
-                                  You're not in any shared workspace yet. Make one on the Workspaces
+                                  You're not in any shared room yet. Make one on the Shared
                                   page, then send clips there.
                                 </Text>
                               ) : (
@@ -538,8 +538,8 @@ export default function ClipsPage() {
                           >
                             <IconButton
                               icon={<SendToWorkspaceGlyph />}
-                              label="Send to workspace"
-                              tooltip="Send to workspace"
+                              label="Send to a room"
+                              tooltip="Send to a room"
                               variant="secondary"
                               size="sm"
                             />

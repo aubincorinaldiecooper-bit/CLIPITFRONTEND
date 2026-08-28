@@ -137,7 +137,7 @@ export const NAV_ITEMS: Array<{
   { key: "start", label: "New clip", href: "/start", icon: ScissorsGlyph },
   { key: "clips", label: "Your clips", href: "/clips", icon: LibraryGlyph },
   { key: "publishing", label: "Publishing", href: "/publishing", icon: BroadcastGlyph },
-  { key: "workspaces", label: "Workspaces", href: "/workspaces", icon: TeamGlyph },
+  { key: "workspaces", label: "Shared", href: "/shared", icon: TeamGlyph },
 ]
 
 /**
@@ -230,7 +230,19 @@ export function SideNav({
 
   return (
     <AstryxSideNav
+      // The open rail's width, from the theme's --rail-open-width token,
+      // applied ONLY while the rail is open. Not a side-nav override in the
+      // theme: a component override applies in the collapsed state too, and
+      // since Astryx collapses by narrowing, pinning the width there froze
+      // the fold — the chevron stored its preference and the rail never
+      // moved. Collapsed leaves width to the component, exactly as its own
+      // resizable mode does.
+      className={collapsed ? undefined : "w-[var(--rail-open-width)]"}
       collapsible={{ isCollapsed: collapsed, onCollapsedChange: handleCollapsedChange }}
+      // No footer. The account was briefly moved down here to anchor the
+      // rail's empty lower half; that was not asked for, and it put the
+      // address and Sign out in the bottom corner in small type. It lives in
+      // the header, where the owner put it.
       header={
         // The mark rides Astryx's own icon slot and the word its heading slot,
         // so the rail keeps the component's spacing and collapse behaviour
@@ -273,7 +285,7 @@ export function SideNav({
                   <SideNavItem
                     key={room.id}
                     label={room.label}
-                    href={`/workspaces/${room.id}`}
+                    href={`/shared/${room.id}`}
                     icon={FolderGlyph}
                     isSelected={activeWorkspaceId === room.id}
                     size="sm"

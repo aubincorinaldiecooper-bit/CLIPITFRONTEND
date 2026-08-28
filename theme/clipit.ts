@@ -64,6 +64,12 @@ export const clipitTheme = defineTheme({
     // the zinc family so quiet text is gray, not tan.
     "--color-text-secondary": ["#52525b", "#a1a1aa"],
 
+    // The open rail's width is NOT here. It lives as --rail-open-width in
+    // app/globals.css (this map's TokenName type takes no custom names), and
+    // components/side-nav.tsx applies it only while the rail is open — a
+    // token or override here would apply in the collapsed state too, and
+    // Astryx collapses by narrowing, so it froze the fold once already.
+
     // === Structure, from gothic ==========================================
     "--radius-inner": "0.25rem",
     "--radius-element": "0.5rem",
@@ -141,20 +147,21 @@ export const clipitTheme = defineTheme({
         gap: "0.875rem",
       },
     },
-    // The rail's own width. Astryx defaults to 260px; the owner's designs draw
-    // it at 333, measured off the mockup by finding the vertical rule between
-    // rail and content. It was tuned to a different reference earlier — that
-    // reference is superseded.
-    "side-nav": {
-      base: { width: "333px" },
-    },
+    // The rail's WIDTH is deliberately not set here. A theme width applies in
+    // every state — including collapsed — and Astryx folds the rail by
+    // narrowing it, so pinning 333px here froze the collapse control: the
+    // chevron saved its preference and nothing on screen moved. The 333px the
+    // owner's designs draw lives in components/side-nav.tsx instead, applied
+    // only while the rail is open — the same shape as the component's own
+    // resizable mode, which also writes its width only when not collapsed.
     // The rail rows, at the proportions of the owner's designs: the label
     // bands in the mockup sit on a 76px pitch, against the 52px minimum here,
-    // and the labels measure about 17px against 15. A wider rail with the old
-    // row height would have been a wider rail with more empty space in it, not
-    // the rail that was drawn. Structure and behaviour stay Astryx's — only
-    // the scale changes. The icon half lives in components/side-nav.tsx; the
-    // two move together.
+    // and the labels measure about 17px against 15.
+    //
+    // 4.25rem is 68px and it stays that way. It was briefly cut to 56px to
+    // match Instagram's row — but the owner asked for a narrower rail, not
+    // tighter rows, and the row height was never part of that. The width
+    // moved; this did not.
     "side-nav-item": {
       base: {
         fontSize: "1.0625rem",

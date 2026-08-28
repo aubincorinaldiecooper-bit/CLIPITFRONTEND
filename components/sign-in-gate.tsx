@@ -76,6 +76,14 @@ type GateValue = {
    * parked intent when they come back. Returns true when it ran.
    */
   requireSignIn: (intent: SignInIntent, action: () => void) => boolean
+  /**
+   * Open the sign-in dialog with no errand attached. For the signed-out state
+   * of a page that IS the errand — Workspaces, Publishing — where the answer
+   * to "continue to what?" is simply "this page, signed in". Nothing is parked
+   * in the URL: the magic link already returns to the page it was sent from,
+   * and arriving signed in is the whole resumption.
+   */
+  askToSignIn: () => void
   isSignedIn: boolean
 }
 
@@ -91,9 +99,25 @@ export function useSignInGate(): GateValue {
   return value
 }
 
-export function SignInGate({ children }: { children: React.ReactNode }) {
+export function SignInGate({
+  children,
+  withoutDialog = false,
+}: {
+  children: React.ReactNode
+  /**
+   * Provide the context but render no dialog.
+   *
+   * The shared screens carry their own gate (components/workspace/sign-in-gate)
+   * with its own plain dialog, so this one's dialog was mounting underneath it
+   * — a second, invisible "Sign in" heading and a pocket of Astryx markup on a
+   * page that has none. The context still hangs here so nothing anywhere can
+   * call useSignInGate and find no provider.
+   */
+  withoutDialog?: boolean
+}) {
   const { data: session, isPending } = authClient.useSession()
-  const [asking, setAsking] = useState<SignInIntent | null>(null)
+  // "plain" is a sign-in with no errand to resume — see askToSignIn.
+  const [asking, setAsking] = useState<SignInIntent | "plain" | null>(null)
   const isSignedIn = Boolean(session?.user)
 
   const requireSignIn = useCallback(
@@ -112,10 +136,12 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     [isSignedIn, isPending],
   )
 
+  const askToSignIn = useCallback(() => setAsking("plain"), [])
+
   return (
-    <SignInGateContext.Provider value={{ requireSignIn, isSignedIn }}>
+    <SignInGateContext.Provider value={{ requireSignIn, askToSignIn, isSignedIn }}>
       {children}
-      <SignInDialog intent={asking} onClose={() => setAsking(null)} />
+      {!withoutDialog && <SignInDialog intent={asking} onClose={() => setAsking(null)} />}
     </SignInGateContext.Provider>
   )
 }
@@ -125,7 +151,13 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
  * consequence of what you just pressed, where a bare "Sign in" reads as an
  * interruption.
  */
-function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClose: () => void }) {
+function SignInDialog({
+  intent,
+  onClose,
+}: {
+  intent: SignInIntent | "plain" | null
+  onClose: () => void
+}) {
   const [email, setEmail] = useState("")
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle")
 
@@ -143,23 +175,29 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
    * still answers "what did I interrupt", in the place it costs nothing.
    */
   const purpose =
-    intent?.action === "publish"
-      ? "to publish"
-      : intent?.action === "connect"
-        ? "to connect"
-        : intent?.action === "invite"
-          ? "to invite"
-          : "to send"
+    intent === "plain"
+      ? null
+      : intent?.action === "publish"
+        ? "to publish"
+        : intent?.action === "connect"
+          ? "to connect"
+          : intent?.action === "invite"
+            ? "to invite"
+            : "to send"
 
   const send = async () => {
     const address = email.trim()
     if (!address || !intent || state === "sending") return
     setState("sending")
 
-    // Park the intent BEFORE sending, so the link's return address carries it.
-    const url = new URL(window.location.href)
-    url.searchParams.set(INTENT_KEY, encodeIntent(intent))
-    window.history.replaceState(window.history.state, "", url.toString())
+    // Park the intent BEFORE sending, so the link's return address carries
+    // it. A plain sign-in has no errand to park: the link already returns to
+    // this page, and arriving signed in IS the resumption.
+    if (intent !== "plain") {
+      const url = new URL(window.location.href)
+      url.searchParams.set(INTENT_KEY, encodeIntent(intent))
+      window.history.replaceState(window.history.state, "", url.toString())
+    }
 
     const { error } = await authClient.signIn.magicLink({
       email: address,
@@ -219,8 +257,10 @@ function SignInDialog({ intent, onClose }: { intent: SignInIntent | null; onClos
             <HStack justify="start">
               <Button
                 // The reason the box appeared, carried on the button rather
-                // than in a subtitle the mockup keeps flat.
-                label={`Continue ${purpose}`}
+                // than in a subtitle the mockup keeps flat. A plain sign-in
+                // interrupted nothing, so its button matches the header
+                // control's own wording instead of inventing an errand.
+                label={purpose ? `Continue ${purpose}` : "Email me a sign-in link"}
                 variant="primary"
                 type="submit"
                 endContent={<Icon icon={ArrowRightGlyph} />}

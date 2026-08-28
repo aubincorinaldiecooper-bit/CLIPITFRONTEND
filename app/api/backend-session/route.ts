@@ -52,6 +52,10 @@ export async function POST(request: Request) {
   })
 
   if (!exchange.ok) {
+    // Drain the refusal before discarding it — an unread body keeps the
+    // pooled connection to the API held open. Same rule as the client's
+    // discardBody, on the server's side of the wall.
+    void exchange.body?.cancel().catch(() => {})
     return Response.json({ error: "The API would not issue a session" }, { status: 502 })
   }
 

@@ -10,9 +10,9 @@
    blocked by `disabled` instead, which works either way. */
 
 import { useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/landing/ui/button';
+import { Calendar } from '@/components/landing/ui/calendar';
+import { ScrollArea } from '@/components/landing/ui/scroll-area';
 
 const TIMES = ['09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM',
                '01:00 PM','01:30 PM','02:00 PM','02:30 PM','03:00 PM','03:30 PM',
