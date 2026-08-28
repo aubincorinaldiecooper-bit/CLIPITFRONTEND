@@ -144,6 +144,22 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
+  /*
+   * The ink, set on the scope itself — not decoration, a fix.
+   *
+   * Dialogs, popovers and menus are PORTALLED to document.body, which sits
+   * outside the pilot's subtree and carries the dark app's `color: #f4f4f5`.
+   * Each portal is given .shadcn-scope so its variables resolve light, but a
+   * variable is not a colour: anything without its own text class — a Label,
+   * a ghost Button, the dialog's close X — still inherited near-white ink and
+   * rendered white on a white dialog. Observed: "Workspace name", "Invite
+   * someone (optional)", "Add another" and "Cancel" were all invisible.
+   *
+   * Setting `color` here means carrying the class is enough, wherever the
+   * element ends up in the DOM.
+   */
+  color: var(--foreground);
+
   color-scheme: light;
 }
 
