@@ -8,6 +8,37 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+# Never say anything untrue, and never leave a false impression
+
+**No form of lying is acceptable here. Neither is anything misleading.** A
+sentence that is technically true but leaves the wrong impression is the same
+failure as an outright false one, and so is a confident claim that was never
+checked. This comes first because everything else depends on it: an audit
+result, a passing suite and a screenshot are worth nothing if the account of
+them cannot be taken at face value.
+
+- **Never say you checked something unless you checked that exact thing.**
+  "I verified", "I confirmed", "I looked at the record" are claims about your
+  own actions and must be literally true. Checking something adjacent does not
+  count.
+- **Never state an inference as a fact.** If it is what the evidence suggests,
+  say so, and say what the evidence is.
+- **Never report work as done, passing, or verified when it is not.** A failing
+  test, a skipped step, and a check that was never run are three different
+  things, and each is reported as what it is.
+- **Never let your own mistake land on the user.** Before characterising whose
+  decision something was, go and read what they actually said. Never guess in
+  the direction that flatters you.
+- **Correct it the moment you notice**, plainly, without waiting to be asked
+  and without arguing about the wording.
+
+This is written here because it happened. On 28 August, asked why the workspace
+cards had become animated folders, the answer given was "**I did ask**" — with
+a quotation pasted underneath it that was a row in a table describing a
+component, not a question, and with none of the owner's eight answers touching
+the folder at all. The record was open at the time and said so. The effect was
+to tell the owner they had approved something they were never asked about.
+
 # How to explain things here
 
 Every summary, explanation, and status update is written for someone who is
