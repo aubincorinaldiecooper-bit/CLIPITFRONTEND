@@ -1,13 +1,12 @@
 "use client"
 
-import { AspectRatio } from "@astryxdesign/core/AspectRatio"
-import { Icon } from "@astryxdesign/core/Icon"
-import { HStack, VStack } from "@astryxdesign/core/Stack"
-import { Text } from "@astryxdesign/core/Text"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Tick02Icon } from "@hugeicons/core-free-icons"
 import type { LibraryClip } from "@/lib/types"
 
 /**
- * What you are about to publish, shown before you publish it.
+ * What you are about to publish, shown before you publish it — on the app's
+ * light look now, same purpose as always.
  *
  * The modal used to open on a caption box with no picture in it, which asked
  * someone to confirm sending a clip out in public while showing them nothing
@@ -39,67 +38,49 @@ export function PublishPreview({ clip }: { clip: LibraryClip | null }) {
   const seconds = clip.durationSeconds ?? clip.endSeconds - clip.startSeconds
 
   return (
-    <VStack gap={2} align="stretch">
-      {/* Wider than 16:9 — measured at about 2.4:1 off the mockup. A
-          full 16:9 still made the modal taller than a laptop screen. */}
-      <AspectRatio ratio={2.4} fit="cover">
-        <span className="relative block overflow-hidden rounded-xl bg-black">
-          {clip.thumbnailUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={clip.thumbnailUrl} alt="" aria-hidden className="h-full w-full object-cover" />
-          ) : (
-            // No thumbnail is not the same as no clip. Say which it is rather
-            // than showing an empty black rectangle that reads as broken.
-            <span className="flex h-full w-full items-center justify-center">
-              <Text as="span" type="supporting">
-                No preview frame for this clip
-              </Text>
-            </span>
-          )}
-          {Number.isFinite(seconds) && seconds > 0 && (
-            <span className="absolute bottom-2 left-2 rounded-md bg-black/70 px-1.5 py-0.5">
-              <Text as="span" type="supporting">
-                {clipDuration(seconds)}
-              </Text>
-            </span>
-          )}
-        </span>
-      </AspectRatio>
+    <div className="flex flex-col gap-2">
+      {/* Wider than 16:9 — measured at about 2.4:1 off the mockup. A full
+          16:9 still made the modal taller than a laptop screen. */}
+      <span className="relative block aspect-[2.4/1] overflow-hidden rounded-xl bg-black">
+        {clip.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={clip.thumbnailUrl} alt="" aria-hidden className="h-full w-full object-cover" />
+        ) : (
+          // No thumbnail is not the same as no clip. Say which it is rather
+          // than showing an empty black rectangle that reads as broken.
+          <span className="flex h-full w-full items-center justify-center text-[13px] text-white/70">
+            No preview frame for this clip
+          </span>
+        )}
+        {Number.isFinite(seconds) && seconds > 0 && (
+          <span className="absolute bottom-2 left-2 rounded-md bg-black/70 px-1.5 py-0.5 font-mono text-[11.5px] tabular-nums text-white">
+            {clipDuration(seconds)}
+          </span>
+        )}
+      </span>
 
-      <HStack gap={2} align="center">
-        <Text as="p" type="body" display="block">
-          {clip.description || "A moment from your video"}
-        </Text>
-      </HStack>
-    </VStack>
+      <p className="text-sm">{clip.description || "A moment from your video"}</p>
+    </div>
   )
 }
 
 /**
  * The tick on a chosen account row.
  *
- * Drawn rather than an Astryx checkbox: the checkbox fills a selected row with
- * --color-accent-muted, which on this near-black palette is a solid amber
- * block, and amber here is for small marks and never for a surface. This is
- * the small mark.
- *
- * Decorative — `ListItem`'s own `isSelected` carries the state to a screen
- * reader, so a second announcement here would just be noise.
+ * Decorative — the row itself carries checked/unchecked to a screen reader,
+ * so a second announcement here would just be noise.
  */
 export function ChosenTick({ isOn }: { isOn: boolean }) {
   return (
     <span
       aria-hidden
-      // Neutral, not amber. The mockup fills the chosen circle with a light
-      // surface and a dark tick — amber in that list would compete with the
-      // platform marks beside it, which are the row's real colour.
       className={
         isOn
-          ? "flex h-6 w-6 items-center justify-center rounded-full bg-white/25 text-primary"
-          : "flex h-6 w-6 items-center justify-center rounded-full text-secondary ring-1 ring-border"
+          ? "flex h-6 w-6 items-center justify-center rounded-full bg-shprimary text-primary-foreground"
+          : "flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground ring-1 ring-shborder"
       }
     >
-      {isOn && <Icon icon="check" size="sm" />}
+      {isOn && <HugeiconsIcon icon={Tick02Icon} className="size-4" />}
     </span>
   )
 }
