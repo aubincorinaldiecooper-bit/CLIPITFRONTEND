@@ -373,6 +373,27 @@ export const api = {
     })
   },
 
+  /** A fresh URL for one numbered slice, signed for exactly its byte length. */
+  async createPartUploadUrl(
+    videoId: string,
+    uploadId: string,
+    partNumber: number,
+    contentLength: number,
+  ): Promise<{ url: string }> {
+    return request(`/api/videos/${videoId}/part-url`, {
+      method: "POST",
+      body: JSON.stringify({ uploadId, partNumber, contentLength }),
+    })
+  },
+
+  /** Walk away cleanly: parts already in storage stop being stored and billed. */
+  async abortMultipartUpload(videoId: string, uploadId: string): Promise<void> {
+    await request(`/api/videos/${videoId}/abort-multipart`, {
+      method: "POST",
+      body: JSON.stringify({ uploadId }),
+    })
+  },
+
   /** Seals a part-by-part upload: storage stitches the slices into one file. */
   async completeMultipartUpload(
     videoId: string,
@@ -391,22 +412,33 @@ export const api = {
    * way to observe upload progress.
    */
   async uploadFile(
+    videoId: string,
     target: UploadTarget,
     file: File,
     onProgress: (fraction: number) => void,
   ): Promise<{ multipart?: { uploadId: string; parts: Array<{ partNumber: number; etag: string }> } }> {
-    // A big file goes in pieces: each slice PUTs to its own URL, and the
-    // ETag storage answers with is the receipt the completion call needs.
+    // A big file goes in pieces. Each slice's URL is asked for FRESH just
+    // before the slice is sent — presigning the whole set up front gave every
+    // URL the same clock, and any upload slower than that expiry stranded
+    // mid-file. The ETag storage answers with is the completion's receipt.
     if (target.multipart) {
-      const { uploadId, partSizeBytes, partUrls } = target.multipart
+      const { uploadId, partSizeBytes, partCount } = target.multipart
       const parts: Array<{ partNumber: number; etag: string }> = []
-      for (let index = 0; index < partUrls.length; index += 1) {
-        const slice = file.slice(index * partSizeBytes, (index + 1) * partSizeBytes)
-        const etag = await putOnce(partUrls[index]!, slice, {}, (fraction) =>
-          // Whole-file progress: the slices already sent, plus this one's own.
-          onProgress((index * partSizeBytes + fraction * slice.size) / file.size),
-        )
-        parts.push({ partNumber: index + 1, etag })
+      try {
+        for (let index = 0; index < partCount; index += 1) {
+          const slice = file.slice(index * partSizeBytes, (index + 1) * partSizeBytes)
+          const { url } = await api.createPartUploadUrl(videoId, uploadId, index + 1, slice.size)
+          const etag = await putOnce(url, slice, {}, (fraction) =>
+            // Whole-file progress: the slices already sent, plus this one's own.
+            onProgress((index * partSizeBytes + fraction * slice.size) / file.size),
+          )
+          parts.push({ partNumber: index + 1, etag })
+        }
+      } catch (cause) {
+        // Walk away cleanly: parts already in storage would otherwise sit
+        // there, stored and billed, until the bucket's sweep found them.
+        void api.abortMultipartUpload(videoId, uploadId).catch(() => {})
+        throw cause
       }
       return { multipart: { uploadId, parts } }
     }

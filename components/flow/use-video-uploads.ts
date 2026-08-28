@@ -83,7 +83,7 @@ export function useVideoUploads({
           entry.file.size,
         )
         patchUpload(entry.id, { videoId: created.id })
-        const outcome = await api.uploadFile(upload, entry.file, (fraction) =>
+        const outcome = await api.uploadFile(created.id, upload, entry.file, (fraction) =>
           patchUpload(entry.id, { progress: fraction }),
         )
         if (outcome.multipart) {
