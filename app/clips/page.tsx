@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -20,6 +21,7 @@ import {
   Folder01Icon,
   ScissorsIcon,
   SubtitleIcon,
+  Upload01Icon,
   Upload02Icon,
   VideoReplayIcon,
 } from "@hugeicons/core-free-icons"
@@ -32,6 +34,9 @@ import { useWorkspaceResumeIntent, useWorkspaceSignInGate } from "@/components/w
 import { PlatformLogo } from "@/components/platform-logos"
 import { ChosenTick, PublishPreview } from "@/components/publish-preview"
 import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
+import { UploadPackage } from "@/components/flow/upload-package"
+import { useVideoUploads } from "@/components/flow/use-video-uploads"
+import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 
 /**
  * The caption length to count against.
@@ -83,6 +88,31 @@ function ClipAction({
 }
 
 function ClipsBody() {
+  const router = useRouter()
+  /**
+   * The library is a door for new footage too, at the owner's ask: drag a
+   * video anywhere onto this page — the page shows the same upload state the
+   * New clip screen uses — or press Upload video. The engine is the shared
+   * one, and when the batch lands it hands the videos to the theater
+   * (/start?videos=…), which opens the first and offers the carousel.
+   */
+  const {
+    uploads,
+    startUploads,
+    retryUpload,
+    removeUpload,
+    overLimit,
+    clearOverLimit,
+  } = useVideoUploads({
+    onBatchLanded: (videos) => {
+      router.push(`/start?videos=${videos.map((video) => video.id).join(",")}`)
+    },
+  })
+  const uploadInput = useRef<HTMLInputElement>(null)
+  /** Counts enters/leaves — a plain boolean flickers over child elements. */
+  const dragDepth = useRef(0)
+  const [dragging, setDragging] = useState(false)
+
   const [clips, setClips] = useState<LibraryClip[] | null>(null)
   /**
    * Whether older clips exist below what is currently held. The cursor is
@@ -413,13 +443,73 @@ function ClipsBody() {
 
   return (
     <>
-      <div className="flex flex-1 flex-col gap-5">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Your clips</h1>
-          <p className="text-sm text-muted-foreground">
-            Every clip you have cut, ready to play or download.
-          </p>
+      <div
+        className="relative flex flex-1 flex-col gap-5"
+        onDragEnter={(event) => {
+          if (![...event.dataTransfer.items].some((item) => item.kind === "file")) return
+          event.preventDefault()
+          dragDepth.current += 1
+          setDragging(true)
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1)
+          if (dragDepth.current === 0) setDragging(false)
+        }}
+        onDrop={(event) => {
+          event.preventDefault()
+          dragDepth.current = 0
+          setDragging(false)
+          startUploads(Array.from(event.dataTransfer.files))
+        }}
+      >
+        {/* The upload placeholder, over the page while a drag hovers — the
+            same look the New clip screen greets a drop with. */}
+        {dragging && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 rounded-2xl border border-dashed border-ring bg-shaccent/95 text-center">
+            <span className="flex h-24 w-24 items-center justify-center rounded-full bg-shmuted text-muted-foreground ring-1 ring-shborder">
+              <HugeiconsIcon icon={Upload01Icon} className="size-9" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-xl font-semibold">Drop videos to upload</h2>
+              <p className="text-sm text-muted-foreground">MP4, MOV, MKV, WebM — up to 6 hours each</p>
+            </div>
+          </div>
+        )}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Your clips</h1>
+            <p className="text-sm text-muted-foreground">
+              Every clip you have cut, ready to play or download.
+            </p>
+          </div>
+          {/* The button beside the drag-and-drop, as asked — the same door
+              for anyone who does not think in drops. */}
+          <Button onClick={() => uploadInput.current?.click()}>
+            <HugeiconsIcon icon={Upload01Icon} />
+            Upload video
+          </Button>
+          <input
+            ref={uploadInput}
+            type="file"
+            accept="video/*"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              if (event.target.files) startUploads(Array.from(event.target.files))
+              event.currentTarget.value = ""
+            }}
+          />
         </div>
+
+        {uploads.length > 0 && (
+          <UploadPackage
+            entries={uploads}
+            onAdd={startUploads}
+            onRemove={removeUpload}
+            onRetry={retryUpload}
+          />
+        )}
 
         {failed ? (
           <p className="text-sm text-destructive">Couldn&apos;t load your clips. Refresh to try again.</p>
@@ -758,6 +848,7 @@ function ClipsBody() {
           )}
         </DialogContent>
       </Dialog>
+      <UpgradeDialog files={overLimit} onClose={clearOverLimit} />
     </>
   )
 }

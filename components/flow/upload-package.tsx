@@ -57,15 +57,12 @@ export type UploadEntry = {
 export const MAX_FILES = 12
 
 /**
- * The largest file this screen will start an upload for.
- *
- * A client-side guard and nothing more: the API issues a presigned PUT with no
- * size condition on it, so the server does not enforce a ceiling of its own.
- * Refusing here means a five-hour mistake fails in a second with a reason on
- * the row, instead of after a long upload. If a real server-side limit is
- * added, this should be made to match it rather than guessing again.
+ * The largest file this screen will start an upload for — matching the
+ * server's own multipart ceiling. Big files no longer stop at 5GB: that was
+ * the cap of a SINGLE presigned PUT, and anything above it now goes up in
+ * parts (lib/api.ts uploadFile), so six-hour footage at real bitrates fits.
  */
-export const MAX_FILE_BYTES = 5 * 1024 * 1024 * 1024
+export const MAX_FILE_BYTES = 64 * 1024 * 1024 * 1024
 
 export function formatBytes(bytes: number | undefined): string | null {
   if (bytes === undefined || !Number.isFinite(bytes) || bytes <= 0) return null
@@ -121,14 +118,11 @@ export function UploadPackage({
   onAdd,
   onRemove,
   onRetry,
-  onOpen,
 }: {
   entries: UploadEntry[]
   onAdd: (files: File[]) => void
   onRemove: (id: string) => void
   onRetry: (id: string) => void
-  /** Opening one that is ready. Absent while only one file is in flight. */
-  onOpen?: (entry: UploadEntry) => void
 }) {
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -274,11 +268,6 @@ export function UploadPackage({
                       >
                         <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-5" />
                       </span>
-                      {onOpen && (
-                        <Button variant="secondary" size="sm" onClick={() => onOpen(entry)}>
-                          Open
-                        </Button>
-                      )}
                     </>
                   )}
                   {entry.phase === "failed" && (

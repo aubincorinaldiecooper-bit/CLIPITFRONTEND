@@ -309,6 +309,40 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
   return (await response.json()) as T
 }
 
+
+/**
+ * One PUT, by XHR — the only way to watch upload progress — resolving with
+ * the response's ETag (a part-by-part upload's receipt; harmless otherwise).
+ */
+function putOnce(
+  url: string,
+  body: Blob,
+  headers: Record<string, string>,
+  onProgress: (fraction: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("PUT", url, true)
+    for (const [header, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(header, value)
+    }
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total)
+    })
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.getResponseHeader("ETag") ?? "")
+      else reject(new ApiError(xhr.status, "upload_failed", `Upload failed (${xhr.status})`))
+    })
+    // Status 0 means the browser refused to send it, so there is no response
+    // to report. Cross-origin PUTs to storage fail this way when the bucket
+    // CORS is missing or stale.
+    xhr.addEventListener("error", () =>
+      reject(new ApiError(0, "upload_blocked", "The upload could not be sent. Check your connection and try again.")),
+    )
+    xhr.send(body)
+  })
+}
+
 export const api = {
   isConfigured(): boolean {
     return API_BASE.length > 0
@@ -321,10 +355,33 @@ export const api = {
     })
   },
 
-  async createUpload(filename: string, contentType?: string): Promise<{ video: Video; upload: UploadTarget }> {
+  async createUpload(
+    filename: string,
+    contentType?: string,
+    sizeBytes?: number,
+  ): Promise<{ video: Video; upload: UploadTarget }> {
     return request("/api/videos", {
       method: "POST",
-      body: JSON.stringify({ sourceType: "upload", filename, ...(contentType ? { contentType } : {}) }),
+      body: JSON.stringify({
+        sourceType: "upload",
+        filename,
+        ...(contentType ? { contentType } : {}),
+        // Announced so the server can choose single-PUT or part-by-part; a
+        // single presigned PUT cannot carry more than 5GB.
+        ...(sizeBytes ? { sizeBytes } : {}),
+      }),
+    })
+  },
+
+  /** Seals a part-by-part upload: storage stitches the slices into one file. */
+  async completeMultipartUpload(
+    videoId: string,
+    uploadId: string,
+    parts: Array<{ partNumber: number; etag: string }>,
+  ): Promise<void> {
+    await request(`/api/videos/${videoId}/complete-multipart`, {
+      method: "POST",
+      body: JSON.stringify({ uploadId, parts }),
     })
   },
 
@@ -333,40 +390,29 @@ export const api = {
    * never pass through the API. XHR rather than fetch because it is the only
    * way to observe upload progress.
    */
-  uploadFile(target: UploadTarget, file: File, onProgress: (fraction: number) => void): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open(target.method, target.url, true)
-
-      for (const [header, value] of Object.entries(target.headers)) {
-        xhr.setRequestHeader(header, value)
+  async uploadFile(
+    target: UploadTarget,
+    file: File,
+    onProgress: (fraction: number) => void,
+  ): Promise<{ multipart?: { uploadId: string; parts: Array<{ partNumber: number; etag: string }> } }> {
+    // A big file goes in pieces: each slice PUTs to its own URL, and the
+    // ETag storage answers with is the receipt the completion call needs.
+    if (target.multipart) {
+      const { uploadId, partSizeBytes, partUrls } = target.multipart
+      const parts: Array<{ partNumber: number; etag: string }> = []
+      for (let index = 0; index < partUrls.length; index += 1) {
+        const slice = file.slice(index * partSizeBytes, (index + 1) * partSizeBytes)
+        const etag = await putOnce(partUrls[index]!, slice, {}, (fraction) =>
+          // Whole-file progress: the slices already sent, plus this one's own.
+          onProgress((index * partSizeBytes + fraction * slice.size) / file.size),
+        )
+        parts.push({ partNumber: index + 1, etag })
       }
-
-      xhr.upload.addEventListener("progress", (event) => {
-        if (event.lengthComputable) onProgress(event.loaded / event.total)
-      })
-
-      xhr.addEventListener("load", () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve()
-        else reject(new ApiError(xhr.status, "upload_failed", `Upload failed (${xhr.status})`))
-      })
-      // Status 0 means the browser refused to send it, so there is no response
-      // to report. Cross-origin PUTs to storage fail this way when the bucket
-      // has no CORS rule for this site — indistinguishable here from being
-      // offline, but the console entry names which one it was.
-      xhr.addEventListener("error", () =>
-        reject(
-          new ApiError(
-            0,
-            "upload_failed",
-            "The upload was blocked before it left the browser. This usually means the storage bucket is missing a CORS rule for this site; check your connection and the browser console for the exact reason.",
-          ),
-        ),
-      )
-      xhr.addEventListener("abort", () => reject(new ApiError(0, "upload_aborted", "Upload cancelled")))
-
-      xhr.send(file)
-    })
+      return { multipart: { uploadId, parts } }
+    }
+    if (!target.url) throw new ApiError(500, "bad_upload_target", "The upload target carries no URL.")
+    await putOnce(target.url, file, target.headers, onProgress)
+    return {}
   },
 
   async markUploaded(videoId: string): Promise<{ video: Video }> {

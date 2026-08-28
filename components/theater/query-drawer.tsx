@@ -770,21 +770,28 @@ function EvidencePicker({
             place, cued from the source video's own stream, and stops when the
             moment ends. Before the source is streamable the press falls back
             to jumping the main player. */}
-        {!playable && activeThumbnail && previewingId !== active.id && (
+        {!playable && previewingId !== active.id && (
           <button
             type="button"
             onClick={() => (playbackUrl ? setPreviewingId(active.id) : onSeek(active.startSeconds))}
             className="group/still relative block w-full overflow-hidden rounded-lg"
             aria-label={`Play this moment (${asPlayerTime(active.startSeconds)} to ${asPlayerTime(active.endSeconds)})`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={activeThumbnail}
-              alt=""
-              onError={() => refreshThumbnail(active.id)}
-              className="aspect-video w-full bg-black/50 object-cover"
-              style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
-            />
+            {/* No still is not no moment: the pane keeps its shape and its
+                play control either way (a match's thumbnail is best-effort on
+                the backend and the type says so). */}
+            {activeThumbnail ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={activeThumbnail}
+                alt=""
+                onError={() => refreshThumbnail(active.id)}
+                className="aspect-video w-full bg-black/50 object-cover"
+                style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+              />
+            ) : (
+              <span className="block aspect-video w-full bg-[#0b0e12]" />
+            )}
             <span className="absolute inset-0 m-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover/still:scale-105">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                 <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
@@ -805,6 +812,19 @@ function EvidencePicker({
               playsInline
               onLoadedMetadata={(event) => {
                 event.currentTarget.currentTime = active.startSeconds
+              }}
+              onPlay={(event) => {
+                const element = event.currentTarget
+                // One soundtrack at a time: starting the preview silences any
+                // other player on the page — the stage most of all.
+                for (const other of document.querySelectorAll("video")) {
+                  if (other !== element) other.pause()
+                }
+                // Play after the cutoff means "again": rewind to the moment's
+                // start instead of resuming past its end just to re-pause.
+                if (element.currentTime >= active.endSeconds - 0.05) {
+                  element.currentTime = active.startSeconds
+                }
               }}
               onTimeUpdate={(event) => {
                 // The preview is the MOMENT, not the film: stop at its end.

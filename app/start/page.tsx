@@ -7,7 +7,9 @@ import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowLeft01Icon, ArrowRight01Icon, ScissorsIcon } from "@hugeicons/core-free-icons"
-import { MAX_FILES, MAX_FILE_BYTES, UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
+import { UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
+import { useVideoUploads } from "@/components/flow/use-video-uploads"
+import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { VideoStage } from "@/components/theater/video-stage"
 import { QueryDrawer } from "@/components/theater/query-drawer"
 import { WorkspaceShell } from "@/components/workspace/shell"
@@ -29,17 +31,6 @@ export interface Exchange {
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
   const [exchanges, setExchanges] = useState<Exchange[]>([])
-  /**
-   * The files in this drop, each with its own progress and outcome.
-   *
-   * A single number could not carry this: five files uploading at once have
-   * five different amounts done, and one of them failing must not be reported
-   * as all five failing — or, worse, disappear.
-   */
-  const [uploads, setUploads] = useState<UploadEntry[]>([])
-  /** The list as of the latest render, for settle-time checks inside promises. */
-  const uploadsRef = useRef<UploadEntry[]>([])
-  uploadsRef.current = uploads
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [seekRequest, setSeekRequest] = useState<{ seconds: number; token: number } | null>(null)
@@ -53,136 +44,62 @@ export default function StartPage() {
   /**
    * A page-wide failure — asking a question, cutting a clip.
    *
-   * Upload failures do NOT come through here any more: with several files in
-   * flight a banner at the top cannot say which one went wrong, so each one is
-   * reported on its own row instead.
+   * Upload failures do NOT come through here: with several files in flight a
+   * banner at the top cannot say which one went wrong, so each one is
+   * reported on its own row instead (the shared engine owns that).
    */
   const fail = useCallback((cause: unknown) => {
     setError(cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.")
     setBusy(false)
   }, [])
 
-  // --- source -------------------------------------------------------------
-
-  /** Change one row without disturbing the others. */
-  const patchUpload = useCallback((id: string, patch: Partial<UploadEntry>) => {
-    setUploads((current) => current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)))
-  }, [])
+  /**
+   * The uploads, run by the shared engine (components/flow/use-video-uploads)
+   * — the same one the library's drag-anywhere uses, so a file behaves
+   * identically whichever door it came through. When a drop's batch lands,
+   * the theater opens on its first video; the carousel walks the rest. The
+   * per-row Open button retired at the owner's word.
+   */
+  const {
+    uploads,
+    setUploads,
+    uploadsBusy,
+    startUploads,
+    retryUpload,
+    removeUpload,
+    overLimit,
+    clearOverLimit,
+  } = useVideoUploads({
+    onBatchLanded: (videos) => {
+      const first = videos[0]
+      if (first) setVideo((current) => current ?? first)
+    },
+  })
 
   /**
-   * Carry one file all the way: ask for a slot, send the bytes, tell the
-   * server it landed.
-   *
-   * Every failure is written onto that file's own row. Nothing here touches
-   * the page-wide error, because with several files in flight a banner at the
-   * top cannot say WHICH one went wrong — and the row can.
+   * Videos handed over from another door — the library uploads on /clips,
+   * then arrives here as ?videos=id,id. The batch is seeded so the carousel
+   * can walk it, and the first one opens.
    */
-  const runUpload = useCallback(
-    async (entry: UploadEntry) => {
-      patchUpload(entry.id, { phase: "uploading", progress: 0, error: undefined })
-      try {
-        const { video: created, upload } = await api.createUpload(
-          entry.file.name,
-          entry.file.type || undefined,
-        )
-        patchUpload(entry.id, { videoId: created.id })
-        await api.uploadFile(upload, entry.file, (fraction) =>
-          patchUpload(entry.id, { progress: fraction }),
-        )
-        const { video: queued } = await api.markUploaded(created.id)
-        patchUpload(entry.id, { phase: "ready", progress: 1, videoId: queued.id })
-        return queued
-      } catch (cause) {
-        patchUpload(entry.id, {
-          phase: "failed",
-          error: cause instanceof ApiError ? cause.message : "Upload failed. Try again.",
-        })
-        return null
-      }
-    },
-    [patchUpload],
-  )
-
-  /**
-   * Files picked or dropped.
-   *
-   * One file behaves exactly as it always has — it goes straight into the
-   * theater, because that is the whole errand and stopping to show a list of
-   * one would be a step for nothing. Several stay here with their rows, so a
-   * failure among them is visible and retryable instead of being skipped past
-   * on the way to whichever one happened to finish first.
-   */
-  const startUploads = useCallback(
-    (files: File[]) => {
-      if (files.length === 0) return
-      setError(null)
-
-      const room = Math.max(0, MAX_FILES - uploads.length)
-      const taken = files.slice(0, room)
-      const overflow = files.slice(room)
-
-      const rejected: UploadEntry[] = []
-      const accepted: UploadEntry[] = []
-      taken.forEach((file, index) => {
-        const entry: UploadEntry = {
-          id: `${Date.now()}-${index}-${file.name}`,
-          file,
-          phase: "queued",
-        }
-        // Refused files still get a row. A file that vanishes on being dropped
-        // reads as a bug in the page, where a row saying why reads as an
-        // answer.
-        if (file.size > MAX_FILE_BYTES) {
-          rejected.push({ ...entry, phase: "failed", error: "Too large to upload" })
-        } else {
-          accepted.push(entry)
-        }
-      })
-      overflow.forEach((file, index) => {
-        rejected.push({
-          id: `${Date.now()}-over-${index}-${file.name}`,
-          file,
-          phase: "failed",
-          error: `More than ${MAX_FILES} files in one go`,
-        })
-      })
-
-      const added = [...accepted, ...rejected]
-      if (added.length === 0) return
-      setUploads((current) => [...current, ...added])
-      if (accepted.length === 0) return
-
-      const single = uploads.length === 0 && added.length === 1
-      setBusy(true)
-      void Promise.all(accepted.map((entry) => runUpload(entry)))
-        .then((results) => {
-          // A lone file goes on into the theater, as it always did — but
-          // "lone" is re-checked when it lands, not just when it was picked.
-          // Files can be added while this one uploads, and being carried into
-          // the theater while a batch you just started uploads behind you
-          // would read as the page discarding it.
-          const first = results.find((result) => result !== null)
-          if (single && first && uploadsRef.current.length === 1) setVideo(first)
-        })
-        .finally(() => setBusy(false))
-    },
-    [runUpload, uploads.length],
-  )
-
-  const retryUpload = useCallback(
-    (id: string) => {
-      const entry = uploads.find((candidate) => candidate.id === id)
-      // A file refused for its size or for overflowing the batch has nothing
-      // to retry — trying again would fail the same way.
-      if (!entry || entry.file.size > MAX_FILE_BYTES) return
-      setBusy(true)
-      void runUpload(entry).finally(() => setBusy(false))
-    },
-    [runUpload, uploads],
-  )
-
-  const removeUpload = useCallback((id: string) => {
-    setUploads((current) => current.filter((entry) => entry.id !== id))
+  useEffect(() => {
+    const handed = new URLSearchParams(window.location.search).get("videos")
+    if (!handed) return
+    const ids = handed.split(",").filter(Boolean)
+    if (ids.length === 0) return
+    // The address is consumed: reloading must not re-open a stale batch.
+    const url = new URL(window.location.href)
+    url.searchParams.delete("videos")
+    window.history.replaceState(window.history.state, "", url.toString())
+    setUploads(
+      ids.map((videoId, index) => ({
+        id: `handed-${index}-${videoId}`,
+        file: new File([], "Uploaded video"),
+        phase: "ready" as const,
+        videoId,
+      })),
+    )
+    void openFromLibrary(ids[0]!)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // The YouTube-URL path used to start here, from a tab above the drop zone.
@@ -533,21 +450,6 @@ export default function StartPage() {
               onAdd={startUploads}
               onRemove={removeUpload}
               onRetry={retryUpload}
-              // Only offered once there is a choice to make. With one file the
-              // page opens it for you.
-              //
-              // Fetched by id rather than looked up in `library`: that list is
-              // loaded once, before any of these uploads existed, and is not
-              // refreshed when they land — so searching it found nothing and
-              // the button did nothing at all. Asking the server for the video
-              // is also what the library rows do.
-              onOpen={
-                uploads.length > 1
-                  ? (entry) => {
-                      if (entry.videoId) void openFromLibrary(entry.videoId)
-                    }
-                  : undefined
-              }
             />
           </div>
 
@@ -650,6 +552,7 @@ export default function StartPage() {
         </motion.p>
       )}
       </div>
+      <UpgradeDialog files={overLimit} onClose={clearOverLimit} />
     </WorkspaceShell>
   )
 }

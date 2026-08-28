@@ -79,7 +79,14 @@ export interface LibraryClip extends Clip {
 
 export interface UploadTarget {
   method: "PUT"
-  url: string
+  /** Absent when the upload is part-by-part. */
+  url?: string
+  /** Present for a big file: one URL per numbered slice. */
+  multipart?: {
+    uploadId: string
+    partSizeBytes: number
+    partUrls: string[]
+  }
   storageKey: string
   headers: Record<string, string>
   expiresInSeconds: number
