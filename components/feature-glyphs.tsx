@@ -63,7 +63,7 @@ export function QuestionGlyph(props: SVGProps<SVGSVGElement>) {
   )
 }
 
-/** A cut: the scissors. Matches the rail's New clip mark. */
+/** A cut: the scissors. Matches the rail's Footage mark. */
 export function ScissorsGlyph(props: SVGProps<SVGSVGElement>) {
   return (
     <Glyph {...props}>

@@ -59,9 +59,9 @@ export function AppShell({
                 const className = `whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] transition-colors ${
                   active === item.key ? "bg-white/10 text-foreground" : "text-foreground/60 hover:text-foreground"
                 }`
-                // Same rule as the rail: New clip is a full navigation, so it
+                // Same rule as the rail: Footage is a full navigation, so it
                 // resets the theater even when tapped from the theater.
-                return item.key === "start" ? (
+                return item.key === "footage" ? (
                   <a key={item.key} href={item.href} className={className}>
                     {item.label}
                   </a>

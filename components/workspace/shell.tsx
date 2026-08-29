@@ -39,20 +39,21 @@ import { WorkspaceAccount } from "@/components/workspace/account"
  *
  * It began as the frame for the Shared screens alone (the shadcn pilot), and
  * the owner's verdict on that pilot was to roll it out: "shared is what we
- * need the rest of the workspace to look like." So Home, New clip, Your
- * clips, Publishing and Join now mount this same shell — off-white ground,
- * shadcn sidebar, header account — and the Astryx shell retires. Only the
- * landing page keeps its own look.
+ * need the rest of the workspace to look like." Every signed-in screen mounts
+ * this shell — off-white ground, shadcn sidebar, header account — and the
+ * Astryx shell retires. Only the landing page keeps its own look.
  *
- * The five destinations, in the order the rail has always had, with the
- * shared rooms listed under Rooms. The account stays in the header's
- * top-right, where the owner has kept it.
+ * The destinations name what you own, at the owner's direction: FOOTAGE is
+ * what you bring in, CLIPS is what you cut out of it. They read "New clip"
+ * and "Your clips" before — one an action, one a possession, neither the
+ * name of a thing — which is why an uploaded video felt homeless. The
+ * account stays in the header's top-right, where the owner has kept it.
  */
 
 const DESTINATIONS = [
   { key: "home", label: "Home", href: "/home", icon: Home01Icon },
-  { key: "start", label: "New clip", href: "/start", icon: ScissorsIcon },
-  { key: "clips", label: "Your clips", href: "/clips", icon: VideoReplayIcon },
+  { key: "footage", label: "Footage", href: "/footage", icon: ScissorsIcon },
+  { key: "clips", label: "Clips", href: "/clips", icon: VideoReplayIcon },
   { key: "publishing", label: "Publishing", href: "/publishing", icon: PodcastIcon },
   { key: "workspaces", label: "Shared", href: "/shared", icon: UserGroupIcon },
 ] as const
@@ -163,9 +164,9 @@ export function WorkspaceShell({
                     {DESTINATIONS.map((item) => (
                       <SidebarMenuItem key={item.key}>
                         <SidebarMenuButton asChild isActive={item.key === active} tooltip={item.label}>
-                          {/* New clip stays a full navigation: landing on
-                              /start fresh is what resets the theater. */}
-                          {item.key === "start" ? (
+                          {/* Footage stays a full navigation: landing on it
+                              fresh is what resets the theater. */}
+                          {item.key === "footage" ? (
                             <a href={item.href} aria-current={item.key === active ? "page" : undefined}>
                               <HugeiconsIcon icon={item.icon} />
                               <span>{item.label}</span>

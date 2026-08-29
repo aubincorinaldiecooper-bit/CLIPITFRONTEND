@@ -40,9 +40,9 @@ import { forgetApiSession } from "@/lib/api"
  * window.location alone, so it can only ever be a path on this site.
  */
 function returnTo(): string {
-  if (typeof window === "undefined") return "/start"
+  if (typeof window === "undefined") return "/footage"
   const { pathname, search } = window.location
-  if (pathname === "/" || pathname.startsWith("/api/")) return "/start"
+  if (pathname === "/" || pathname.startsWith("/api/")) return "/footage"
   return `${pathname}${search}`
 }
 
@@ -92,7 +92,7 @@ export function AccountControl({ configured: configuredFromServer }: { configure
           onClick={() => {
             void authClient.signOut().finally(() => {
               forgetApiSession()
-              window.location.assign("/start")
+              window.location.assign("/footage")
             })
           }}
         />

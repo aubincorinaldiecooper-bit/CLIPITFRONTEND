@@ -63,7 +63,6 @@ export default function StartPage() {
    */
   const {
     uploads,
-    setUploads,
     uploadsBusy,
     startUploads,
     retryUpload,
@@ -76,32 +75,6 @@ export default function StartPage() {
       if (first) setVideo((current) => current ?? first)
     },
   })
-
-  /**
-   * Videos handed over from another door — the library uploads on /clips,
-   * then arrives here as ?videos=id,id. The batch is seeded so the carousel
-   * can walk it, and the first one opens.
-   */
-  useEffect(() => {
-    const handed = new URLSearchParams(window.location.search).get("videos")
-    if (!handed) return
-    const ids = handed.split(",").filter(Boolean)
-    if (ids.length === 0) return
-    // The address is consumed: reloading must not re-open a stale batch.
-    const url = new URL(window.location.href)
-    url.searchParams.delete("videos")
-    window.history.replaceState(window.history.state, "", url.toString())
-    setUploads(
-      ids.map((videoId, index) => ({
-        id: `handed-${index}-${videoId}`,
-        file: new File([], "Uploaded video"),
-        phase: "ready" as const,
-        videoId,
-      })),
-    )
-    void openFromLibrary(ids[0]!)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // The YouTube-URL path used to start here, from a tab above the drop zone.
   // The owner removed that tab; `api.createYoutubeVideo` and the route behind
@@ -426,7 +399,7 @@ export default function StartPage() {
     [...exchanges].reverse().find((exchange) => exchange.request.status === "completed")?.request.matches ?? []
 
   return (
-    <WorkspaceShell active="start">
+    <WorkspaceShell active="footage">
       <div className="flex w-full flex-1 flex-col">
       {!video ? (
         <motion.div
@@ -456,7 +429,7 @@ export default function StartPage() {
 
           {library.length > 0 && (
             <div className="mt-12">
-              <h2 className="text-base font-semibold">Your videos</h2>
+              <h2 className="text-base font-semibold">Your footage</h2>
               {/* Cards, not a filename list: the frame is what tells two cuts
                   of the same shoot apart at a glance. */}
               <div className="mt-4 grid grid-cols-1 gap-x-5 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">

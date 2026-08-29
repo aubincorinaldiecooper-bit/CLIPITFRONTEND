@@ -188,7 +188,7 @@ function WorkspacesBody() {
     <div className="flex flex-col gap-1">
       <h1 className="text-2xl font-semibold tracking-tight">Shared</h1>
       <p className="text-sm text-muted-foreground">
-        Rooms you share with other people. Your own clips live under Your clips.
+        Rooms you share with other people. Your own clips live under Clips.
       </p>
     </div>
   )
