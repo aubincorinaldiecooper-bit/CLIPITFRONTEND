@@ -85,7 +85,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
 
-  /* Your own room and "Your clips" are one place, so a kept URL for it lands
+  /* Your own room and Clips are one place, so a kept URL for it lands
      on the page that place actually has. Fired from here rather than during
      render: React is free to run a render twice, and a navigation is a side
      effect, not a rendering. */
@@ -224,7 +224,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     )
   }
 
-  // The personal room and "Your clips" are one place; a kept URL lands on the
+  // The personal room and Clips are one place; a kept URL lands on the
   // page that place actually has. Rendering still shows the skeleton — the
   // navigation itself is fired from the effect above, because React is free to
   // run a render twice and a redirect is not something to do during one.
@@ -375,11 +375,11 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
             </span>
             <h2 className="text-lg font-semibold">Nothing sent here yet</h2>
             <p className="text-sm text-muted-foreground">
-              In Your clips, every ready clip has a &quot;Send to a room&quot; option — what you
+              In Clips, every ready clip has a &quot;Send to a room&quot; option — what you
               send lands here for everyone in the workspace.
             </p>
             <Button variant="secondary" className="mt-2" onClick={() => router.push("/clips")}>
-              Open Your clips
+              Open Clips
             </Button>
           </CardContent>
         </Card>

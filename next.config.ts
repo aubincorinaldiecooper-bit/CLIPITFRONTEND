@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
     return [
       { source: "/workspaces", destination: "/shared", permanent: true },
       { source: "/workspaces/:id", destination: "/shared/:id", permanent: true },
+      // "New clip" became "Footage": the page always WAS the video library —
+      // upload zone, your footage, and the theater once one is open — and was
+      // the only item in the rail named after an action rather than a thing.
+      { source: "/start", destination: "/footage", permanent: true },
     ];
   },
 };

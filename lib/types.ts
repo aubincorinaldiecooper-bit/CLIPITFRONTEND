@@ -63,6 +63,8 @@ export interface Video {
     error: string | null
   }
   createdAt: string
+  /** One frame of the video itself, signed — captured at preprocess time. */
+  posterUrl?: string | null
   /** Signed source playback URL; present on the detail endpoint once bytes are in storage. */
   playback?: { url: string; expiresAt: string } | null
 }

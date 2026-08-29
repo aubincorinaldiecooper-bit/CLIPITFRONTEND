@@ -1,5 +1,5 @@
-// Clipping is open to guests, so the product's real front door is /start
-export const SIGNUP_URL = '/start';
+// Clipping is open to guests, so the product's real front door is /footage
+export const SIGNUP_URL = '/footage';
 
 /**
  * Whether the plans are shown at all.

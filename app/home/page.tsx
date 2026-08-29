@@ -83,7 +83,7 @@ export default function HomePage() {
             </p>
           </div>
           <Button asChild>
-            <a href="/start">
+            <a href="/footage">
               <HugeiconsIcon icon={ScissorsIcon} />
               Start clipping
             </a>

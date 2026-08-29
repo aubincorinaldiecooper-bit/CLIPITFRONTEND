@@ -25,7 +25,7 @@ import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
  *   deployment is a supported setup, not one with a broken button.
  * - Nothing renders until both answers are in, so "Sign in" never flashes at
  *   somebody who is signed in.
- * - Signing out forgets the API session too, then lands on /start.
+ * - Signing out forgets the API session too, then lands on /footage.
  *
  * Signed out it offers one button that opens the same sign-in dialog every
  * gated action here uses — one dialog, not two ways to sign in.
@@ -76,7 +76,7 @@ export function WorkspaceAccount() {
           onClick={() => {
             void authClient.signOut().finally(() => {
               forgetApiSession()
-              window.location.assign("/start")
+              window.location.assign("/footage")
             })
           }}
         >

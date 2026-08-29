@@ -20,8 +20,8 @@ import { api } from "@/lib/api"
  * - Collapsed is remembered per browser (same key as always), restored
  *   before first paint so a person who saved the rail closed never watches
  *   it animate shut on every navigation.
- * - "New clip" is a full navigation on purpose: landing on /start fresh is
- *   what resets the theater, so it must work even from /start itself.
+ * - Footage is a full navigation on purpose: landing on /footage fresh is
+ *   what resets the theater, so it must work even from /footage itself.
  * - The wordmark keeps its serif voice via the theme's side-nav-heading
  *   override — the one place serif is allowed to appear.
  */
@@ -47,7 +47,7 @@ const WORKSPACES_OPEN_KEY = "clipit.nav.workspaces.open"
  */
 export const WORKSPACES_CHANGED_EVENT = "clipit:workspaces-changed"
 
-export type NavDestination = "home" | "start" | "clips" | "publishing" | "workspaces"
+export type NavDestination = "home" | "footage" | "clips" | "publishing" | "workspaces"
 
 /**
  * The frame every rail glyph is drawn in.
@@ -134,14 +134,14 @@ export const NAV_ITEMS: Array<{
   icon: (props: SVGProps<SVGSVGElement>) => React.JSX.Element
 }> = [
   { key: "home", label: "Home", href: "/home", icon: HomeGlyph },
-  { key: "start", label: "New clip", href: "/start", icon: ScissorsGlyph },
-  { key: "clips", label: "Your clips", href: "/clips", icon: LibraryGlyph },
+  { key: "footage", label: "Footage", href: "/footage", icon: ScissorsGlyph },
+  { key: "clips", label: "Clips", href: "/clips", icon: LibraryGlyph },
   { key: "publishing", label: "Publishing", href: "/publishing", icon: BroadcastGlyph },
   { key: "workspaces", label: "Shared", href: "/shared", icon: TeamGlyph },
 ]
 
 /**
- * A plain anchor, bypassing the router on purpose — see the "New clip" note
+ * A plain anchor, bypassing the router on purpose — see the Footage note
  * above. Everything else in the rail navigates through Next via LinkProvider.
  */
 const FullNavigationLink = (props: ComponentProps<"a">) => <a {...props} />
@@ -182,7 +182,7 @@ export function SideNav({
         .then((page) => {
           if (cancelled) return
           // The personal workspace is deliberately NOT listed here. It is the
-          // same room "Your clips" already links to, and showing one place
+          // same room Clips already links to, and showing one place
           // twice under two names — once as a page, once as a room — was the
           // thing that made the rail confusing. Workspaces means the rooms
           // you share with other people.
@@ -256,7 +256,7 @@ export function SideNav({
     >
       <SideNavSection title="Navigate" isHeaderHidden>
         {NAV_ITEMS.map((item) => {
-          if (item.key === "start") {
+          if (item.key === "footage") {
             return (
               <SideNavItem
                 key={item.key}
