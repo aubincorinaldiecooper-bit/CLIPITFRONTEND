@@ -78,6 +78,7 @@ export default function EvaluationPage() {
   const [model, setModel] = useState("")
   const [promptVersion, setPromptVersion] = useState("")
   const [bucket, setBucket] = useState("")
+  const [stage, setStage] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -94,6 +95,7 @@ export default function EvaluationPage() {
         model: model || undefined,
         promptVersion: promptVersion || undefined,
         durationBucket: bucket || undefined,
+        stage: stage || undefined,
       })
       setReport(result)
       setUnavailable(false)
@@ -103,7 +105,7 @@ export default function EvaluationPage() {
     } finally {
       setLoading(false)
     }
-  }, [from, to, provider, model, promptVersion, bucket])
+  }, [from, to, provider, model, promptVersion, bucket, stage])
 
   useEffect(() => {
     void load()
@@ -124,7 +126,7 @@ export default function EvaluationPage() {
 
   const q = report?.quality
   const s = report?.searches
-  const t = report?.timestamps
+  const b = report?.boundaries
   const e = report?.economics
 
   return (
@@ -179,6 +181,19 @@ export default function EvaluationPage() {
             ))}
           </select>
         </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="eval-stage" className="text-xs text-muted-foreground">Stage</Label>
+          <select
+            id="eval-stage"
+            value={stage}
+            onChange={(event) => setStage(event.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All stages</option>
+            <option value="initial">First pass</option>
+            <option value="reclip">Re-clip</option>
+          </select>
+        </div>
         <Button onClick={() => void load()} disabled={loading} className="h-9">
           {loading ? "Loading…" : "Apply"}
         </Button>
@@ -218,35 +233,57 @@ export default function EvaluationPage() {
             />
           </Section>
 
-          <Section title="Timestamps — how far off are the boundaries?">
-            {t!.errors.editedClips === 0 ? (
-              <p className="py-1 text-[13px] text-muted-foreground">
-                No boundary edits recorded yet, so there is no ground truth to measure against. Numbers appear here
-                once someone adjusts a clip&apos;s timing.
-              </p>
-            ) : (
-              <>
-                <Row label="Edited clips measured" value={String(t!.errors.editedClips)} />
-                <Row label="Start MAE" value={seconds(t!.errors.startMaeSeconds)} />
-                <Row label="End MAE" value={seconds(t!.errors.endMaeSeconds)} />
-                <Row label="Boundary MAE" value={seconds(t!.errors.boundaryMaeSeconds)} />
-                <Row label="Median boundary error" value={seconds(t!.errors.medianBoundaryErrorSeconds)} />
-                <Row label="P90 boundary error" value={seconds(t!.errors.p90BoundaryErrorSeconds)} />
-                <Row label="Both boundaries within ±1s" value={pct(t!.errors.withinSeconds["1"])} />
-                <Row label="Within ±2s" value={pct(t!.errors.withinSeconds["2"])} />
-                <Row label="Within ±3s" value={pct(t!.errors.withinSeconds["3"])} />
-                <Row label="Within ±5s" value={pct(t!.errors.withinSeconds["5"])} />
-                <Row label="Average start shift (signed)" value={seconds(t!.errors.averageStartShiftSeconds)} />
-                <Row label="Average end shift (signed)" value={seconds(t!.errors.averageEndShiftSeconds)} />
-              </>
-            )}
+          <Section title="Boundary quality — does the first cut land, and does Re-clip help?">
+            <Row
+              label="First-pass success rate"
+              value={pct(b!.firstPassSuccessRate)}
+              over={`${b!.firstPassSuccesses} of ${b!.eligibleReviewedMoments} reviewed`}
+            />
+            <Row
+              label="Re-clip rate"
+              value={pct(b!.reclipRate)}
+              over={`${b!.momentsReclipped} of ${b!.eligibleReviewedMoments} reviewed`}
+            />
+            <Row
+              label="Re-clip acceptance"
+              value={pct(b!.reclipAcceptanceRate)}
+              over={`${b!.acceptedReclips} of ${b!.reviewedReclips} judged after a Re-clip`}
+            />
+            <Row
+              label="Timing-is-off rate"
+              value={pct(b!.timingDownvoteRate)}
+              over={`${b!.timingDownvotes} of ${b!.momentsWithExplicitFeedback} with feedback`}
+            />
+            <Row label="Moments never reviewed" value={String(b!.momentsNeverReviewed)} over="excluded from every rate above" />
+
             <div className="mt-2">
-              <Row label="Accepted without edit" value={String(t!.states.acceptedWithoutEdit)} />
-              <Row label="Edited and kept" value={String(t!.states.editedAndKept)} />
-              <Row label="Generated, never reviewed" value={String(t!.states.generatedNeverReviewed)} />
-              <Row label="Rejected" value={String(t!.states.rejected)} />
-              <Row label="No-edit rate (among reviewed keeps)" value={pct(t!.noEditRate)} over={`${t!.states.acceptedWithoutEdit} of ${t!.states.acceptedWithoutEdit + t!.states.editedAndKept}`} />
+              {b!.shifts.reclipsMeasured === 0 ? (
+                <p className="py-1 text-[13px] text-muted-foreground">
+                  No Re-clips measured yet. Boundary shift — how far the model moves its own cut when asked to
+                  reconsider — appears here once Re-clip is used.
+                </p>
+              ) : (
+                <>
+                  <Row label="Re-clips measured" value={String(b!.shifts.reclipsMeasured)} />
+                  <Row label="Average boundary shift" value={seconds(b!.shifts.medianBoundaryShiftSeconds === null ? null : (b!.shifts.averageAbsoluteStartShiftSeconds! + b!.shifts.averageAbsoluteEndShiftSeconds!) / 2)} />
+                  <Row label="Median boundary shift" value={seconds(b!.shifts.medianBoundaryShiftSeconds)} />
+                  <Row label="P90 boundary shift" value={seconds(b!.shifts.p90BoundaryShiftSeconds)} />
+                  <Row label="Average start shift (signed)" value={seconds(b!.shifts.averageSignedStartShiftSeconds)} />
+                  <Row label="Average end shift (signed)" value={seconds(b!.shifts.averageSignedEndShiftSeconds)} />
+                  <Row label="Shift under 1s" value={pct(b!.shifts.withinSeconds["1"])} />
+                  <Row label="Under 2s" value={pct(b!.shifts.withinSeconds["2"])} />
+                  <Row label="Under 3s" value={pct(b!.shifts.withinSeconds["3"])} />
+                  <Row label="Under 5s" value={pct(b!.shifts.withinSeconds["5"])} />
+                  <p className="mt-1.5 text-[12px] text-muted-foreground">
+                    Boundary shift is the model reconsidering itself — a correction signal, not timestamp accuracy.
+                  </p>
+                </>
+              )}
             </div>
+          </Section>
+
+          <Section title="True timestamp accuracy — human-labelled">
+            <p className="py-1 text-[13px] text-muted-foreground">{report.labelledAccuracy.note}</p>
           </Section>
 
           <Section title="Economics — what an hour of source video costs">
@@ -260,6 +297,10 @@ export default function EvaluationPage() {
             <Row label="Marginal cost per source hour" value={usd(e!.marginalCostPerSourceHourUsd)} />
             <Row label="Effective cost per source hour" value="see Modal dashboard" over="no billing API" />
             <Row label="Modal inference per source hour" value={e!.inferenceSecondsPerSourceHour === null ? "—" : `${e!.inferenceSecondsPerSourceHour.toFixed(1)}s`} />
+            <Row label="First-pass analysis calls" value={String(e!.initialAnalysisCalls)} over={e!.initialInferenceMs === null ? undefined : `${Math.round(e!.initialInferenceMs / 1000)}s inference`} />
+            <Row label="Re-clip calls" value={String(e!.reclipCalls)} over={e!.reclipInferenceMs === null ? undefined : `${Math.round(e!.reclipInferenceMs / 1000)}s inference`} />
+            <Row label="Re-clip cost" value={usd(e!.reclipCostUsd)} over={e!.initialCostUsd === null ? undefined : `first-pass ${usd(e!.initialCostUsd)}`} />
+            <Row label="Re-clip cost share" value={pct(e!.reclipCostShare)} over="of all moment-analysis spend" />
             <Row label="Analysis time per source hour" value={e!.analysisMsPerSourceHour === null ? "—" : `${Math.round(e!.analysisMsPerSourceHour / 1000)}s`} />
 
             {e!.segments.length > 0 && (

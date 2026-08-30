@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { Clip, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import type { Clip, ClipRequest, MatchFeedback, MatchFeedbackReason, Video, ClipMatch } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowLeft01Icon, ArrowRight01Icon, ScissorsIcon } from "@hugeicons/core-free-icons"
@@ -198,6 +198,7 @@ export default function StartPage() {
       (exchange) =>
         exchange.request.status === "pending" ||
         exchange.request.status === "searching" ||
+        exchange.request.matches?.some((match) => match.reclipStatus === "pending") ||
         exchange.clips.some((clip) => clip.status === "pending" || clip.status === "generating"),
     )
     .map((exchange) => exchange.request.id)
@@ -284,25 +285,61 @@ export default function StartPage() {
   )
 
   /**
-   * The person moving a clip to where the moment actually is. The server
-   * answers at once with the clip back in `pending` and re-renders in the
-   * background; merging that row into the exchange is what wakes the same
-   * polling that watches a fresh cut.
+   * Asking the system to reconsider a moment. The tap lands instantly as a
+   * pending mark on the match; the server answers with the same, and the
+   * re-evaluation runs in the background. The pending mark is what keeps the
+   * exchange polling until a better cut (or an honest failure) arrives.
    */
-  const adjustClip = useCallback(
-    async (exchangeRequestId: string, clipId: string, startSeconds: number, endSeconds: number) => {
+  const reclipMatch = useCallback(
+    async (exchangeRequestId: string, matchId: string) => {
       setError(null)
+      const paint = (match: ClipMatch): ClipMatch => ({ ...match, reclipStatus: "pending", reclipError: null })
+      setExchanges((previous) =>
+        previous.map((exchange) =>
+          exchange.request.id === exchangeRequestId
+            ? {
+                ...exchange,
+                request: {
+                  ...exchange.request,
+                  matches: exchange.request.matches?.map((match) => (match.id === matchId ? paint(match) : match)),
+                },
+              }
+            : exchange,
+        ),
+      )
       try {
-        const { clip } = await api.setClipBoundaries(clipId, startSeconds, endSeconds)
+        const { match } = await api.reclipMatch(exchangeRequestId, matchId)
         setExchanges((previous) =>
-          previous.map((exchange) => {
-            if (exchange.request.id !== exchangeRequestId) return exchange
-            const merged = new Map(exchange.clips.map((existing) => [existing.id, existing]))
-            merged.set(clip.id, clip)
-            return { ...exchange, clips: Array.from(merged.values()) }
-          }),
+          previous.map((exchange) =>
+            exchange.request.id === exchangeRequestId
+              ? {
+                  ...exchange,
+                  request: {
+                    ...exchange.request,
+                    matches: exchange.request.matches?.map((existing) => (existing.id === matchId ? match : existing)),
+                  },
+                }
+              : exchange,
+          ),
         )
       } catch (cause) {
+        // The tap did not take. Clear the optimistic pending mark so the
+        // button comes back, and say why like any other failure.
+        setExchanges((previous) =>
+          previous.map((exchange) =>
+            exchange.request.id === exchangeRequestId
+              ? {
+                  ...exchange,
+                  request: {
+                    ...exchange.request,
+                    matches: exchange.request.matches?.map((existing) =>
+                      existing.id === matchId ? { ...existing, reclipStatus: null } : existing,
+                    ),
+                  },
+                }
+              : exchange,
+          ),
+        )
         fail(cause)
       }
     },
@@ -568,7 +605,7 @@ export default function StartPage() {
             onSeek={seekTo}
             onClip={clipMatch}
             onRate={rateMatch}
-            onAdjust={adjustClip}
+            onReclip={reclipMatch}
           />
         </div>
       )}
