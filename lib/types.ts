@@ -95,6 +95,100 @@ export interface UploadTarget {
 
 export type MatchFeedback = "approved" | "rejected"
 
+/**
+ * The owner's evaluation report, exactly as /api/evaluation serialises it.
+ * Rates are 0–1 fractions or null when their denominator is zero — the page
+ * shows the denominator beside every rate rather than hiding a small sample
+ * behind a confident percentage.
+ */
+export interface EvaluationReport {
+  filters: {
+    from: string | null
+    to: string | null
+    provider: string | null
+    model: string | null
+    promptVersion: string | null
+    durationBucket: string | null
+  }
+  quality: {
+    momentsReturned: number
+    momentsWithFeedback: number
+    thumbsUp: number
+    thumbsDown: number
+    thumbsUpRate: number | null
+    thumbsDownRate: number | null
+    reasons: Record<string, number>
+    clipsKept: number
+    acceptanceRate: number | null
+    momentsWithoutAttribution: number
+  }
+  searches: {
+    searchesCompleted: number
+    searchesWithResults: number
+    searchesCorrected: number
+    correctionRate: number | null
+    noCorrectionSuccessRate: number | null
+    searchesWithExplicitFeedback: number
+    searchesMarkedMissed: number
+    observedMissRate: number | null
+  }
+  timestamps: {
+    clipsMeasured: number
+    states: {
+      editedAndKept: number
+      acceptedWithoutEdit: number
+      generatedNeverReviewed: number
+      rejected: number
+    }
+    noEditRate: number | null
+    errors: {
+      editedClips: number
+      startMaeSeconds: number | null
+      endMaeSeconds: number | null
+      boundaryMaeSeconds: number | null
+      medianBoundaryErrorSeconds: number | null
+      p90BoundaryErrorSeconds: number | null
+      withinSeconds: { "1": number | null; "2": number | null; "3": number | null; "5": number | null }
+      averageStartShiftSeconds: number | null
+      averageEndShiftSeconds: number | null
+    }
+  }
+  economics: {
+    sourceVideoHoursAnalyzed: number
+    videosAnalyzed: number
+    totalAnalysisWallMs: number
+    actualReportedCostUsd: number
+    estimatedModalCostUsd: number | null
+    modalRateUsdPerGpuHour: number | null
+    marginalCostPerSourceHourUsd: number | null
+    effectiveCostPerSourceHourUsd: null
+    inferenceSecondsPerSourceHour: number | null
+    analysisMsPerSourceHour: number | null
+    segments: Array<{
+      provider: string
+      model: string
+      stage: string
+      calls: number
+      callsMissingCost: number
+      totalCostUsd: number | null
+      totalLatencyMs: number
+      totalInferenceMs: number | null
+      totalDownloadMs: number | null
+      totalGpuMsForEstimate: number | null
+      estimatedCostUsd: number | null
+    }>
+  }
+  notes: string[]
+}
+
+/**
+ * Why a moment was waved away — offered once, after a thumbs-down, never
+ * demanded. "Missed what I wanted" is the important one: it is the only way
+ * to say the RIGHT moment never appeared, which no thumbs-down on a wrong
+ * moment can express by itself.
+ */
+export type MatchFeedbackReason = "wrong_moment" | "missed_moment" | "bad_boundaries" | "not_relevant"
+
 export interface ClipMatch {
   id: string
   startSeconds: number
@@ -113,6 +207,8 @@ export interface ClipMatch {
    * own answer; this is the only thing on a match that disagrees with it.
    */
   feedback: MatchFeedback | null
+  /** The optional word after a thumbs-down; null until (and unless) given. */
+  feedbackReason?: MatchFeedbackReason | null
   clip: { id: string; status: ClipStatus } | null
 }
 
@@ -238,6 +334,15 @@ export interface Clip {
   /** Signed with an attachment disposition so the browser saves rather than plays. */
   downloadUrl: string | null
   urlExpiresAt: string | null
+  /**
+   * The boundaries the model originally predicted, frozen at generation.
+   * start/end above are the live boundaries; when someone adjusts the clip
+   * these keep saying where the model thought the moment was.
+   */
+  predictedStartSeconds?: number | null
+  predictedEndSeconds?: number | null
+  /** Set once someone has moved this clip's boundaries. */
+  boundariesEditedAt?: string | null
   createdAt: string
 }
 

@@ -5,9 +5,11 @@ import type {
   ClipCaption,
   ClipMatch,
   ClipRequest,
+  EvaluationReport,
   InvitePreview,
   LibraryClip,
   MatchFeedback,
+  MatchFeedbackReason,
   SocialAccount,
   SocialAccountsPage,
   TeamInvite,
@@ -483,10 +485,30 @@ export const api = {
     requestId: string,
     matchId: string,
     verdict: MatchFeedback | null,
+    reason?: MatchFeedbackReason | null,
   ): Promise<{ match: ClipMatch }> {
     return request(`/api/clip-requests/${requestId}/matches/${matchId}/feedback`, {
       method: "POST",
-      body: JSON.stringify({ verdict }),
+      // The reason travels only when someone gave one; the server ignores it
+      // for anything but a rejection, so re-sending the same verdict with a
+      // reason attached is a safe second tap, not a state change.
+      body: JSON.stringify(reason ? { verdict, reason } : { verdict }),
+    })
+  },
+
+  /**
+   * Moves a clip's start/end to where the person says the moment is. Answers
+   * immediately with the clip set back to `pending`; the file re-renders in
+   * the background — poll getClipRequest/getClip until ready, same as a cut.
+   */
+  async setClipBoundaries(
+    clipId: string,
+    startSeconds: number,
+    endSeconds: number,
+  ): Promise<{ clip: Clip }> {
+    return request(`/api/clips/${clipId}/boundaries`, {
+      method: "POST",
+      body: JSON.stringify({ startSeconds, endSeconds }),
     })
   },
 
@@ -502,6 +524,27 @@ export const api = {
   },
 
   /** What the caller has done here: videos, minutes, questions, clips. */
+  /**
+   * The owner's evaluation numbers. Answers 404 for anyone not named in the
+   * server's EVAL_OWNER_EMAILS — the page treats that as "not available",
+   * not as an error to report.
+   */
+  async getEvaluation(filters: {
+    from?: string
+    to?: string
+    provider?: string
+    model?: string
+    promptVersion?: string
+    durationBucket?: string
+  }): Promise<EvaluationReport> {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value)
+    }
+    const query = params.toString()
+    return request(`/api/evaluation${query ? `?${query}` : ""}`)
+  },
+
   async getStats(): Promise<{ stats: ActivityStats }> {
     return request("/api/stats")
   },
