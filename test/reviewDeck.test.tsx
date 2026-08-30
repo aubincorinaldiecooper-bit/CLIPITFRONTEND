@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
+  ChannelToggle,
   DeckControls,
   DeckEndState,
+  KeptGrid,
   ReclipCardButton,
   SkipPill,
   deckQueue,
@@ -189,18 +191,106 @@ describe('SkipPill — the optional word after a fast skip', () => {
   })
 })
 
-describe('DeckEndState — the deck ran out', () => {
-  it('says what was kept and where it lives', () => {
-    render(<DeckEndState kept={3} total={5} />)
+describe('DeckEndState — the deck ran out with nothing kept', () => {
+  it('offers both ways onward, per the owner\'s screen', () => {
+    const onUploadMore = vi.fn()
+    render(<DeckEndState kept={3} total={5} onUploadMore={onUploadMore} />)
     const end = screen.getByTestId('deck-end')
     expect(end.textContent).toContain("That's every moment")
-    expect(end.textContent).toContain('kept 3 of 5')
+    expect(screen.getByRole('button', { name: 'Upload more video' })).toBeTruthy()
     expect(screen.getByRole('link', { name: /library/i }).getAttribute('href')).toBe('/clips')
   })
 
-  it('does not pretend an empty keep pile is a library', () => {
+  it('says plainly that everything was skipped, and suggests asking differently', () => {
     render(<DeckEndState kept={0} total={4} />)
     expect(screen.getByTestId('deck-end').textContent).toContain('skipped all 4')
-    expect(screen.queryByRole('link', { name: /library/i })).toBeNull()
+  })
+})
+
+describe('KeptGrid — the outcome, told truthfully per tile', () => {
+  const tile = (overrides: Record<string, unknown> = {}) => ({
+    id: 'clip-1',
+    title: 'Green Mercedes reveal',
+    videoTitle: 'night-shoot.mp4',
+    duration: '0:31',
+    url: 'https://cdn/clip.mp4',
+    poster: null,
+    status: 'ready' as const,
+    error: null,
+    ...overrides,
+  })
+
+  it('shows count, names and lengths, and publishing goes on when something is ready', async () => {
+    const onReview = vi.fn()
+    render(
+      <KeptGrid
+        clips={[tile(), tile({ id: 'clip-2', title: 'Gas station at night', duration: '0:19' })]}
+        onReview={onReview}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+    const grid = screen.getByTestId('kept-grid')
+    expect(grid.textContent).toContain('2 clips kept')
+    expect(grid.textContent).toContain('Green Mercedes reveal')
+    expect(grid.textContent).toContain('0:19')
+    await userEvent.click(screen.getByRole('button', { name: 'Publish all 2' }))
+    expect(onReview).toHaveBeenCalledTimes(1)
+  })
+
+  it('every kept clip carries its own Publish', async () => {
+    const onPublish = vi.fn()
+    render(
+      <KeptGrid clips={[tile()]} onReview={vi.fn()} onPublish={onPublish} onRename={vi.fn()} onDelete={vi.fn()} />,
+    )
+    await userEvent.click(screen.getAllByRole('button', { name: 'Publish' })[0]!)
+    expect(onPublish).toHaveBeenCalledWith('clip-1')
+  })
+
+  it('a keep still cutting says so, and cannot be published', () => {
+    render(
+      <KeptGrid
+        clips={[tile({ status: 'cutting', url: null, duration: null })]}
+        onReview={vi.fn()}
+        onPublish={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('kept-grid').textContent).toContain('Cutting…')
+    expect(screen.getByRole('button', { name: 'Publish' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /Publish this clip/ })).toHaveProperty('disabled', true)
+  })
+
+  it('a failed cut shows its reason instead of a green rectangle', () => {
+    render(
+      <KeptGrid
+        clips={[tile({ status: 'failed', url: null, error: 'The source stream dropped.' })]}
+        onReview={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('kept-grid').textContent).toContain('The source stream dropped.')
+  })
+})
+
+describe('ChannelToggle — a channel is on, off, or unavailable', () => {
+  it('reports its state as a switch, not a decoration', async () => {
+    const onToggle = vi.fn()
+    render(<ChannelToggle on={true} disabled={false} onToggle={onToggle} label="Post to TikTok" />)
+    const toggle = screen.getByRole('switch', { name: 'Post to TikTok' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    await userEvent.click(toggle)
+    expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('an unconnected channel cannot be switched on here', async () => {
+    const onToggle = vi.fn()
+    render(<ChannelToggle on={false} disabled onToggle={onToggle} label="YouTube Shorts is not connected" />)
+    const toggle = screen.getByRole('switch')
+    expect(toggle).toHaveProperty('disabled', true)
+    await userEvent.click(toggle)
+    expect(onToggle).not.toHaveBeenCalled()
   })
 })

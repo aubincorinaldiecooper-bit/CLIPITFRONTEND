@@ -25,7 +25,7 @@ import {
   UserIcon,
 } from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
-import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
+import type { ScheduledPost, SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { Notice } from "@/components/workspace/notice"
 import { PlatformLogo } from "@/components/platform-logos"
@@ -471,6 +471,8 @@ function PublishingBody() {
         </CardContent>
       </Card>
 
+      <ScheduledPostsCard />
+
       <Card>
         <CardContent className="flex flex-col gap-6">
           <div className="flex items-start gap-3">
@@ -662,5 +664,122 @@ export default function PublishingPage() {
         <PublishingBody />
       </div>
     </WorkspaceShell>
+  )
+}
+
+/**
+ * The publishes promised for later. A promise you cannot see or take back
+ * is a trap, so every waiting scheduled post is listed here with its
+ * minute and a Cancel — and the whole card simply is not there when
+ * nothing waits.
+ */
+function ScheduledPostsCard() {
+  const [rows, setRows] = useState<Array<ScheduledPost & { clipTitle: string | null }>>([])
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listScheduledPosts()
+      .then((result) => !cancelled && setRows(result.scheduled))
+      .catch(() => {
+        // Signed out, unconfigured, or unreachable: nothing to list either
+        // way, and the accounts card above already tells those stories.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (rows.length === 0) return null
+
+  const cancel = async (id: string) => {
+    setBusyId(id)
+    setCancelError(null)
+    try {
+      await api.cancelScheduledPost(id)
+      setRows((current) => current.filter((row) => row.id !== id))
+    } catch (cause) {
+      setCancelError(cause instanceof ApiError ? cause.message : "Couldn't cancel that one. Refresh and try again.")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const waiting = rows.filter((row) => row.status === "waiting").length
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex items-start gap-3">
+          <IconWell icon={FlashIcon} />
+          <div className="flex min-w-0 flex-col">
+            <h2 className="text-base font-semibold">Scheduled</h2>
+            <p className="text-[13px] text-muted-foreground">
+              {waiting === 0
+                ? "Nothing waiting. Recent attempts are below."
+                : `${waiting === 1 ? "One post waiting" : `${waiting} posts waiting`} to go out. Cancel any of them until their minute arrives.`}
+            </p>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-lg border border-shborder">
+          <ul>
+            {rows.map((row, index) => {
+              // What this row actually is. `status` says the worker ran;
+              // `outcome` says what reached the platforms, and only the
+              // second one may be spoken as a result.
+              const when = new Date(row.scheduledAt).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })
+              const line =
+                row.status === "waiting"
+                  ? { text: `Goes out ${when}`, tone: "text-muted-foreground" }
+                  : row.outcome === "posted"
+                    ? { text: `Posted ${when}`, tone: "text-muted-foreground" }
+                    : row.outcome === "posting"
+                      ? { text: `Posting now — started ${when}`, tone: "text-muted-foreground" }
+                      : row.outcome === "partly_failed"
+                        ? { text: row.error ?? `Some channels failed at ${when}`, tone: "text-destructive" }
+                        : { text: row.error ?? `Didn't go out at ${when}`, tone: "text-destructive" }
+              return (
+                <li
+                  key={row.id}
+                  className={"flex flex-wrap items-center gap-3 px-4 py-3 " + (index > 0 ? "border-t border-shborder" : "")}
+                >
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium">{row.clipTitle ?? "A clip"}</span>
+                    <span className={`text-[13px] ${line.tone}`}>{line.text}</span>
+                  </div>
+                  {row.status === "waiting" ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="ml-auto"
+                      disabled={busyId === row.id}
+                      onClick={() => void cancel(row.id)}
+                    >
+                      {busyId === row.id ? "Canceling…" : "Cancel"}
+                    </Button>
+                  ) : row.outcome === "failed" || row.outcome === "partly_failed" ? (
+                    // Nothing to cancel; the way back is the clip itself.
+                    <Button variant="secondary" size="sm" className="ml-auto" asChild>
+                      <a href="/clips">Try again</a>
+                    </Button>
+                  ) : (
+                    // Reserved so a row without an action keeps its height.
+                    <span aria-hidden className="ml-auto h-8" />
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+        {cancelError && <p className="text-[13px] text-destructive">{cancelError}</p>}
+      </CardContent>
+    </Card>
   )
 }

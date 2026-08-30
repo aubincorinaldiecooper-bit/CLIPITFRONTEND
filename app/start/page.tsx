@@ -11,7 +11,7 @@ import { UploadPackage, type UploadEntry } from "@/components/flow/upload-packag
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { VideoStage } from "@/components/theater/video-stage"
-import { QueryDrawer } from "@/components/theater/query-drawer"
+import { DeckStage } from "@/components/theater/deck-stage"
 import { WorkspaceShell } from "@/components/workspace/shell"
 
 const POLL_MS = 2000
@@ -454,7 +454,10 @@ export default function StartPage() {
     [fail, showVerdict],
   )
 
+  const [theaterOpen, setTheaterOpen] = useState(false)
+
   const seekTo = useCallback((seconds: number) => {
+    setTheaterOpen(true)
     setSeekRequest((current) => ({ seconds, token: (current?.token ?? 0) + 1 }))
   }, [])
 
@@ -463,6 +466,7 @@ export default function StartPage() {
     setExchanges([])
     setError(null)
     setSeekRequest(null)
+    setTheaterOpen(false)
   }, [])
 
   /**
@@ -598,9 +602,8 @@ export default function StartPage() {
           )}
         </motion.div>
       ) : (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center py-8 lg:pr-[380px]">
-          {/* The Astryx header carried this; the app shell's header is shared
-              across every screen, so the action lives with the stage now. */}
+        <div className="mx-auto flex w-full max-w-[34rem] flex-1 flex-col py-6">
+          {/* Batch walking and the way out, above the stage panel. */}
           <div className="mb-4 flex items-center justify-between gap-3">
             {/* Walking the batch: only when this video came from a drop of
                 several, so a video opened from the library keeps its plain
@@ -637,14 +640,11 @@ export default function StartPage() {
               Clip another video
             </Button>
           </div>
-          <VideoStage video={video} uploadFraction={uploadFraction} matches={matches} seekRequest={seekRequest} />
-
-          <p className="mx-auto mt-3 max-w-xl truncate text-center text-xs text-muted-foreground">
-            {video.title ?? video.originalFilename ?? video.sourceUrl}
-            {video.durationTimecode ? ` · ${video.durationTimecode}` : ""}
-          </p>
-
-          <QueryDrawer
+          {/* The stage: leader, question, deck, kept grid, publish — one
+              centered panel, per the owner's screens. Keyed by video so a
+              flip to the next file starts its stage fresh. */}
+          <DeckStage
+            key={video.id}
             video={video}
             exchanges={exchanges}
             busy={busy}
@@ -653,7 +653,33 @@ export default function StartPage() {
             onKeep={keepMatch}
             onRate={rateMatch}
             onReclip={reclipMatch}
+            onUploadMore={reset}
+            uploadFraction={uploadFraction}
           />
+
+          <p className="mx-auto mt-4 max-w-xl truncate text-center text-xs text-muted-foreground">
+            {video.title ?? video.originalFilename ?? video.sourceUrl}
+            {video.durationTimecode ? ` · ${video.durationTimecode}` : ""}
+          </p>
+
+          {/* The theater, one reveal away. The deck judges moments in the
+              card; the full film — with the seek bar's match ticks — opens
+              here, and a tap on a coverage gap opens it by itself. */}
+          <div className="mt-2 flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => setTheaterOpen((open) => !open)}
+              aria-expanded={theaterOpen}
+              className="whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-shaccent hover:text-foreground"
+            >
+              {theaterOpen ? "Hide the full video" : "Watch the full video"}
+            </button>
+            {theaterOpen && (
+              <div className="mt-3 w-full">
+                <VideoStage video={video} uploadFraction={uploadFraction} matches={matches} seekRequest={seekRequest} />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
