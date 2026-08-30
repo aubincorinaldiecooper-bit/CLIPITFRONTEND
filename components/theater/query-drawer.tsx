@@ -881,19 +881,19 @@ function EvidencePicker({
           previous single row squeezed "Save clip" until it wrapped onto
           three lines inside its own button. */}
       <div className="border-t border-white/10 bg-black/20 px-2.5 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-2">
-            <Meter confidence={active.confidence} />
-            <span className="truncate text-[12px] font-medium text-white/60">
-              {Math.round(active.confidence * 100)}% accuracy
+        <MatchFeedbackControls
+          match={active}
+          onRate={(verdict, reason) => rate(active, verdict, reason)}
+          onReclip={() => onReclip(active.id)}
+          leading={
+            <span className="flex min-w-0 items-center gap-2">
+              <Meter confidence={active.confidence} />
+              <span className="truncate text-[12px] font-medium text-white/60">
+                {Math.round(active.confidence * 100)}% accuracy
+              </span>
             </span>
-          </span>
-          <MatchFeedbackControls
-            match={active}
-            onRate={(verdict, reason) => rate(active, verdict, reason)}
-            onReclip={() => onReclip(active.id)}
-          />
-        </div>
+          }
+        />
 
         <div className="mt-2 flex items-center gap-2">
           {others.length > 0 && (

@@ -59,6 +59,15 @@ describe('default state', () => {
     expect(iconOf(thumbDown()).getAttribute('data-filled')).toBe('false')
     expect(reclip()).toBeTruthy()
   })
+
+  it('always reserves the detail row, so a verdict cannot resize the card', () => {
+    // The row exists (at its fixed height class) even with nothing to show —
+    // reasons, the timing hint and failures all appear INSIDE this space.
+    renderControls()
+    const detail = screen.getByTestId('feedback-detail')
+    expect(detail.className).toContain('h-7')
+    expect(detail.textContent).toBe('')
+  })
 })
 
 describe('thumbs up', () => {
@@ -118,10 +127,14 @@ describe('thumbs down', () => {
     expect(onRate).toHaveBeenCalledWith('rejected', 'wrong_moment')
   })
 
-  it('fills the chosen reason chip from persisted data', () => {
-    renderControls({ feedback: 'rejected', feedbackReason: 'not_relevant' })
-    expect(screen.getByRole('button', { name: 'Not useful' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Wrong moment' }).getAttribute('aria-pressed')).toBe('false')
+  it('shows the chosen reason chip filled from persisted data, clearable in place', async () => {
+    const { onRate } = renderControls({ feedback: 'rejected', feedbackReason: 'not_relevant' })
+    const chosen = screen.getByRole('button', { name: 'Not useful' })
+    expect(chosen.getAttribute('aria-pressed')).toBe('true')
+    // The open chips collapse to the choice — same reserved row, no growth.
+    expect(screen.queryByRole('button', { name: 'Wrong moment' })).toBeNull()
+    await userEvent.click(chosen)
+    expect(onRate).toHaveBeenCalledWith('rejected', null)
   })
 })
 

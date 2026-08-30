@@ -35,7 +35,9 @@ export default function StartPage() {
   const [error, setError] = useState<string | null>(null)
   const [seekRequest, setSeekRequest] = useState<{ seconds: number; token: number } | null>(null)
   /** Verdicts the server has not confirmed yet. See `reconcileVerdicts`. */
-  const pendingVerdicts = useRef(new Map<string, MatchFeedback | null>())
+  const pendingVerdicts = useRef(
+    new Map<string, { verdict: MatchFeedback | null; reason: MatchFeedbackReason | null }>(),
+  )
   /** Per match, which rating attempt is the live one. See `rateMatch`. */
   const verdictAttempts = useRef(new Map<string, number>())
 
@@ -179,13 +181,13 @@ export default function StartPage() {
     if (pending.size === 0 || !request.matches?.length) return request
 
     const matches = request.matches.map((match) => {
-      if (!pending.has(match.id)) return match
-      const verdict = pending.get(match.id) ?? null
-      if (match.feedback === verdict) {
+      const held = pending.get(match.id)
+      if (held === undefined) return match
+      if (match.feedback === held.verdict && (match.feedbackReason ?? null) === held.reason) {
         pending.delete(match.id)
         return match
       }
-      return { ...match, feedback: verdict }
+      return { ...match, feedback: held.verdict, feedbackReason: held.reason }
     })
 
     return { ...request, matches }
@@ -347,12 +349,20 @@ export default function StartPage() {
   )
 
   const showVerdict = useCallback(
-    (exchangeRequestId: string, matchId: string, verdict: MatchFeedback | null) =>
+    (
+      exchangeRequestId: string,
+      matchId: string,
+      verdict: MatchFeedback | null,
+      reason: MatchFeedbackReason | null = null,
+    ) =>
       setExchanges((previous) =>
         previous.map((exchange) => {
           if (exchange.request.id !== exchangeRequestId) return exchange
+          // The reason rides with the verdict: a chosen chip must fill (and
+          // be clearable) without waiting for a poll that never comes on a
+          // settled exchange.
           const matches = exchange.request.matches?.map((match) =>
-            match.id === matchId ? { ...match, feedback: verdict } : match,
+            match.id === matchId ? { ...match, feedback: verdict, feedbackReason: reason } : match,
           )
           return matches ? { ...exchange, request: { ...exchange.request, matches } } : exchange
         }),
@@ -378,29 +388,33 @@ export default function StartPage() {
     ) => {
       setError(null)
 
-      const previousVerdict =
-        exchanges
-          .find((exchange) => exchange.request.id === exchangeRequestId)
-          ?.request.matches?.find((match) => match.id === matchId)?.feedback ?? null
+      const previousMatch = exchanges
+        .find((exchange) => exchange.request.id === exchangeRequestId)
+        ?.request.matches?.find((match) => match.id === matchId)
+      const previousVerdict = previousMatch?.feedback ?? null
+      const previousReason = previousMatch?.feedbackReason ?? null
 
       const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
       verdictAttempts.current.set(matchId, attempt)
       const isCurrent = () => verdictAttempts.current.get(matchId) === attempt
 
-      pendingVerdicts.current.set(matchId, verdict)
-      showVerdict(exchangeRequestId, matchId, verdict)
+      pendingVerdicts.current.set(matchId, { verdict, reason: reason ?? null })
+      showVerdict(exchangeRequestId, matchId, verdict, reason ?? null)
 
       try {
         const { match } = await api.rateMatch(exchangeRequestId, matchId, verdict, reason ?? null)
         if (!isCurrent()) return
         // Trust the row the server returned rather than what was sent, and keep
         // holding it until a poll comes back agreeing.
-        pendingVerdicts.current.set(matchId, match.feedback ?? null)
-        showVerdict(exchangeRequestId, matchId, match.feedback ?? null)
+        pendingVerdicts.current.set(matchId, {
+          verdict: match.feedback ?? null,
+          reason: match.feedbackReason ?? null,
+        })
+        showVerdict(exchangeRequestId, matchId, match.feedback ?? null, match.feedbackReason ?? null)
       } catch (cause) {
         if (!isCurrent()) return
         pendingVerdicts.current.delete(matchId)
-        showVerdict(exchangeRequestId, matchId, previousVerdict)
+        showVerdict(exchangeRequestId, matchId, previousVerdict, previousReason)
         fail(cause)
       }
     },

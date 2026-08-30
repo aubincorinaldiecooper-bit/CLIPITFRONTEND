@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import type { ClipMatch, MatchFeedback, MatchFeedbackReason } from "@/lib/types"
 
 /**
@@ -19,8 +20,18 @@ import type { ClipMatch, MatchFeedback, MatchFeedbackReason } from "@/lib/types"
  *   natural recovery: try that cut again, never "fix it yourself".
  * - While a Re-clip runs the ↻ spins and refuses further taps; a failure is
  *   a quiet line under the row with the button live again; success shows a
- *   small "Re-clipped" mark. The card never resizes on a verdict — the
- *   reason and status rows live in a reserved space below the controls.
+ *   small "Re-clipped" mark.
+ * - NOTHING REFLOWS. One detail row below the controls is always present at
+ *   a fixed height, and every transient state — the reason chips, the
+ *   timing-recovery offer, a failure line — appears inside it. A verdict
+ *   never changes the card's size.
+ *
+ * Hand-rolled rather than Astryx on purpose: this row lives inside the
+ * theater drawer, which is custom by the owner's decision (2026-08-22), and
+ * every neighbouring control in query-drawer.tsx speaks this same inline-SVG
+ * idiom. One Astryx island inside a custom surface would inherit neither its
+ * neighbours' look nor Astryx's, and no Astryx component is mounted anywhere
+ * in the app today.
  */
 
 export const REJECTION_REASONS: ReadonlyArray<{ reason: MatchFeedbackReason; label: string }> = [
@@ -85,10 +96,13 @@ export function MatchFeedbackControls({
   match,
   onRate,
   onReclip,
+  leading,
 }: {
   match: ClipMatch
   onRate: (verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
   onReclip: () => void
+  /** What sits to the left of the icons (the confidence meter, in the drawer). */
+  leading?: ReactNode
 }) {
   const approved = match.feedback === "approved"
   const rejected = match.feedback === "rejected"
@@ -96,9 +110,12 @@ export function MatchFeedbackControls({
   const reclipFailed = match.reclipStatus === "failed"
   const reclipsRemaining = match.reclipsRemaining ?? 0
   const reclipDisabled = reclipPending || reclipsRemaining <= 0
+  const chosenReason = REJECTION_REASONS.find(({ reason }) => match.feedbackReason === reason) ?? null
 
   return (
     <div data-testid="match-feedback">
+      <div className="flex items-center justify-between gap-2">
+      {leading}
       <span className="flex items-center gap-0.5">
         <button
           type="button"
@@ -148,50 +165,57 @@ export function MatchFeedbackControls({
           </span>
         )}
       </span>
+      </div>
 
-      {/* The optional word after a thumbs-down. Never required: 👎 alone is a
-          complete answer. The chosen chip fills; choosing "Timing is off"
-          also surfaces the automated recovery right where the thought is. */}
-      {rejected && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="rejection-reasons">
-          {REJECTION_REASONS.map(({ reason, label }) => {
-            const chosen = match.feedbackReason === reason
-            return (
+      {/* The reserved row. Always rendered, always this height, so choosing
+          a verdict, a reason, or hitting a failure never resizes the card —
+          the content changes, the space does not. One occupant at a time:
+          a failure outranks everything, then the chosen reason with its
+          recovery, then the open chips, then nothing. */}
+      <div className="mt-1 flex h-7 items-center gap-1.5 overflow-x-auto" data-testid="feedback-detail">
+        {reclipFailed && !reclipPending ? (
+          <p className="whitespace-nowrap text-[11px] text-amber-300/80" data-testid="reclip-failure">
+            {match.reclipError ?? "Re-clip didn't work. The original is untouched — try again."}
+          </p>
+        ) : rejected && chosenReason ? (
+          <span className="flex items-center gap-1.5" data-testid="rejection-reasons">
+            <button
+              type="button"
+              aria-pressed={true}
+              onClick={() => onRate("rejected", null)}
+              title="Chosen reason — click to clear"
+              className="whitespace-nowrap rounded-full bg-white/15 px-2 py-0.5 text-[10.5px] text-white ring-1 ring-white/30"
+            >
+              {chosenReason.label}
+            </button>
+            {chosenReason.reason === "bad_boundaries" && !reclipPending && reclipsRemaining > 0 && (
+              <button
+                type="button"
+                onClick={onReclip}
+                data-testid="timing-reclip-hint"
+                className="flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] text-white/70 ring-1 ring-white/20 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <ReclipIcon spinning={false} />
+                Re-clip — try that cut again
+              </button>
+            )}
+          </span>
+        ) : rejected ? (
+          <span className="flex items-center gap-1.5" data-testid="rejection-reasons">
+            {REJECTION_REASONS.map(({ reason, label }) => (
               <button
                 key={reason}
                 type="button"
-                aria-pressed={chosen}
-                onClick={() => onRate("rejected", chosen ? null : reason)}
-                className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] ring-1 transition-colors ${
-                  chosen
-                    ? "bg-white/15 text-white ring-white/30"
-                    : "text-white/60 ring-white/20 hover:bg-white/10 hover:text-white/90"
-                }`}
+                aria-pressed={false}
+                onClick={() => onRate("rejected", reason)}
+                className="whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] text-white/60 ring-1 ring-white/20 transition-colors hover:bg-white/10 hover:text-white/90"
               >
                 {label}
               </button>
-            )
-          })}
-        </div>
-      )}
-
-      {rejected && match.feedbackReason === "bad_boundaries" && !reclipPending && reclipsRemaining > 0 && (
-        <button
-          type="button"
-          onClick={onReclip}
-          data-testid="timing-reclip-hint"
-          className="mt-1.5 flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[11.5px] text-white/70 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <ReclipIcon spinning={false} />
-          Re-clip — try that cut again
-        </button>
-      )}
-
-      {reclipFailed && !reclipPending && (
-        <p className="mt-1.5 text-[11px] text-amber-300/80" data-testid="reclip-failure">
-          {match.reclipError ?? "Re-clip didn't work. The original is untouched — try again."}
-        </p>
-      )}
+            ))}
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }
