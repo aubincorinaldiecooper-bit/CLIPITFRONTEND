@@ -21,6 +21,13 @@ import type { ClipMatch, MatchFeedbackReason } from "@/lib/types"
  * never required and never blocks the next card. "Timing is off" offers
  * "↻ Re-clip instead", which brings the moment back and refines it,
  * because a poor cut is the system's job to fix, not the reviewer's.
+ *
+ * Hand-rolled rather than Astryx, on purpose: the deck lives inside the
+ * theater drawer, which is custom by the owner's decision (2026-08-22),
+ * and every neighbouring control there speaks this same inline-SVG idiom.
+ * No Astryx component is mounted anywhere in the app today (main builds
+ * with the shadcn/ui workspace pilot), so an Astryx island here would
+ * inherit neither its neighbours' look nor Astryx's theme contract.
  */
 
 export const REJECTION_REASONS: ReadonlyArray<{ reason: MatchFeedbackReason; label: string }> = [

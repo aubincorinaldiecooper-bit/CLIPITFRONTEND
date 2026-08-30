@@ -264,7 +264,7 @@ export function QueryDrawer({
   busy,
   onSearch,
   onSeek,
-  onClip,
+  onKeep,
   onRate,
   onReclip,
 }: {
@@ -273,7 +273,8 @@ export function QueryDrawer({
   busy: boolean
   onSearch: (instruction: string) => void
   onSeek: (seconds: number) => void
-  onClip: (requestId: string, matchId: string) => void
+  /** Keep: persist the verdict AND queue the cut, as one coordinated act. */
+  onKeep: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
   /** Ask the system to re-evaluate this SAME moment and cut it better. */
   onReclip: (requestId: string, matchId: string) => void
@@ -405,7 +406,7 @@ export function QueryDrawer({
                   exchange={exchange}
                   playbackUrl={video.playback?.url ?? null}
                   onSeek={onSeek}
-                  onClip={onClip}
+                  onKeep={onKeep}
                   onRate={onRate}
                   onReclip={onReclip}
                   onSearch={onSearch}
@@ -480,7 +481,7 @@ function ExchangeBlock({
   exchange,
   playbackUrl,
   onSeek,
-  onClip,
+  onKeep,
   onRate,
   onReclip,
   onSearch,
@@ -493,7 +494,7 @@ function ExchangeBlock({
   /** The source video's own stream, for previewing a moment in place. */
   playbackUrl: string | null
   onSeek: (seconds: number) => void
-  onClip: (requestId: string, matchId: string) => void
+  onKeep: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
   onReclip: (requestId: string, matchId: string) => void
   onSearch: (instruction: string) => void
@@ -567,7 +568,7 @@ function ExchangeBlock({
           clipByMatch={clipByMatch}
           playbackUrl={playbackUrl}
           onSeek={onSeek}
-          onClip={(matchId) => onClip(request.id, matchId)}
+          onKeep={(matchId) => onKeep(request.id, matchId)}
           onRate={(matchId, verdict, reason) => onRate(request.id, matchId, verdict, reason)}
           onReclip={(matchId) => onReclip(request.id, matchId)}
           hotkeys={isLatest}
@@ -674,7 +675,7 @@ function EvidencePicker({
   clipByMatch,
   playbackUrl,
   onSeek,
-  onClip,
+  onKeep,
   onRate,
   onReclip,
   hotkeys = false,
@@ -683,7 +684,7 @@ function EvidencePicker({
   clipByMatch: Map<string, Clip>
   playbackUrl: string | null
   onSeek: (seconds: number) => void
-  onClip: (matchId: string) => void
+  onKeep: (matchId: string) => void
   onRate: (matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
   onReclip: (matchId: string) => void
   /** Arrow keys decide, u/Backspace undoes — only for the newest answer. */
@@ -726,10 +727,10 @@ function EvidencePicker({
 
   const keep = (match: ClipMatch) => {
     if (deciding || match.reclipStatus === "pending") return
-    // Persist FIRST, confirm second: the verdict and the cut are queued the
-    // instant the button lands, and the flash is only the acknowledgement.
-    onRate(match.id, "approved")
-    onClip(match.id)
+    // Persist FIRST, confirm second. Keep is ONE act — verdict and cut
+    // together, coordinated upstream so a half-failure rolls the whole
+    // decision back and the card returns instead of the library lying.
+    onKeep(match.id)
     setUndoableId(null)
     setDeciding({ id: match.id, decision: "keep" })
     setPreviewingId(null)
@@ -754,7 +755,13 @@ function EvidencePicker({
     if (!hotkeys) return
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return
+      // Not just text fields: a focused video player owns its arrow keys
+      // (they seek), and stealing them would turn a scrub into a decision.
+      if (
+        target &&
+        (["INPUT", "TEXTAREA", "SELECT", "VIDEO", "AUDIO"].includes(target.tagName) || target.isContentEditable)
+      )
+        return
       if (event.key === "ArrowRight" && active) keep(active)
       else if (event.key === "ArrowLeft" && active) skip(active)
       else if ((event.key === "u" || event.key === "Backspace") && undoable) undoSkip(undoable)
@@ -764,7 +771,7 @@ function EvidencePicker({
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotkeys, active?.id, undoable?.id, deciding])
+  }, [hotkeys, active?.id, active?.reclipStatus, undoable?.id, deciding])
 
   if (!active) {
     // Every moment decided. Say what happened; the kept cuts live in the

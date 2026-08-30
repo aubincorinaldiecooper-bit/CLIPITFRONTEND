@@ -540,7 +540,10 @@ export const api = {
       if (value) params.set(key, value)
     }
     const query = params.toString()
-    return request(`/api/evaluation${query ? `?${query}` : ""}`)
+    const raw = await request<EvaluationReport & Record<string, unknown>>(
+      `/api/evaluation${query ? `?${query}` : ""}`,
+    )
+    return normalizeEvaluationReport(raw)
   },
 
   async getStats(): Promise<{ stats: ActivityStats }> {
@@ -697,4 +700,37 @@ export const api = {
   async leaveWorkspace(workspaceId: string): Promise<{ left: boolean }> {
     return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/members/me`, { method: "DELETE" })
   },
+}
+
+
+/**
+ * Accepts the report in either schema. The backend renamed its fields to the
+ * product's Keep/Skip language in the paired PR; until both deployments have
+ * moved, an old-schema response must not render as NaN% — the legacy names
+ * are mapped onto the new ones and everything else passes through.
+ */
+export function normalizeEvaluationReport(raw: EvaluationReport & Record<string, unknown>): EvaluationReport {
+  const quality = raw.quality as unknown as Record<string, unknown>
+  if (quality && quality.keepRate === undefined && quality.thumbsUpRate !== undefined) {
+    raw.quality = {
+      ...(raw.quality as object),
+      keeps: quality.thumbsUp,
+      skips: quality.thumbsDown,
+      keepRate: quality.thumbsUpRate,
+      skipRate: quality.thumbsDownRate,
+    } as EvaluationReport["quality"]
+  }
+  const boundaries = raw.boundaries as unknown as Record<string, unknown>
+  if (boundaries && boundaries.firstPassKeepRate === undefined && boundaries.firstPassSuccessRate !== undefined) {
+    raw.boundaries = {
+      ...(raw.boundaries as object),
+      firstPassKeeps: boundaries.firstPassSuccesses,
+      firstPassKeepRate: boundaries.firstPassSuccessRate,
+      keptReclips: boundaries.acceptedReclips,
+      reclipKeepRate: boundaries.reclipAcceptanceRate,
+      timingIssues: boundaries.timingDownvotes,
+      timingIssueRate: boundaries.timingDownvoteRate,
+    } as EvaluationReport["boundaries"]
+  }
+  return raw
 }
