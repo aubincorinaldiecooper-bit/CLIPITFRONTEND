@@ -42,7 +42,11 @@ const SUGGESTIONS = [
  * - A stretch that could NOT be looked at is named, with the exact times,
  *   because its silence is not evidence of absence.
  * - Moments seen but not trusted are listed plainly, with "look again".
- * - "From what I remember of this video" marks a recalled answer.
+ *
+ * When an answer is clean and complete and has moments, no words appear at
+ * all — the cards speak, per the owner's screens. Text shows up only when
+ * it carries something the deck cannot: a failure, an empty result, or
+ * "still watching the rest".
  *
  * The question box stays reachable under the panel the whole time —
  * whatever the person types is what gets searched, verbatim.
@@ -250,23 +254,6 @@ function UncertainMoments({
   )
 }
 
-/** Three bars: how sure the model was, at a glance rather than as a number. */
-function Meter({ confidence }: { confidence: number }) {
-  const filled = confidence >= 0.8 ? 3 : confidence >= 0.5 ? 2 : 1
-  const tone = filled === 3 ? "#16a34a" : filled === 2 ? "#d97706" : "#dc2626"
-  return (
-    <span className="flex items-end gap-0.5" aria-hidden>
-      {[0, 1, 2].map((bar) => (
-        <span
-          key={bar}
-          className="w-1 rounded-full transition-colors duration-300"
-          style={{ height: 10, background: bar < filled ? tone : "rgba(17,17,22,0.12)" }}
-        />
-      ))}
-    </span>
-  )
-}
-
 /**
  * Holds each match's thumbnail at the first URL it arrived with. The
  * backend signs thumbnail URLs per request, so binding src to the newest
@@ -406,36 +393,41 @@ function Deck({
   const clip = clipByMatch.get(active.id) ?? null
   const playable = clip?.status === "ready" && clip?.url ? clip.url : null
   const regenerating = active.reclipStatus === "pending"
-  const behindCount = Math.min(2, Math.max(0, queue.length - 1))
+  /** The cards waiting behind, fanned either side — the owner's stack. */
+  const behind = queue.slice(1, 5)
 
   return (
     <div data-testid="deck">
-      {/* What this moment is, and how sure the model was of it — read
-          before watching, in one reserved line. */}
-      <div className="flex items-center gap-2 pb-2">
-        <Meter confidence={active.confidence} />
-        <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-          {active.description || "A moment worth a look"}
-        </span>
-        <span className="shrink-0 whitespace-nowrap text-[12px] tabular-nums text-muted-foreground">
-          {(active.reclipCount ?? 0) > 0 && !regenerating ? "Re-clipped · " : ""}
-          {queue.length} to review
-        </span>
-      </div>
+      <h2 className="pb-6 text-center text-[28px] font-semibold tracking-tight">Keep this moment?</h2>
 
-      <div className="relative">
-        {/* Depth shells: exactly as many as wait behind, capped at two. */}
-        {Array.from({ length: behindCount }, (_, i) => (
-          <div
-            key={i}
-            aria-hidden
-            className="absolute inset-x-0 top-0 h-12 rounded-2xl bg-shmuted ring-1 ring-shborder"
-            style={{ transform: `scale(${1 - (i + 1) * 0.045}) translateY(-${(i + 1) * 8}px)`, zIndex: -1 - i, opacity: 0.8 - i * 0.35 }}
-          />
-        ))}
+      {/* The stack. Neighbours are pure depth — dimmed, inert, and hidden
+          from assistive tech; only the front card is a decision. */}
+      <div className="relative flex items-center justify-center">
+        {behind.map((peer, index) => {
+          const side = index % 2 === 0 ? 1 : -1
+          const rank = Math.floor(index / 2) + 1
+          const peerThumb = thumbnails[peer.id] ?? null
+          return (
+            <div
+              key={peer.id}
+              aria-hidden
+              className="pointer-events-none absolute aspect-[3/4] w-[48%] overflow-hidden rounded-[24px] bg-[#101013]"
+              style={{
+                transform: `translateX(${side * rank * 30}%) scale(${1 - rank * 0.09})`,
+                zIndex: 10 - rank,
+                filter: `brightness(${0.55 - rank * 0.14})`,
+              }}
+            >
+              {peerThumb && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={peerThumb} alt="" className="h-full w-full object-cover" />
+              )}
+            </div>
+          )
+        })}
 
         <div
-          className="relative mx-auto aspect-[3/4] w-full overflow-hidden rounded-2xl bg-[#101013]"
+          className="relative z-20 aspect-[3/4] w-[58%] overflow-hidden rounded-[26px] bg-[#101013] shadow-[0_18px_50px_rgba(17,17,22,0.22)]"
           style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
         >
           <ReclipCardButton
@@ -445,8 +437,8 @@ function Deck({
           />
           {regenerating && <RegeneratingOverlay />}
 
-          {/* The moment, watchable right here: still → in-place preview cued
-              from the source stream → the finished cut when it exists. */}
+          {/* The moment, watchable here: still → in-place preview cued from
+              the source stream → the finished cut once it exists. */}
           {!playable && previewingId !== active.id && (
             <button
               type="button"
@@ -460,13 +452,13 @@ function Deck({
                   src={activeThumbnail}
                   alt=""
                   onError={() => refreshThumbnail(active.id)}
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-cover"
                   style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
                 />
               ) : (
-                <span className="block h-full w-full bg-gradient-to-b from-white/5 to-transparent" />
+                <span className="block h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
               )}
-              <span className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover/still:scale-105">
+              <span className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-white opacity-0 ring-1 ring-white/30 transition-opacity group-hover/still:opacity-100">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                   <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
                 </svg>
@@ -511,18 +503,14 @@ function Deck({
               style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
             />
           )}
-
-          <span className="pointer-events-none absolute bottom-2 right-2.5 rounded-md bg-black/75 px-1.5 py-0.5 font-mono text-[11.5px] tabular-nums text-white">
-            {asPlayerTime(active.endSeconds - active.startSeconds)}
-          </span>
         </div>
 
-        {/* The take-back, floating over the card and leaving on its own. */}
+        {/* The take-back, floating over the stack and leaving on its own. */}
         <AnimatePresence>
           {undoable && (
             <motion.div
               key="skip-pill"
-              className="pointer-events-none absolute inset-x-3 top-3 z-20"
+              className="pointer-events-none absolute inset-x-[20%] top-3 z-30"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -543,7 +531,7 @@ function Deck({
         </AnimatePresence>
       </div>
 
-      <div className="pt-5">
+      <div className="pt-7">
         <DeckControls
           onSkip={() => skip(active)}
           onKeep={() => keep(active)}
@@ -600,6 +588,8 @@ export function DeckStage({
   const [publishBusy, setPublishBusy] = useState(false)
   const [outcomes, setOutcomes] = useState<PublishOutcome[]>([])
   const [publishMode, setPublishMode] = useState<"now" | "scheduled">("now")
+  /** One clip id when publishing a single tile; null means everything ready. */
+  const [publishOnly, setPublishOnly] = useState<string | null>(null)
   const [publishWhen, setPublishWhen] = useState<Date | null>(null)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   /** Session-local names and removals for kept tiles; the server holds the truth for the library. */
@@ -694,7 +684,9 @@ export function DeckStage({
     })
   }, [])
 
-  const readyClips = publishable.filter((clip) => clip.ready)
+  const readyClips = publishable.filter(
+    (clip) => clip.ready && (publishOnly === null || clip.id === publishOnly),
+  )
 
   const postNow = useCallback(
     async (accountIds: string[], caption: string) => {
@@ -756,7 +748,6 @@ export function DeckStage({
 
   const leader = !video.readyForSearch
   const showAskIdle = !leader && exchanges.length === 0
-  const kept = matches.filter((match) => match.feedback === "approved").length
 
   return (
     <section
@@ -769,7 +760,10 @@ export function DeckStage({
           <WhereTo
             clips={publishable}
             busy={publishBusy}
-            onBack={() => setStage("flow")}
+            onBack={() => {
+              setPublishOnly(null)
+              setStage("flow")
+            }}
             onPostNow={(accountIds, caption) => void postNow(accountIds, caption)}
             onSchedule={(accountIds, caption) => {
               setPublishChoice({ accountIds, caption })
@@ -781,6 +775,7 @@ export function DeckStage({
           <WhenTo
             busy={publishBusy}
             error={scheduleError}
+            clipCount={readyClips.length}
             onBack={() => setStage("publish")}
             onCommit={(when) => void commitSchedule(when)}
           />
@@ -843,28 +838,25 @@ export function DeckStage({
 
             {current && (
               <div className="flex flex-col gap-2.5">
-                {/* The question as asked, then the answer out loud. */}
-                <p className="text-[12.5px] text-muted-foreground">
-                  <span className="font-medium text-foreground/70">You asked:</span> {current.request.instruction}
-                </p>
+                {/* Words only when they carry something the deck cannot
+                    show itself: the search failed, nothing matched, or the
+                    video is still being read and more may come. A clean
+                    answer with moments says nothing — the cards speak. */}
                 {searching ? (
                   <p className="text-sm text-muted-foreground" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
                     {understanding
                       ? "Still taking notes on this video — I'll answer the moment I've seen enough."
                       : "Looking through what I know about this video…"}
                   </p>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <StreamedLine
-                      key={current.request.id + current.request.status}
-                      text={answerLine(current.request, video.index?.readThroughSeconds ?? null)}
-                      className={`text-sm leading-relaxed ${current.request.status === "failed" ? "text-destructive" : ""}`}
-                    />
-                    {current.request.answeredFrom === "notes" && (
-                      <span className="text-[11.5px] text-muted-foreground/80">From what I remember of this video</span>
-                    )}
-                  </div>
-                )}
+                ) : current.request.status === "failed" ||
+                  matches.length === 0 ||
+                  (current.request.coverage?.gaps?.some((gap) => gap.reason === "not_read_yet") ?? false) ? (
+                  <StreamedLine
+                    key={current.request.id + current.request.status}
+                    text={answerLine(current.request, video.index?.readThroughSeconds ?? null)}
+                    className={`text-sm leading-relaxed ${current.request.status === "failed" ? "text-destructive" : ""}`}
+                  />
+                ) : null}
                 {!searching && <CoverageGap request={current.request} onSeek={onSeek} />}
                 {!searching && (
                   <UncertainMoments
@@ -899,17 +891,19 @@ export function DeckStage({
             {!searching && queue.length === 0 && current && matches.length > 0 && (
               <div style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}>
                 {keptTiles.length > 0 ? (
-                  <>
-                    <p className="pb-1 text-[13px] text-muted-foreground">
-                      That&apos;s every moment — you kept {kept} of {matches.length} from this question.
-                    </p>
-                    <KeptGrid
-                      clips={keptTiles}
-                      onReview={() => setStage("publish")}
-                      onRename={renameTile}
-                      onDelete={deleteTile}
-                    />
-                  </>
+                  <KeptGrid
+                    clips={keptTiles}
+                    onReview={() => {
+                      setPublishOnly(null)
+                      setStage("publish")
+                    }}
+                    onPublish={(id) => {
+                      setPublishOnly(id)
+                      setStage("publish")
+                    }}
+                    onRename={renameTile}
+                    onDelete={deleteTile}
+                  />
                 ) : (
                   <DeckEndState kept={0} total={matches.length} onUploadMore={onUploadMore} />
                 )}
@@ -924,7 +918,19 @@ export function DeckStage({
                   {keptTiles.length} kept so far
                 </summary>
                 <div className="pt-3">
-                  <KeptGrid clips={keptTiles} onReview={() => setStage("publish")} onRename={renameTile} onDelete={deleteTile} />
+                  <KeptGrid
+                    clips={keptTiles}
+                    onReview={() => {
+                      setPublishOnly(null)
+                      setStage("publish")
+                    }}
+                    onPublish={(id) => {
+                      setPublishOnly(id)
+                      setStage("publish")
+                    }}
+                    onRename={renameTile}
+                    onDelete={deleteTile}
+                  />
                 </div>
               </details>
             )}
@@ -935,12 +941,14 @@ export function DeckStage({
         )}
       </div>
 
-      {/* The question box, under the panel, always reachable while the
-          video can be searched — asking is the product. Hidden only inside
-          the publish steps, where the panel is a form. */}
+      {/* The question box, under the panel: the owner's pill — a camera
+          mark for what is being asked of, the instruction, and one send.
+          Always reachable while the video can be searched, because asking
+          is the product; hidden only inside the publish steps, where the
+          panel is a form. */}
       {stage === "flow" && !leader && (
         <form
-          className="mt-4"
+          className="mt-5"
           onSubmit={(event) => {
             event.preventDefault()
             submit()
@@ -949,8 +957,13 @@ export function DeckStage({
           <div
             role="presentation"
             onClick={() => inputRef.current?.focus()}
-            className="flex cursor-text items-end gap-2 rounded-2xl bg-shcard p-2 shadow-sm ring-1 ring-shborder transition-[box-shadow] duration-150 focus-within:ring-ring"
+            className="flex cursor-text items-center gap-3 rounded-full bg-shcard py-2 pl-4 pr-2 ring-1 ring-shborder transition-[box-shadow] duration-150 focus-within:ring-2 focus-within:ring-shprimary"
           >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground" aria-hidden>
+              <rect x="2" y="6" width="13" height="12" rx="3" />
+              <path d="M15 10.5l6-3.5v10l-6-3.5" />
+            </svg>
+            <span aria-hidden className="h-6 w-px shrink-0 bg-shborder" />
             <textarea
               ref={inputRef}
               value={draft}
@@ -962,20 +975,21 @@ export function DeckStage({
                 }
               }}
               rows={1}
-              placeholder={exchanges.length === 0 ? "Ask for a moment in this video" : "Ask for another moment"}
-              className="max-h-32 min-h-[2.5rem] w-full resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+              placeholder={exchanges.length === 0 ? "What should I find in this video?" : "Ask for another moment"}
+              className="max-h-28 min-h-[2.25rem] w-full resize-none self-center bg-transparent py-1.5 text-[15px] outline-none placeholder:text-muted-foreground"
               disabled={!video.readyForSearch}
             />
             <button
               type="submit"
-              aria-label="Search"
+              aria-label="Find this moment"
               disabled={!canSend}
-              className={`mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] ${
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] ${
                 canSend ? "bg-shprimary text-primary-foreground" : "bg-shmuted text-muted-foreground"
               }`}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 19V5M5 12l7-7 7 7" />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M12 2.5l1.9 5.1 5.1 1.9-5.1 1.9L12 16.5l-1.9-5.1L5 9.5l5.1-1.9L12 2.5Z" />
+                <path d="M18.5 14.5l.85 2.15 2.15.85-2.15.85-.85 2.15-.85-2.15-2.15-.85 2.15-.85.85-2.15Z" />
               </svg>
             </button>
           </div>

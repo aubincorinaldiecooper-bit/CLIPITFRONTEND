@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
-import { ReclipIcon } from "./review-deck"
+import { ChannelToggle, ReclipIcon } from "./review-deck"
+import { PlatformLogo } from "@/components/platform-logos"
 
 /**
  * Publishing, from the deck: Where do they go? → now or later → the truth
@@ -203,57 +204,66 @@ export function WhereTo({
         </p>
       ) : (
         <>
-          <div className="flex flex-col gap-2.5">
-            {connected.map((account) => {
-              const ticked = chosen.has(account.id)
+          {/* The channels, as the owner draws them: each platform's own
+              mark, the account it posts as, and a switch. A platform with
+              no connected account is dimmed with its switch off and leads
+              to Publishing — off and unavailable are different states. */}
+          <div className="overflow-hidden rounded-2xl ring-1 ring-shborder">
+            {connected.map((account, index) => {
+              const on = chosen.has(account.id)
+              const label = PLATFORM_LABELS[account.platform] ?? account.platform
               return (
-                <button
+                <div
                   key={account.id}
-                  type="button"
-                  onClick={() => toggle(account.id)}
-                  aria-pressed={ticked}
-                  className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 text-left ring-1 transition-colors ${
-                    ticked ? "bg-shcard ring-2 ring-shprimary" : "bg-shcard ring-shborder hover:bg-shaccent"
-                  }`}
+                  className={`flex items-center gap-3.5 px-4 py-3.5 ${index > 0 ? "border-t border-shborder" : ""}`}
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[15px] font-semibold text-foreground">
-                      {PLATFORM_LABELS[account.platform] ?? account.platform}
-                    </span>
-                    <span className="block truncate text-[13px] text-muted-foreground">
+                  <PlatformLogo platform={account.platform} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[16px] font-semibold text-foreground">{label}</span>
+                    <span className="block truncate text-[14px] text-muted-foreground">
                       {account.displayName ? `@${account.displayName.replace(/^@/, "")}` : "Connected"}
                     </span>
                   </span>
-                  <span
-                    aria-hidden
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
-                      ticked ? "bg-shprimary text-primary-foreground" : "bg-shmuted"
-                    }`}
-                  >
-                    {ticked && (
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4 12.5l5 5L20 6.5" />
-                      </svg>
-                    )}
-                  </span>
-                </button>
+                  <ChannelToggle
+                    on={on}
+                    disabled={false}
+                    onToggle={() => toggle(account.id)}
+                    label={`Post to ${label}`}
+                  />
+                </div>
               )
             })}
-            {missingPlatforms.map((platform) => (
+            {missingPlatforms.map((platform, index) => (
               <a
                 key={platform}
                 href="/publishing"
-                className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 ring-1 ring-shborder transition-colors hover:bg-shaccent"
+                className={`flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-shaccent ${
+                  connected.length > 0 || index > 0 ? "border-t border-shborder" : ""
+                }`}
               >
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-semibold text-muted-foreground">
+                <span className="opacity-40 grayscale">
+                  <PlatformLogo platform={platform} size="sm" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[16px] font-semibold text-muted-foreground">
                     {PLATFORM_LABELS[platform]}
                   </span>
-                  <span className="block text-[13px] text-muted-foreground/80">Not connected</span>
+                  <span className="block text-[14px] text-muted-foreground/75">Not connected — tap to add</span>
                 </span>
-                <span aria-hidden className="h-7 w-7 shrink-0 rounded-full bg-shmuted/60" />
+                <ChannelToggle on={false} disabled onToggle={() => undefined} label={`${PLATFORM_LABELS[platform]} is not connected`} />
               </a>
             ))}
+
+            {/* What the switches add up to, in the owner's words. */}
+            <p className="border-t border-shborder px-4 py-3 text-[14px] text-muted-foreground">
+              {chosen.size === 0 ? (
+                "No channels on — switch one on to post."
+              ) : (
+                <>
+                  Every clip goes to <span className="font-semibold text-foreground">{chosen.size} {chosen.size === 1 ? "channel" : "channels"}</span>.
+                </>
+              )}
+            </p>
           </div>
 
           {/* One caption for every post. Optional — an empty caption posts
@@ -262,12 +272,12 @@ export function WhereTo({
             type="text"
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
-            placeholder="Add a caption (optional — used for every clip)"
+            placeholder="Add a caption (optional)"
             maxLength={2200}
-            className="mt-4 w-full rounded-2xl bg-shmuted px-4 py-3 text-sm outline-none ring-1 ring-shborder transition-shadow placeholder:text-muted-foreground focus:ring-ring"
+            className="mt-3 w-full rounded-2xl bg-shmuted px-4 py-3.5 text-sm outline-none ring-1 ring-shborder transition-shadow placeholder:text-muted-foreground focus:ring-ring"
           />
 
-          <p className="mt-3 h-5 text-[13px] text-muted-foreground">
+          <p className="mt-3 h-5 text-[13.5px] text-muted-foreground">
             {ready.length} {ready.length === 1 ? "clip" : "clips"} ready
             {cutting > 0 ? ` · ${cutting} still cutting (${cutting === 1 ? "it won't" : "they won't"} be posted)` : ""}
           </p>
@@ -296,29 +306,83 @@ export function WhereTo({
   )
 }
 
-/** "When should it go out?" — the calendar, the time, the one commitment. */
+/**
+ * The half-hour slots the times panel offers. Plain and predictable: the
+ * product has no audience analytics, so a "best time" here would be a
+ * confident number with nothing behind it.
+ */
+export function postTimeSlots(): string[] {
+  const slots: string[] = []
+  for (let minutes = 0; minutes < 24 * 60; minutes += 30) {
+    slots.push(`${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}`)
+  }
+  return slots
+}
+
+/**
+ * "When should it go out?" — the calendar beside its times, per the
+ * owner's screen: pick a day on the left, a slot on the right, and the
+ * line underneath says exactly what was chosen before anything commits.
+ *
+ * A slot already past on a day that is today is dropped from the list
+ * rather than shown and refused — offering 9:00 AM at noon is an invitation
+ * to a rejection.
+ */
 export function WhenTo({
   onBack,
   onCommit,
   busy,
   error,
+  clipCount,
 }: {
   onBack: () => void
   onCommit: (when: Date) => void
   busy: boolean
   /** A refusal from the last attempt, shown in place. */
   error: string | null
+  /** How many clips this commitment covers, for the sentence underneath. */
+  clipCount: number
 }) {
   const now = useMemo(() => new Date(), [])
   const [view, setView] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [dayIso, setDayIso] = useState<string | null>(null)
-  const [time, setTime] = useState("18:00")
+  const [time, setTime] = useState<string | null>(null)
+  const slotsRef = useRef<HTMLDivElement | null>(null)
 
   const weeks = useMemo(() => monthGrid(view.year, view.month, now), [view, now])
   const atCurrentMonth = view.year === now.getFullYear() && view.month === now.getMonth()
-  const when = scheduleDate(dayIso, time)
-  const tooSoon = when !== null && when.getTime() - Date.now() < 60 * 1000
-  const canCommit = !busy && when !== null && !tooSoon
+
+  // Slots still in the future for the chosen day. A minute of lead time so
+  // the commitment is not racing its own submission.
+  const slots = useMemo(() => {
+    const all = postTimeSlots()
+    if (!dayIso) return all
+    return all.filter((slot) => {
+      const when = scheduleDate(dayIso, slot)
+      return when !== null && when.getTime() - Date.now() >= 60 * 1000
+    })
+  }, [dayIso])
+
+  // A day change can strip the slot that was chosen; never carry a stale one.
+  useEffect(() => {
+    if (time && !slots.includes(time)) setTime(null)
+  }, [slots, time])
+
+  /**
+   * Open the list at 9am rather than midnight. Every slot is still there —
+   * scrolling up reaches 12:00 AM — but the first thing seen should be an
+   * hour someone would actually post at.
+   */
+  useEffect(() => {
+    const panel = slotsRef.current
+    if (!panel || time !== null) return
+    const index = slots.indexOf("09:00")
+    const row = index >= 0 ? (panel.children[index] as HTMLElement | undefined) : undefined
+    if (row) panel.scrollTop = row.offsetTop - panel.offsetTop
+  }, [slots, time])
+
+  const when = time ? scheduleDate(dayIso, time) : null
+  const canCommit = !busy && when !== null
 
   const step = (offset: number) =>
     setView((current) => {
@@ -326,95 +390,140 @@ export function WhenTo({
       return { year: next.getFullYear(), month: next.getMonth() }
     })
 
+  const chosenDay = dayIso ? scheduleDate(dayIso, "12:00") : null
+
   return (
     <div data-testid="publish-when">
       <div className="flex items-center gap-3 pb-5">
-        <BackDisc onBack={onBack} label="Back to accounts" />
+        <BackDisc onBack={onBack} label="Back to channels" />
         <h2 className="text-xl font-semibold tracking-tight">When should it go out?</h2>
       </div>
 
-      <div className="flex items-center justify-between pb-3">
-        <button
-          type="button"
-          aria-label="Previous month"
-          onClick={() => step(-1)}
-          disabled={atCurrentMonth}
-          className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-shborder transition-colors hover:bg-shaccent disabled:opacity-35"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-        </button>
-        <p className="text-[15px] font-semibold">{MONTH_NAMES[view.month]} {view.year}</p>
-        <button
-          type="button"
-          aria-label="Next month"
-          onClick={() => step(1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-shborder transition-colors hover:bg-shaccent"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
+      <div className="overflow-hidden rounded-2xl ring-1 ring-shborder">
+        <div className="flex flex-col sm:flex-row">
+          {/* The month */}
+          <div className="min-w-0 flex-1 p-4">
+            <div className="flex items-center justify-between pb-3">
+              <button
+                type="button"
+                aria-label="Previous month"
+                onClick={() => step(-1)}
+                disabled={atCurrentMonth}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-shaccent disabled:opacity-25"
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M15 5l-7 7 7 7" />
+                </svg>
+              </button>
+              <p className="text-[17px] font-semibold">{MONTH_NAMES[view.month]} {view.year}</p>
+              <button
+                type="button"
+                aria-label="Next month"
+                onClick={() => step(1)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-shaccent"
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 pb-1 text-center">
+              {["SU", "MO", "TU", "WE", "TH", "FR", "SA"].map((label) => (
+                <span key={label} className="py-1 text-[13px] font-medium text-muted-foreground">{label}</span>
+              ))}
+            </div>
+            <div role="grid" aria-label="Pick a day" className="grid grid-cols-7 gap-y-1">
+              {weeks.flat().map((cell, index) =>
+                cell === null ? (
+                  <span key={`empty-${index}`} aria-hidden />
+                ) : (
+                  <button
+                    key={cell.iso}
+                    type="button"
+                    role="gridcell"
+                    aria-selected={dayIso === cell.iso}
+                    disabled={cell.disabled}
+                    onClick={() => setDayIso(cell.iso)}
+                    className={`mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-[15px] tabular-nums transition-colors ${
+                      dayIso === cell.iso
+                        ? "bg-shprimary font-semibold text-primary-foreground"
+                        : cell.disabled
+                          ? "text-muted-foreground/35"
+                          : "text-foreground hover:bg-shaccent"
+                    } disabled:cursor-default`}
+                  >
+                    {cell.day}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
+          {/* The times */}
+          <div className="flex w-full shrink-0 flex-col border-t border-shborder p-4 sm:w-[190px] sm:border-l sm:border-t-0">
+            <p className="pb-3 text-[16px] font-semibold">Post times</p>
+            {/* Scrolls inside itself: a day's worth of slots must not make
+                the panel grow past the commitment button. */}
+            <div ref={slotsRef} className="flex max-h-[236px] flex-col gap-2 overflow-y-auto pr-0.5">
+              {slots.length === 0 ? (
+                <p className="text-[13px] leading-snug text-muted-foreground">
+                  No slots left today — pick another day.
+                </p>
+              ) : (
+                slots.map((slot) => (
+                  <button
+                    key={slot}
+                    type="button"
+                    aria-pressed={time === slot}
+                    disabled={dayIso === null}
+                    onClick={() => setTime(slot)}
+                    className={`w-full shrink-0 whitespace-nowrap rounded-xl px-3 py-2.5 text-center text-[15px] tabular-nums transition-colors ${
+                      time === slot
+                        ? "bg-shprimary font-semibold text-primary-foreground"
+                        : "text-foreground ring-1 ring-shborder hover:bg-shaccent"
+                    } disabled:opacity-40`}
+                  >
+                    {speakTime(slot)}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-7 pb-1 text-center">
-        {["S", "M", "T", "W", "T", "F", "S"].map((label, i) => (
-          <span key={i} className="py-1 text-[12px] font-medium text-muted-foreground">{label}</span>
-        ))}
-      </div>
-      <div role="grid" aria-label="Pick a day" className="grid grid-cols-7 gap-y-1">
-        {weeks.flat().map((cell, index) =>
-          cell === null ? (
-            <span key={`empty-${index}`} aria-hidden />
+      {/* What was chosen, said back before it commits. Two reserved lines,
+          so a refusal appearing cannot shove the button under the cursor. */}
+      <div className="mt-4 min-h-[2.75rem]">
+        <p className="text-[14.5px] leading-snug text-muted-foreground">
+          {chosenDay ? (
+            <>
+              {clipCount === 1 ? "Your clip posts" : `All ${clipCount} clips post`} on{" "}
+              <span className="font-semibold text-foreground">
+                {chosenDay.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+              </span>
+              {time ? (
+                <>
+                  {" at "}
+                  <span className="font-semibold text-foreground">{speakTime(time)}</span>.
+                </>
+              ) : (
+                ". Pick a time."
+              )}
+            </>
           ) : (
-            <button
-              key={cell.iso}
-              type="button"
-              role="gridcell"
-              aria-selected={dayIso === cell.iso}
-              disabled={cell.disabled}
-              onClick={() => setDayIso(cell.iso)}
-              className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full text-[13.5px] tabular-nums transition-colors ${
-                dayIso === cell.iso
-                  ? "bg-shprimary font-semibold text-primary-foreground"
-                  : cell.disabled
-                    ? "text-muted-foreground/40"
-                    : "font-medium text-foreground hover:bg-shaccent"
-              } disabled:cursor-default`}
-            >
-              {cell.day}
-            </button>
-          ),
-        )}
+            "Pick a day, then a time."
+          )}
+        </p>
+        {error && <p className="pt-1 text-[13px] text-destructive">{error}</p>}
       </div>
-
-      <label className="mt-5 flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 ring-1 ring-shborder">
-        <span className="text-[15px] font-medium">Time</span>
-        <span className="flex items-center gap-2">
-          <input
-            type="time"
-            value={time}
-            onChange={(event) => setTime(event.target.value || "18:00")}
-            className="bg-transparent text-right font-mono text-[14px] tabular-nums outline-none"
-          />
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-muted-foreground" aria-hidden>
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v5l3.5 2" />
-          </svg>
-        </span>
-      </label>
-
-      {/* Reserved line: a refusal appearing must not shove the button. */}
-      <p className="mt-3 h-5 text-center text-[12.5px] text-destructive">
-        {error ?? (tooSoon ? "That minute is already here — pick a later time, or use Post now." : "")}
-      </p>
 
       <button
         type="button"
         onClick={() => when && onCommit(when)}
         disabled={!canCommit}
-        className="mt-4 w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3.5 text-[15px] font-semibold text-primary-foreground transition-[transform,opacity] active:scale-[0.98] disabled:bg-shmuted-foreground/40 disabled:text-white disabled:opacity-90"
+        className="mt-3 w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3.5 text-[15px] font-semibold text-primary-foreground transition-[transform,opacity] active:scale-[0.98] disabled:bg-shmuted-foreground/40 disabled:text-white disabled:opacity-90"
       >
         {busy ? "Scheduling…" : "Publish your post"}
       </button>

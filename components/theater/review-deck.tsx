@@ -72,7 +72,7 @@ function CheckIcon({ size = 24 }: { size?: number }) {
 
 function CrossIcon() {
   return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M6 6l12 12M18 6L6 18" />
     </svg>
   )
@@ -116,38 +116,81 @@ export function DeckControls({
   deciding: "keep" | "skip" | null
 }) {
   return (
-    <div className="flex items-center justify-center gap-7" data-testid="deck-controls">
-      <button
-        type="button"
-        aria-label="Skip — not useful, move on"
-        title="Skip — not useful, move on"
-        aria-pressed={deciding === "skip"}
-        onClick={onSkip}
-        disabled={disabled || deciding !== null}
-        className={`flex h-14 w-14 items-center justify-center rounded-full ring-1 transition-all ${
-          deciding === "skip"
-            ? "scale-95 bg-red-500 text-white ring-red-500"
-            : "bg-shcard text-foreground ring-shborder hover:bg-shaccent"
-        } disabled:cursor-default ${deciding === null ? "disabled:opacity-40" : ""}`}
-      >
-        <CrossIcon />
-      </button>
-      <button
-        type="button"
-        aria-label="Keep — this clip works"
-        title="Keep — this clip works"
-        aria-pressed={deciding === "keep"}
-        onClick={onKeep}
-        disabled={disabled || deciding !== null}
-        className={`flex h-16 w-16 items-center justify-center rounded-full transition-all ${
-          deciding === "keep"
-            ? "scale-95 bg-emerald-500 text-white"
-            : "bg-shprimary text-primary-foreground hover:opacity-90"
-        } disabled:cursor-default ${deciding === null ? "disabled:opacity-40" : ""}`}
-      >
-        <CheckIcon />
-      </button>
+    <div className="flex items-start justify-center gap-6" data-testid="deck-controls">
+      <span className="flex flex-col items-center gap-2">
+        <button
+          type="button"
+          aria-label="Skip — not useful, move on"
+          title="Skip — not useful, move on"
+          aria-pressed={deciding === "skip"}
+          onClick={onSkip}
+          disabled={disabled || deciding !== null}
+          className={`flex h-[74px] w-[74px] items-center justify-center rounded-full ring-1 transition-all ${
+            deciding === "skip"
+              ? "scale-95 bg-red-500 text-white ring-red-500"
+              : "bg-shcard text-foreground ring-shborder hover:bg-shaccent"
+          } disabled:cursor-default ${deciding === null ? "disabled:opacity-40" : ""}`}
+        >
+          <CrossIcon />
+        </button>
+        <span className="whitespace-nowrap text-[15px] text-muted-foreground">Skip</span>
+      </span>
+      <span className="flex flex-col items-center gap-2">
+        <button
+          type="button"
+          aria-label="Keep — this clip works"
+          title="Keep — this clip works"
+          aria-pressed={deciding === "keep"}
+          onClick={onKeep}
+          disabled={disabled || deciding !== null}
+          className={`flex h-[74px] w-[74px] items-center justify-center rounded-full transition-all ${
+            deciding === "keep"
+              ? "scale-95 bg-emerald-500 text-white"
+              : "bg-shprimary text-primary-foreground hover:opacity-90"
+          } disabled:cursor-default ${deciding === null ? "disabled:opacity-40" : ""}`}
+        >
+          <CheckIcon size={30} />
+        </button>
+        <span className="whitespace-nowrap text-[15px] text-foreground">Keep</span>
+      </span>
     </div>
+  )
+}
+
+/**
+ * A channel's on/off, the owner's control: a real switch, not a tick. Off
+ * and unavailable are different — a channel with no connected account is
+ * dimmed and cannot be switched on here, and says where to go instead.
+ */
+export function ChannelToggle({
+  on,
+  disabled,
+  onToggle,
+  label,
+}: {
+  on: boolean
+  disabled: boolean
+  onToggle: () => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`relative h-[34px] w-[60px] shrink-0 rounded-full transition-colors ${
+        on ? "bg-shprimary" : "bg-shmuted ring-1 ring-shborder"
+      } disabled:cursor-default disabled:opacity-45`}
+    >
+      <span
+        aria-hidden
+        className="absolute top-[3px] block h-7 w-7 rounded-full bg-white shadow-sm transition-[left] duration-200"
+        style={{ left: on ? 29 : 3 }}
+      />
+    </button>
   )
 }
 
@@ -338,12 +381,15 @@ export interface KeptClipTile {
 export function KeptGrid({
   clips,
   onReview,
+  onPublish,
   onRename,
   onDelete,
 }: {
   clips: KeptClipTile[]
   /** Move on to publishing what's ready. Absent → the button links to the library. */
   onReview?: () => void
+  /** Publish THIS clip on its own — every clip carries the option. */
+  onPublish?: (id: string) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
 }) {
@@ -421,12 +467,26 @@ export function KeptGrid({
                   </svg>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-40">
+                {/* Every clip carries its own Publish — the owner's menu.
+                    Only a finished cut can go out, so it waits while the
+                    clip is still being made rather than failing later. */}
+                {onPublish && (
+                  <DropdownMenuItem disabled={tile.status !== "ready"} onSelect={() => onPublish(tile.id)}>
+                    Publish
+                  </DropdownMenuItem>
+                )}
+                {/* Edit and Share are the Library's — the caption editor and
+                    room sharing live there, and pointing at them beats a
+                    second, thinner copy inside this flow. */}
+                <DropdownMenuItem asChild>
+                  <a href="/clips">Edit</a>
+                </DropdownMenuItem>
                 <DropdownMenuItem disabled={tile.status !== "ready"} onSelect={() => rename(tile)}>
                   Rename
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <a href="/clips">Edit &amp; share in Library</a>
+                  <a href="/clips">Share</a>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

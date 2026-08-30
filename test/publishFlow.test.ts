@@ -119,3 +119,15 @@ describe("publishEach — the truth per clip", () => {
     expect(outcomes[1]).toMatchObject({ ok: true, detail: "submitted" })
   })
 })
+
+describe("postTimeSlots — the times panel", () => {
+  it("offers every half hour of the day, spoken as clock time", async () => {
+    const { postTimeSlots } = await import("../components/theater/publish-flow")
+    const slots = postTimeSlots()
+    expect(slots).toHaveLength(48)
+    expect(slots[0]).toBe("00:00")
+    expect(slots[18]).toBe("09:00")
+    expect(slots.at(-1)).toBe("23:30")
+    expect(speakTime(slots[18]!)).toBe("9:00 AM")
+  })
+})
