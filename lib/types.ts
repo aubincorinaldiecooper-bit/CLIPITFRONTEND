@@ -114,10 +114,10 @@ export interface EvaluationReport {
   quality: {
     momentsReturned: number
     momentsWithFeedback: number
-    thumbsUp: number
-    thumbsDown: number
-    thumbsUpRate: number | null
-    thumbsDownRate: number | null
+    keeps: number
+    skips: number
+    keepRate: number | null
+    skipRate: number | null
     reasons: Record<string, number>
     clipsKept: number
     acceptanceRate: number | null
@@ -136,16 +136,16 @@ export interface EvaluationReport {
   boundaries: {
     eligibleReviewedMoments: number
     momentsNeverReviewed: number
-    firstPassSuccesses: number
-    firstPassSuccessRate: number | null
+    firstPassKeeps: number
+    firstPassKeepRate: number | null
     momentsReclipped: number
     reclipRate: number | null
     reviewedReclips: number
-    acceptedReclips: number
-    reclipAcceptanceRate: number | null
+    keptReclips: number
+    reclipKeepRate: number | null
     momentsWithExplicitFeedback: number
-    timingDownvotes: number
-    timingDownvoteRate: number | null
+    timingIssues: number
+    timingIssueRate: number | null
     shifts: {
       reclipsMeasured: number
       averageAbsoluteStartShiftSeconds: number | null

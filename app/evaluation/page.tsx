@@ -207,10 +207,10 @@ export default function EvaluationPage() {
 
       {report && (
         <div className="flex flex-col gap-4">
-          <Section title="Quality — are the moments useful?">
+          <Section title="Quality — are the moments worth keeping?">
             <Row label="Moments returned" value={String(q!.momentsReturned)} />
-            <Row label="Thumbs-up rate" value={pct(q!.thumbsUpRate)} over={`${q!.thumbsUp} of ${q!.momentsWithFeedback} rated`} />
-            <Row label="Thumbs-down rate" value={pct(q!.thumbsDownRate)} over={`${q!.thumbsDown} of ${q!.momentsWithFeedback} rated`} />
+            <Row label="Keep rate" value={pct(q!.keepRate)} over={`${q!.keeps} of ${q!.momentsWithFeedback} reviewed`} />
+            <Row label="Skip rate" value={pct(q!.skipRate)} over={`${q!.skips} of ${q!.momentsWithFeedback} reviewed`} />
             <Row label="Acceptance (moment became a kept clip)" value={pct(q!.acceptanceRate)} over={`${q!.clipsKept} of ${q!.momentsReturned}`} />
             {Object.keys(q!.reasons).length > 0 && (
               <Row
@@ -235,9 +235,9 @@ export default function EvaluationPage() {
 
           <Section title="Boundary quality — does the first cut land, and does Re-clip help?">
             <Row
-              label="First-pass success rate"
-              value={pct(b!.firstPassSuccessRate)}
-              over={`${b!.firstPassSuccesses} of ${b!.eligibleReviewedMoments} reviewed`}
+              label="First-pass Keep rate"
+              value={pct(b!.firstPassKeepRate)}
+              over={`${b!.firstPassKeeps} of ${b!.eligibleReviewedMoments} reviewed`}
             />
             <Row
               label="Re-clip rate"
@@ -245,14 +245,14 @@ export default function EvaluationPage() {
               over={`${b!.momentsReclipped} of ${b!.eligibleReviewedMoments} reviewed`}
             />
             <Row
-              label="Re-clip acceptance"
-              value={pct(b!.reclipAcceptanceRate)}
-              over={`${b!.acceptedReclips} of ${b!.reviewedReclips} judged after a Re-clip`}
+              label="Re-clip → Keep rate"
+              value={pct(b!.reclipKeepRate)}
+              over={`${b!.keptReclips} of ${b!.reviewedReclips} decided after a Re-clip`}
             />
             <Row
-              label="Timing-is-off rate"
-              value={pct(b!.timingDownvoteRate)}
-              over={`${b!.timingDownvotes} of ${b!.momentsWithExplicitFeedback} with feedback`}
+              label="Timing-issue rate"
+              value={pct(b!.timingIssueRate)}
+              over={`${b!.timingIssues} of ${b!.momentsWithExplicitFeedback} with a decision`}
             />
             <Row label="Moments never reviewed" value={String(b!.momentsNeverReviewed)} over="excluded from every rate above" />
 
