@@ -10,6 +10,7 @@ import type {
   LibraryClip,
   MatchFeedback,
   MatchFeedbackReason,
+  ScheduledPost,
   SocialAccount,
   SocialAccountsPage,
   TeamInvite,
@@ -580,18 +581,45 @@ export const api = {
    */
   async publishClip(
     clipId: string,
-    input: { caption: string; accountIds?: string[] },
+    input: { caption: string; accountIds?: string[]; scheduledAt?: string },
   ): Promise<{
-    post: { id: string; clipId: string; status: string }
+    post?: { id: string; clipId: string; status: string }
     /** One entry per platform SHAPE — a clip going to TikTok and YouTube is
      *  two posts, each carrying its own correctly-cut file. */
     posts?: Array<{ id: string; status: string; aspect: string; targets: Array<{ platform: string }> }>
+    /** Present instead of post/posts when scheduledAt was given: the promise
+     *  record. Nothing goes out until its minute arrives. */
+    scheduled?: ScheduledPost
   }> {
     return request(`/api/clips/${clipId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     })
+  },
+
+  /** Publishes promised for later and not yet fired, soonest first. */
+  async listScheduledPosts(): Promise<{ scheduled: Array<ScheduledPost & { clipTitle: string | null }> }> {
+    return request("/api/scheduled-posts")
+  },
+
+  /** Take back a promise not yet kept. Conflict = it already fired. */
+  async cancelScheduledPost(id: string): Promise<{ scheduled: ScheduledPost }> {
+    return request(`/api/scheduled-posts/${encodeURIComponent(id)}`, { method: "DELETE" })
+  },
+
+  /** Give a clip a name of your own; an empty string brings the description back. */
+  async renameClip(clipId: string, title: string): Promise<{ clip: Clip }> {
+    return request(`/api/clips/${encodeURIComponent(clipId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    })
+  },
+
+  /** Delete a clip and its files. Refused while a publish or schedule depends on it. */
+  async deleteClip(clipId: string): Promise<{ deleted: boolean }> {
+    return request(`/api/clips/${encodeURIComponent(clipId)}`, { method: "DELETE" })
   },
 
   /**

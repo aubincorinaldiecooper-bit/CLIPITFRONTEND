@@ -25,7 +25,7 @@ import {
   UserIcon,
 } from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
-import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
+import type { ScheduledPost, SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { Notice } from "@/components/workspace/notice"
 import { PlatformLogo } from "@/components/platform-logos"
@@ -471,6 +471,8 @@ function PublishingBody() {
         </CardContent>
       </Card>
 
+      <ScheduledPostsCard />
+
       <Card>
         <CardContent className="flex flex-col gap-6">
           <div className="flex items-start gap-3">
@@ -662,5 +664,96 @@ export default function PublishingPage() {
         <PublishingBody />
       </div>
     </WorkspaceShell>
+  )
+}
+
+/**
+ * The publishes promised for later. A promise you cannot see or take back
+ * is a trap, so every waiting scheduled post is listed here with its
+ * minute and a Cancel — and the whole card simply is not there when
+ * nothing waits.
+ */
+function ScheduledPostsCard() {
+  const [rows, setRows] = useState<Array<ScheduledPost & { clipTitle: string | null }>>([])
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listScheduledPosts()
+      .then((result) => !cancelled && setRows(result.scheduled))
+      .catch(() => {
+        // Signed out, unconfigured, or unreachable: nothing to list either
+        // way, and the accounts card above already tells those stories.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (rows.length === 0) return null
+
+  const cancel = async (id: string) => {
+    setBusyId(id)
+    setCancelError(null)
+    try {
+      await api.cancelScheduledPost(id)
+      setRows((current) => current.filter((row) => row.id !== id))
+    } catch (cause) {
+      setCancelError(cause instanceof ApiError ? cause.message : "Couldn't cancel that one. Refresh and try again.")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex items-start gap-3">
+          <IconWell icon={FlashIcon} />
+          <div className="flex min-w-0 flex-col">
+            <h2 className="text-base font-semibold">Scheduled</h2>
+            <p className="text-[13px] text-muted-foreground">
+              {rows.length === 1 ? "One post waiting" : `${rows.length} posts waiting`} to go out. Cancel any of
+              them until their minute arrives.
+            </p>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-lg border border-shborder">
+          <ul>
+            {rows.map((row, index) => (
+              <li
+                key={row.id}
+                className={"flex flex-wrap items-center gap-3 px-4 py-3 " + (index > 0 ? "border-t border-shborder" : "")}
+              >
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{row.clipTitle ?? "A clip"}</span>
+                  <span className="text-[13px] text-muted-foreground">
+                    Goes out{" "}
+                    {new Date(row.scheduledAt).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="ml-auto"
+                  disabled={busyId === row.id}
+                  onClick={() => void cancel(row.id)}
+                >
+                  {busyId === row.id ? "Canceling…" : "Cancel"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {cancelError && <p className="text-[13px] text-destructive">{cancelError}</p>}
+      </CardContent>
+    </Card>
   )
 }

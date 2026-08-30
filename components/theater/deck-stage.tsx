@@ -1,0 +1,986 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AnimatePresence, motion } from "motion/react"
+import { api } from "@/lib/api"
+import type { Clip, ClipMatch, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import { FilmLeader } from "./film-leader"
+import {
+  DeckControls,
+  DeckEndState,
+  KeptGrid,
+  ReclipCardButton,
+  RegeneratingOverlay,
+  SkipPill,
+  deckQueue,
+  type KeptClipTile,
+} from "./review-deck"
+import {
+  PublishDone,
+  WhenTo,
+  WhereTo,
+  publishEach,
+  type PublishOutcome,
+  type PublishableClip,
+} from "./publish-flow"
+
+const EASE = [0.23, 1, 0.32, 1] as const
+
+const SUGGESTIONS = [
+  "Clip every time the energy peaks",
+  "Find the part where they introduce themselves",
+]
+
+/**
+ * The stage: one centered panel that walks the whole journey — the film
+ * leader while the video is read, the question, the deck of moments, what
+ * was kept, and publishing it now or later. The owner's screens of
+ * 2026-08-30, carrying over every honesty rule the drawer held:
+ *
+ * - An answer given before the whole video was watched says so in the
+ *   answer, and never calls a not-yet-read stretch a failure.
+ * - A stretch that could NOT be looked at is named, with the exact times,
+ *   because its silence is not evidence of absence.
+ * - Moments seen but not trusted are listed plainly, with "look again".
+ * - "From what I remember of this video" marks a recalled answer.
+ *
+ * The question box stays reachable under the panel the whole time —
+ * whatever the person types is what gets searched, verbatim.
+ */
+
+/** One question and everything that came back for it. */
+export interface StageExchange {
+  request: ClipRequest
+  clips: Clip[]
+}
+
+/** m:ss — the same clock the stage player writes. */
+const asPlayerTime = (seconds: number) => {
+  const whole = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
+}
+
+/**
+ * How long, said the way someone would say it out loud. Nobody reads
+ * "08:12" as a length.
+ */
+function describeMinutes(seconds: number): string {
+  if (seconds < 90) return "a minute"
+  return `${Math.round(seconds / 60)} minutes`
+}
+
+/** Whole minutes and seconds, for a duration rather than a position. */
+function describeDuration(seconds: number): string {
+  const total = Math.round(seconds)
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  if (minutes === 0) return `${rest}s`
+  return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`
+}
+
+/**
+ * What the answer says, out loud. Written the way a person would say it —
+ * "segment" and "examine" are ours, not the reader's.
+ */
+export function answerLine(request: ClipRequest, readThroughSeconds?: number | null): string {
+  const count = request.matches?.length ?? 0
+  if (request.status === "failed") return request.error ?? "Something went wrong with that search."
+
+  // Answered before the whole video had been watched: said in the answer,
+  // not in a warning box — the box's words ("couldn't look") would be
+  // untrue of a stretch we simply had not reached yet.
+  const partial = request.coverage?.gaps?.some((gap) => gap.reason === "not_read_yet") ?? false
+
+  if (partial && count > 0) {
+    const found = count === 1 ? "One so far" : `${count} so far`
+    const sofar = readThroughSeconds ? ` — I'm only ${describeMinutes(readThroughSeconds)} in` : ""
+    return `${found}${sofar}. Still watching the rest.`
+  }
+
+  if (count === 0) {
+    // Never claim the video lacks something when part of it went unread.
+    if (request.coverage?.complete === false) {
+      return "I didn't find that in the parts of the video I could look at."
+    }
+    return request.uncertain?.length
+      ? "I didn't find a clear match — but there's one I'm unsure about below."
+      : "I couldn't find that. Try describing the moment a different way."
+  }
+
+  const found = count === 1 ? "Found one moment." : `Found ${count} moments.`
+  return count === 1
+    ? `${found} Keep it, skip it, or have me re-cut it.`
+    : `${found} Keep, skip, or re-cut each one.`
+}
+
+/** Words resolve out of blur, one after another. */
+function StreamedLine({ text, className }: { text: string; className?: string }) {
+  const words = useMemo(() => text.split(" "), [text])
+  return (
+    <p className={className}>
+      {words.map((word, i) => (
+        <span
+          key={`${word}-${i}`}
+          className="inline [will-change:filter,opacity]"
+          style={{ animation: `stream-in 420ms cubic-bezier(0.22,0.61,0.25,1) ${i * 48}ms both` }}
+        >
+          {word}{" "}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/**
+ * States plainly that part of the video was never looked at. A chunk a
+ * provider refused used to be invisible, and a user whose moment fell
+ * inside it was told the video did not contain it.
+ */
+function CoverageGap({ request, onSeek }: { request: ClipRequest; onSeek: (seconds: number) => void }) {
+  const coverage = request.coverage
+  if (!coverage || coverage.complete) return null
+
+  const gaps = (coverage.gaps ?? []).filter((gap) => gap.reason !== "not_read_yet")
+  const degraded = coverage.degraded ?? []
+
+  const gapLine =
+    gaps.length > 0
+      ? `I couldn't look at ${describeDuration(coverage.unsearchedSeconds)} of this video, so I'd have missed anything in ${gaps.length === 1 ? "it" : "those bits"}.`
+      : coverage.locatable === false
+        ? "There's part of this video I couldn't look at, so I may have missed something."
+        : null
+
+  if (!gapLine && degraded.length === 0) return null
+
+  return (
+    <div
+      className="rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-600/30"
+      style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
+    >
+      {gapLine && <p className="text-[13px] leading-snug text-amber-900">{gapLine}</p>}
+      {gaps.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {gaps.map((gap) => (
+            <button
+              key={`gap-${gap.startSeconds}-${gap.endSeconds}`}
+              type="button"
+              onClick={() => onSeek(gap.startSeconds)}
+              className="rounded-lg bg-amber-500/15 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-900 transition-colors hover:bg-amber-500/25"
+            >
+              {gap.startTimecode} – {gap.endTimecode}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {degraded.length > 0 && (
+        <div className={gapLine ? "mt-3 border-t border-amber-600/20 pt-2.5" : ""}>
+          <p className="text-[13px] leading-snug text-amber-900">
+            {degraded.length === 1 ? "There's a bit" : `There are ${degraded.length} bits`} where I could see the
+            video but not hear it, so I'd have missed anything that was only said out loud.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {degraded.map((window) => (
+              <button
+                key={`degraded-${window.startSeconds}-${window.endSeconds}`}
+                type="button"
+                onClick={() => onSeek(window.startSeconds)}
+                className="rounded-lg bg-amber-500/15 px-2 py-1 font-mono text-[11px] tabular-nums text-amber-900 transition-colors hover:bg-amber-500/25"
+              >
+                {window.startTimecode} – {window.endTimecode}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The moments we found and did not show. Saying "I saw something here, I'm
+ * not sure" is more honest than a silent drop — a person cannot tell a
+ * silent drop apart from their video genuinely not containing it.
+ */
+function UncertainMoments({
+  request,
+  onSeek,
+  onLookAgain,
+}: {
+  request: ClipRequest
+  onSeek: (seconds: number) => void
+  onLookAgain: (() => void) | null
+}) {
+  const uncertain = request.uncertain ?? []
+  if (uncertain.length === 0) return null
+
+  return (
+    <div className="rounded-xl bg-shmuted/60 px-3 py-2.5 ring-1 ring-shborder">
+      <p className="text-[12.5px] leading-snug text-muted-foreground">
+        {uncertain.length === 1 ? "There's one moment" : `There are ${uncertain.length} moments`} I spotted but
+        wasn't sure about.
+      </p>
+      <div className="mt-2 flex flex-col gap-1">
+        {uncertain.map((moment) => (
+          <button
+            key={`${moment.startSeconds}-${moment.endSeconds}`}
+            type="button"
+            onClick={() => onSeek(moment.startSeconds)}
+            className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-shaccent"
+          >
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+              {moment.startTimecode}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
+              {moment.description || "Something worth a look"}
+            </span>
+          </button>
+        ))}
+      </div>
+      {onLookAgain && (
+        <button
+          type="button"
+          onClick={onLookAgain}
+          className="mt-1.5 rounded-lg px-1.5 py-1 text-[12px] font-medium text-amber-700 transition-colors hover:bg-shaccent hover:text-amber-800"
+        >
+          Look again, properly
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Three bars: how sure the model was, at a glance rather than as a number. */
+function Meter({ confidence }: { confidence: number }) {
+  const filled = confidence >= 0.8 ? 3 : confidence >= 0.5 ? 2 : 1
+  const tone = filled === 3 ? "#16a34a" : filled === 2 ? "#d97706" : "#dc2626"
+  return (
+    <span className="flex items-end gap-0.5" aria-hidden>
+      {[0, 1, 2].map((bar) => (
+        <span
+          key={bar}
+          className="w-1 rounded-full transition-colors duration-300"
+          style={{ height: 10, background: bar < filled ? tone : "rgba(17,17,22,0.12)" }}
+        />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * Holds each match's thumbnail at the first URL it arrived with. The
+ * backend signs thumbnail URLs per request, so binding src to the newest
+ * one refetches every image on every poll; pin the first and move only
+ * when the pinned one actually fails.
+ */
+function usePinnedThumbnails(matches: ClipMatch[]) {
+  const latest = useMemo(() => {
+    const urls: Record<string, string> = {}
+    for (const match of matches) if (match.thumbnailUrl) urls[match.id] = match.thumbnailUrl
+    return urls
+  }, [matches])
+
+  const [pinned, setPinned] = useState<Record<string, string>>(latest)
+
+  useEffect(() => {
+    setPinned((current) => {
+      const ids = Object.keys(latest)
+      let changed = ids.length !== Object.keys(current).length
+      const next: Record<string, string> = {}
+      for (const id of ids) {
+        next[id] = current[id] ?? latest[id]!
+        if (next[id] !== current[id]) changed = true
+      }
+      return changed ? next : current
+    })
+  }, [latest])
+
+  const refresh = useCallback(
+    (matchId: string) =>
+      setPinned((current) => {
+        const fresh = latest[matchId]
+        return fresh && fresh !== current[matchId] ? { ...current, [matchId]: fresh } : current
+      }),
+    [latest],
+  )
+
+  return [pinned, refresh] as const
+}
+
+/**
+ * The deck itself: the tall card, ↻ on its corner, ✕/✓ beneath. The moment
+ * plays IN the card — full frame, letterboxed rather than cropped, because
+ * a decision made on a crop is a decision about a different clip.
+ */
+function Deck({
+  matches,
+  clipByMatch,
+  playbackUrl,
+  onSeek,
+  onKeep,
+  onRate,
+  onReclip,
+  hotkeys,
+}: {
+  matches: ClipMatch[]
+  clipByMatch: Map<string, Clip>
+  playbackUrl: string | null
+  onSeek: (seconds: number) => void
+  onKeep: (matchId: string) => void
+  onRate: (matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
+  onReclip: (matchId: string) => void
+  hotkeys: boolean
+}) {
+  const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
+  const [previewingId, setPreviewingId] = useState<string | null>(null)
+  /** A decision just made: the chosen control fills for a beat before the
+   *  card leaves — confirmation first, then exit. */
+  const [deciding, setDeciding] = useState<{ id: string; decision: "keep" | "skip" } | null>(null)
+  const [undoableId, setUndoableId] = useState<string | null>(null)
+
+  const queue = useMemo(() => deckQueue(matches), [matches])
+
+  useEffect(() => {
+    if (!deciding) return
+    const timer = setTimeout(() => setDeciding(null), 240)
+    return () => clearTimeout(timer)
+  }, [deciding])
+
+  useEffect(() => {
+    if (!undoableId || queue.length === 0) return
+    const timer = setTimeout(() => setUndoableId(null), 6000)
+    return () => clearTimeout(timer)
+  }, [undoableId, queue.length])
+
+  const decidingMatch = deciding ? matches.find((match) => match.id === deciding.id) : undefined
+  const active = decidingMatch ?? queue[0]
+  const undoable = matches.find((match) => match.id === undoableId && match.feedback === "rejected") ?? null
+
+  const keep = (match: ClipMatch) => {
+    if (deciding || match.reclipStatus === "pending") return
+    onKeep(match.id)
+    setUndoableId(null)
+    setDeciding({ id: match.id, decision: "keep" })
+    setPreviewingId(null)
+  }
+
+  const skip = (match: ClipMatch) => {
+    if (deciding || match.reclipStatus === "pending") return
+    onRate(match.id, "rejected")
+    setUndoableId(match.id)
+    setDeciding({ id: match.id, decision: "skip" })
+    setPreviewingId(null)
+  }
+
+  const undoSkip = (match: ClipMatch) => {
+    onRate(match.id, null)
+    setUndoableId(null)
+  }
+
+  // The reference deck's keyboard: → keeps, ← skips, u/Backspace brings the
+  // last skip back. Never while typing, and never from a focused player —
+  // its arrow keys seek.
+  useEffect(() => {
+    if (!hotkeys) return
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target &&
+        (["INPUT", "TEXTAREA", "SELECT", "VIDEO", "AUDIO"].includes(target.tagName) || target.isContentEditable)
+      )
+        return
+      if (event.key === "ArrowRight" && active) keep(active)
+      else if (event.key === "ArrowLeft" && active) skip(active)
+      else if ((event.key === "u" || event.key === "Backspace") && undoable) undoSkip(undoable)
+      else return
+      event.preventDefault()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotkeys, active?.id, active?.reclipStatus, undoable?.id, deciding])
+
+  if (!active) return null
+
+  const activeThumbnail = thumbnails[active.id] ?? null
+  const clip = clipByMatch.get(active.id) ?? null
+  const playable = clip?.status === "ready" && clip?.url ? clip.url : null
+  const regenerating = active.reclipStatus === "pending"
+  const behindCount = Math.min(2, Math.max(0, queue.length - 1))
+
+  return (
+    <div data-testid="deck">
+      {/* What this moment is, and how sure the model was of it — read
+          before watching, in one reserved line. */}
+      <div className="flex items-center gap-2 pb-2">
+        <Meter confidence={active.confidence} />
+        <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
+          {active.description || "A moment worth a look"}
+        </span>
+        <span className="shrink-0 whitespace-nowrap text-[12px] tabular-nums text-muted-foreground">
+          {(active.reclipCount ?? 0) > 0 && !regenerating ? "Re-clipped · " : ""}
+          {queue.length} to review
+        </span>
+      </div>
+
+      <div className="relative">
+        {/* Depth shells: exactly as many as wait behind, capped at two. */}
+        {Array.from({ length: behindCount }, (_, i) => (
+          <div
+            key={i}
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-12 rounded-2xl bg-shmuted ring-1 ring-shborder"
+            style={{ transform: `scale(${1 - (i + 1) * 0.045}) translateY(-${(i + 1) * 8}px)`, zIndex: -1 - i, opacity: 0.8 - i * 0.35 }}
+          />
+        ))}
+
+        <div
+          className="relative mx-auto aspect-[3/4] w-full overflow-hidden rounded-2xl bg-[#101013]"
+          style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
+        >
+          <ReclipCardButton
+            pending={regenerating}
+            remaining={active.reclipsRemaining ?? 0}
+            onReclip={() => onReclip(active.id)}
+          />
+          {regenerating && <RegeneratingOverlay />}
+
+          {/* The moment, watchable right here: still → in-place preview cued
+              from the source stream → the finished cut when it exists. */}
+          {!playable && previewingId !== active.id && (
+            <button
+              type="button"
+              onClick={() => (playbackUrl ? setPreviewingId(active.id) : onSeek(active.startSeconds))}
+              className="group/still relative block h-full w-full"
+              aria-label={`Play this moment (${asPlayerTime(active.startSeconds)} to ${asPlayerTime(active.endSeconds)})`}
+            >
+              {activeThumbnail ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={activeThumbnail}
+                  alt=""
+                  onError={() => refreshThumbnail(active.id)}
+                  className="h-full w-full object-contain"
+                  style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+                />
+              ) : (
+                <span className="block h-full w-full bg-gradient-to-b from-white/5 to-transparent" />
+              )}
+              <span className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover/still:scale-105">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
+                </svg>
+              </span>
+            </button>
+          )}
+
+          {!playable && previewingId === active.id && playbackUrl && (
+            <video
+              src={playbackUrl}
+              autoPlay
+              controls
+              playsInline
+              onLoadedMetadata={(event) => {
+                event.currentTarget.currentTime = active.startSeconds
+              }}
+              onPlay={(event) => {
+                const element = event.currentTarget
+                // One soundtrack at a time.
+                for (const other of document.querySelectorAll("video")) {
+                  if (other !== element) other.pause()
+                }
+                if (element.currentTime >= active.endSeconds - 0.05) {
+                  element.currentTime = active.startSeconds
+                }
+              }}
+              onTimeUpdate={(event) => {
+                // The preview is the MOMENT, not the film: stop at its end.
+                if (event.currentTarget.currentTime >= active.endSeconds) event.currentTarget.pause()
+              }}
+              className="h-full w-full bg-black object-contain"
+            />
+          )}
+
+          {playable && (
+            <video
+              src={playable}
+              controls
+              preload="metadata"
+              playsInline
+              className="h-full w-full bg-black object-contain"
+              style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+            />
+          )}
+
+          <span className="pointer-events-none absolute bottom-2 right-2.5 rounded-md bg-black/75 px-1.5 py-0.5 font-mono text-[11.5px] tabular-nums text-white">
+            {asPlayerTime(active.endSeconds - active.startSeconds)}
+          </span>
+        </div>
+
+        {/* The take-back, floating over the card and leaving on its own. */}
+        <AnimatePresence>
+          {undoable && (
+            <motion.div
+              key="skip-pill"
+              className="pointer-events-none absolute inset-x-3 top-3 z-20"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25, ease: EASE }}
+            >
+              <SkipPill
+                match={undoable}
+                onUndo={() => undoSkip(undoable)}
+                onReason={(reason) => onRate(undoable.id, "rejected", reason)}
+                onReclipInstead={() => {
+                  onRate(undoable.id, null)
+                  setUndoableId(null)
+                  onReclip(undoable.id)
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <div className="pt-5">
+        <DeckControls
+          onSkip={() => skip(active)}
+          onKeep={() => keep(active)}
+          disabled={regenerating}
+          deciding={deciding?.id === active.id ? deciding.decision : null}
+        />
+      </div>
+
+      {/* One reserved line for status, so a failure appearing cannot resize
+          the panel under the person's cursor. */}
+      <p className="mt-2 h-4 truncate text-center text-[11.5px] text-amber-700" data-testid="deck-status">
+        {active.reclipStatus === "failed" ? (active.reclipError ?? "Re-clip didn't work. The original is untouched — try again.") : ""}
+      </p>
+    </div>
+  )
+}
+
+// --- The stage ------------------------------------------------------------
+
+type PanelStage = "flow" | "publish" | "when" | "done"
+
+export function DeckStage({
+  video,
+  exchanges,
+  busy,
+  onSearch,
+  onSeek,
+  onKeep,
+  onRate,
+  onReclip,
+  onUploadMore,
+  uploadFraction,
+}: {
+  video: Video
+  exchanges: StageExchange[]
+  busy: boolean
+  onSearch: (instruction: string) => void
+  onSeek: (seconds: number) => void
+  /** Keep: persist the verdict AND queue the cut, as one coordinated act. */
+  onKeep: (requestId: string, matchId: string) => void
+  onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
+  /** Ask the system to re-evaluate this SAME moment and cut it better. */
+  onReclip: (requestId: string, matchId: string) => void
+  /** Back to the empty upload state — what "home" and "upload more" mean. */
+  onUploadMore: () => void
+  /** 0..1 while this video's bytes are still going up; null after. */
+  uploadFraction: number | null
+}) {
+  const [draft, setDraft] = useState("")
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [stage, setStage] = useState<PanelStage>("flow")
+  /** The account/caption choice carried from Where → When → retry. */
+  const [publishChoice, setPublishChoice] = useState<{ accountIds: string[]; caption: string } | null>(null)
+  const [publishBusy, setPublishBusy] = useState(false)
+  const [outcomes, setOutcomes] = useState<PublishOutcome[]>([])
+  const [publishMode, setPublishMode] = useState<"now" | "scheduled">("now")
+  const [publishWhen, setPublishWhen] = useState<Date | null>(null)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
+  /** Session-local names and removals for kept tiles; the server holds the truth for the library. */
+  const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>({})
+  const [removedClipIds, setRemovedClipIds] = useState<Set<string>>(new Set())
+  const [tileError, setTileError] = useState<string | null>(null)
+
+  const current = exchanges.at(-1) ?? null
+  const searching = current?.request.status === "pending" || current?.request.status === "searching"
+  const understanding =
+    video.index?.status === "pending" || video.index?.status === "queued" || video.index?.status === "running"
+  const canSend = draft.trim().length > 0 && video.readyForSearch && !busy && !searching
+
+  const submit = () => {
+    const instruction = draft.trim()
+    if (!instruction || busy || searching) return
+    setDraft("")
+    onSearch(instruction)
+  }
+
+  const matches = current?.request.status === "completed" ? (current.request.matches ?? []) : []
+  const clipByMatch = useMemo(
+    () => new Map((current?.clips ?? []).map((clip) => [clip.clipMatchId, clip])),
+    [current?.clips],
+  )
+  const queue = useMemo(() => deckQueue(matches), [matches])
+
+  /**
+   * Everything kept this session, across every question asked of this
+   * video — assembled with each tile's true state.
+   */
+  const keptTiles: KeptClipTile[] = useMemo(() => {
+    const tiles: KeptClipTile[] = []
+    for (const exchange of exchanges) {
+      const clipsByMatchId = new Map(exchange.clips.map((clip) => [clip.clipMatchId, clip]))
+      for (const match of exchange.request.matches ?? []) {
+        if (match.feedback !== "approved") continue
+        const clip = clipsByMatchId.get(match.id) ?? null
+        const id = clip?.id ?? match.id
+        if (removedClipIds.has(id)) continue
+        const durationSeconds = clip?.durationSeconds ?? match.durationSeconds
+        tiles.push({
+          id,
+          title: titleOverrides[id] ?? match.description ?? "Kept moment",
+          duration: durationSeconds != null ? asPlayerTime(durationSeconds) : null,
+          url: clip?.status === "ready" ? (clip.url ?? null) : null,
+          poster: match.thumbnailUrl ?? null,
+          status:
+            clip == null || clip.status === "pending" || clip.status === "generating"
+              ? "cutting"
+              : clip.status === "failed"
+                ? "failed"
+                : "ready",
+          error: clip?.status === "failed" ? (clip.error ?? null) : null,
+        })
+      }
+    }
+    return tiles
+  }, [exchanges, titleOverrides, removedClipIds])
+
+  const publishable: PublishableClip[] = useMemo(
+    () => keptTiles.map((tile) => ({ id: tile.id, title: tile.title, ready: tile.status === "ready" && tile.url != null })),
+    [keptTiles],
+  )
+
+  const renameTile = useCallback((id: string, title: string) => {
+    setTileError(null)
+    // Paint first; the library will show the same name once the server has
+    // it. A refusal puts the old name back and says why.
+    setTitleOverrides((current) => ({ ...current, [id]: title }))
+    api.renameClip(id, title).catch((cause) => {
+      setTitleOverrides((current) => {
+        const next = { ...current }
+        delete next[id]
+        return next
+      })
+      setTileError(cause instanceof Error ? cause.message : "Couldn't rename that clip.")
+    })
+  }, [])
+
+  const deleteTile = useCallback((id: string) => {
+    setTileError(null)
+    if (!window.confirm("Delete this clip? This can't be undone.")) return
+    setRemovedClipIds((current) => new Set(current).add(id))
+    api.deleteClip(id).catch((cause) => {
+      setRemovedClipIds((current) => {
+        const next = new Set(current)
+        next.delete(id)
+        return next
+      })
+      setTileError(cause instanceof Error ? cause.message : "Couldn't delete that clip.")
+    })
+  }, [])
+
+  const readyClips = publishable.filter((clip) => clip.ready)
+
+  const postNow = useCallback(
+    async (accountIds: string[], caption: string) => {
+      setPublishBusy(true)
+      setPublishChoice({ accountIds, caption })
+      const results = await publishEach(readyClips, { caption, accountIds })
+      setOutcomes(results)
+      setPublishMode("now")
+      setPublishWhen(null)
+      setPublishBusy(false)
+      setStage("done")
+    },
+    [readyClips],
+  )
+
+  const commitSchedule = useCallback(
+    async (when: Date) => {
+      if (!publishChoice) return
+      setPublishBusy(true)
+      setScheduleError(null)
+      const results = await publishEach(readyClips, {
+        caption: publishChoice.caption,
+        accountIds: publishChoice.accountIds,
+        scheduledAt: when.toISOString(),
+      })
+      setPublishBusy(false)
+      if (results.every((result) => !result.ok) && results.length > 0) {
+        // Nothing was accepted: stay here and show the first reason in
+        // place, so the fix (usually the time) is one tap away.
+        setScheduleError(results[0]!.detail)
+        return
+      }
+      setOutcomes(results)
+      setPublishMode("scheduled")
+      setPublishWhen(when)
+      setStage("done")
+    },
+    [publishChoice, readyClips],
+  )
+
+  const retryFailed = useCallback(async () => {
+    const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).map((outcome) => outcome.clipId))
+    const again = readyClips.filter((clip) => failedIds.has(clip.id))
+    if (again.length === 0 || !publishChoice) return
+    setPublishBusy(true)
+    const results = await publishEach(again, {
+      caption: publishChoice.caption,
+      accountIds: publishChoice.accountIds,
+      ...(publishMode === "scheduled" && publishWhen ? { scheduledAt: publishWhen.toISOString() } : {}),
+    })
+    setOutcomes((current) => {
+      const byId = new Map(results.map((result) => [result.clipId, result]))
+      return current.map((outcome) => byId.get(outcome.clipId) ?? outcome)
+    })
+    setPublishBusy(false)
+  }, [outcomes, readyClips, publishChoice, publishMode, publishWhen])
+
+  // --- What the panel shows -----------------------------------------------
+
+  const leader = !video.readyForSearch
+  const showAskIdle = !leader && exchanges.length === 0
+  const kept = matches.filter((match) => match.feedback === "approved").length
+
+  return (
+    <section
+      className="mx-auto w-full max-w-[34rem]"
+      aria-label="Review your moments"
+      data-testid="deck-stage"
+    >
+      <div className="rounded-3xl bg-shcard p-5 shadow-sm ring-1 ring-shborder sm:p-6">
+        {stage === "publish" ? (
+          <WhereTo
+            clips={publishable}
+            busy={publishBusy}
+            onBack={() => setStage("flow")}
+            onPostNow={(accountIds, caption) => void postNow(accountIds, caption)}
+            onSchedule={(accountIds, caption) => {
+              setPublishChoice({ accountIds, caption })
+              setScheduleError(null)
+              setStage("when")
+            }}
+          />
+        ) : stage === "when" ? (
+          <WhenTo
+            busy={publishBusy}
+            error={scheduleError}
+            onBack={() => setStage("publish")}
+            onCommit={(when) => void commitSchedule(when)}
+          />
+        ) : stage === "done" ? (
+          <PublishDone
+            mode={publishMode}
+            when={publishWhen}
+            outcomes={outcomes}
+            busy={publishBusy}
+            onRetryFailed={outcomes.some((outcome) => !outcome.ok) ? () => void retryFailed() : null}
+            onHome={onUploadMore}
+          />
+        ) : leader ? (
+          <div>
+            <div className="overflow-hidden rounded-2xl">
+              <FilmLeader className="aspect-[3/4] w-full" />
+            </div>
+            <p className="mt-3 h-5 text-center text-[13px] text-muted-foreground" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
+              {uploadFraction !== null
+                ? `Uploading — ${Math.round(uploadFraction * 100)}%`
+                : video.status === "failed"
+                  ? (video.error ?? "This video couldn't be processed.")
+                  : "Reading your video — questions open the moment it's done"}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {showAskIdle && (
+              <div className="py-2">
+                <h2 className="text-xl font-semibold tracking-tight">What should I find?</h2>
+                <p className="mt-1 text-[13.5px] text-muted-foreground">
+                  {understanding
+                    ? video.index?.readThroughSeconds
+                      ? `Still watching — ${describeMinutes(video.index.readThroughSeconds)} in so far. Ask away, and I'll answer from what I've seen.`
+                      : "Still watching this video. Ask away — I'll answer as soon as I've seen enough."
+                    : "Describe the moment in your own words — whatever you type is what gets searched."}
+                </p>
+                <div className="mt-3 flex flex-col">
+                  {SUGGESTIONS.map((text, i) => (
+                    <button
+                      key={text}
+                      type="button"
+                      onClick={() => {
+                        setDraft(text)
+                        inputRef.current?.focus()
+                      }}
+                      className="-mx-1.5 flex items-center gap-2 rounded-lg border-b border-shborder px-1.5 py-2.5 text-left text-[13.5px] transition-colors hover:bg-shaccent"
+                      style={{ animation: `fade-up 350ms cubic-bezier(0.23,1,0.32,1) ${i * 90}ms both` }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/60" aria-hidden>
+                        <path d="M9 10l-5 5 5 5" />
+                        <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+                      </svg>
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {current && (
+              <div className="flex flex-col gap-2.5">
+                {/* The question as asked, then the answer out loud. */}
+                <p className="text-[12.5px] text-muted-foreground">
+                  <span className="font-medium text-foreground/70">You asked:</span> {current.request.instruction}
+                </p>
+                {searching ? (
+                  <p className="text-sm text-muted-foreground" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
+                    {understanding
+                      ? "Still taking notes on this video — I'll answer the moment I've seen enough."
+                      : "Looking through what I know about this video…"}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <StreamedLine
+                      key={current.request.id + current.request.status}
+                      text={answerLine(current.request, video.index?.readThroughSeconds ?? null)}
+                      className={`text-sm leading-relaxed ${current.request.status === "failed" ? "text-destructive" : ""}`}
+                    />
+                    {current.request.answeredFrom === "notes" && (
+                      <span className="text-[11.5px] text-muted-foreground/80">From what I remember of this video</span>
+                    )}
+                  </div>
+                )}
+                {!searching && <CoverageGap request={current.request} onSeek={onSeek} />}
+                {!searching && (
+                  <UncertainMoments
+                    request={current.request}
+                    onSeek={onSeek}
+                    onLookAgain={!busy && !searching && video.readyForSearch ? () => onSearch("look again") : null}
+                  />
+                )}
+              </div>
+            )}
+
+            {searching && (
+              <div className="aspect-[3/4] w-full animate-pulse rounded-2xl bg-shmuted" aria-hidden />
+            )}
+
+            {!searching && queue.length > 0 && current && (
+              <Deck
+                matches={matches}
+                clipByMatch={clipByMatch}
+                playbackUrl={video.playback?.url ?? null}
+                onSeek={onSeek}
+                onKeep={(matchId) => onKeep(current.request.id, matchId)}
+                onRate={(matchId, verdict, reason) => onRate(current.request.id, matchId, verdict, reason)}
+                onReclip={(matchId) => onReclip(current.request.id, matchId)}
+                hotkeys={stage === "flow"}
+              />
+            )}
+
+            {/* The deck ran out (or the answer had no deck): what remains is
+                the outcome — the kept grid when there is one, the honest
+                fork when there is not. */}
+            {!searching && queue.length === 0 && current && matches.length > 0 && (
+              <div style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}>
+                {keptTiles.length > 0 ? (
+                  <>
+                    <p className="pb-1 text-[13px] text-muted-foreground">
+                      That&apos;s every moment — you kept {kept} of {matches.length} from this question.
+                    </p>
+                    <KeptGrid
+                      clips={keptTiles}
+                      onReview={() => setStage("publish")}
+                      onRename={renameTile}
+                      onDelete={deleteTile}
+                    />
+                  </>
+                ) : (
+                  <DeckEndState kept={0} total={matches.length} onUploadMore={onUploadMore} />
+                )}
+              </div>
+            )}
+
+            {/* Kept clips from EARLIER questions stay reachable while a new
+                answer's deck is up-front. */}
+            {!searching && queue.length > 0 && keptTiles.length > 0 && (
+              <details className="pt-1">
+                <summary className="cursor-pointer text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground">
+                  {keptTiles.length} kept so far
+                </summary>
+                <div className="pt-3">
+                  <KeptGrid clips={keptTiles} onReview={() => setStage("publish")} onRename={renameTile} onDelete={deleteTile} />
+                </div>
+              </details>
+            )}
+
+            {/* One reserved line for tile trouble (rename/delete refusals). */}
+            <p className="h-4 text-center text-[11.5px] text-destructive">{tileError ?? ""}</p>
+          </div>
+        )}
+      </div>
+
+      {/* The question box, under the panel, always reachable while the
+          video can be searched — asking is the product. Hidden only inside
+          the publish steps, where the panel is a form. */}
+      {stage === "flow" && !leader && (
+        <form
+          className="mt-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            submit()
+          }}
+        >
+          <div
+            role="presentation"
+            onClick={() => inputRef.current?.focus()}
+            className="flex cursor-text items-end gap-2 rounded-2xl bg-shcard p-2 shadow-sm ring-1 ring-shborder transition-[box-shadow] duration-150 focus-within:ring-ring"
+          >
+            <textarea
+              ref={inputRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault()
+                  submit()
+                }
+              }}
+              rows={1}
+              placeholder={exchanges.length === 0 ? "Ask for a moment in this video" : "Ask for another moment"}
+              className="max-h-32 min-h-[2.5rem] w-full resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+              disabled={!video.readyForSearch}
+            />
+            <button
+              type="submit"
+              aria-label="Search"
+              disabled={!canSend}
+              className={`mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] ${
+                canSend ? "bg-shprimary text-primary-foreground" : "bg-shmuted text-muted-foreground"
+              }`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  )
+}

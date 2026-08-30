@@ -392,6 +392,20 @@ export interface SocialAccount {
   status: "connected" | "disconnected" | "reconnect_required"
 }
 
+/**
+ * A publish promised for a chosen minute. Nothing has gone out while status
+ * is 'waiting'; 'failed' carries the reason the promise could not be kept.
+ */
+export interface ScheduledPost {
+  id: string
+  clipId: string
+  caption: string
+  accountIds: string[]
+  scheduledAt: string
+  status: "waiting" | "firing" | "fired" | "failed" | "canceled"
+  error: string | null
+}
+
 export interface SocialAccountsPage {
   /** False when the deployment has no Zernio configured — publishing is honestly absent. */
   configured: boolean

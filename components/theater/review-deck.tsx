@@ -1,6 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import type { ClipMatch, MatchFeedbackReason } from "@/lib/types"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 /**
  * The review deck: one moment at a time, three decisions.
@@ -22,12 +30,18 @@ import type { ClipMatch, MatchFeedbackReason } from "@/lib/types"
  * "↻ Re-clip instead", which brings the moment back and refines it,
  * because a poor cut is the system's job to fix, not the reviewer's.
  *
- * Hand-rolled rather than Astryx, on purpose: the deck lives inside the
- * theater drawer, which is custom by the owner's decision (2026-08-22),
- * and every neighbouring control there speaks this same inline-SVG idiom.
- * No Astryx component is mounted anywhere in the app today (main builds
- * with the shadcn/ui workspace pilot), so an Astryx island here would
- * inherit neither its neighbours' look nor Astryx's theme contract.
+ * Since the owner's screens of 2026-08-30 the deck lives on the light
+ * stage panel: tall card, big circular ✕/✓ beneath it on the white ground,
+ * ↻ riding the card's corner. On-media furniture (the ↻ disc, the rework
+ * overlay, the skip pill) stays dark glass — it sits on footage, not on
+ * the panel.
+ *
+ * Hand-rolled rather than Astryx, on purpose: the deck belongs to the
+ * theater, which is custom by the owner's decision (2026-08-22), and no
+ * Astryx component is mounted anywhere in the app today (main builds with
+ * the shadcn/ui workspace pilot) — an Astryx island here would inherit
+ * neither its neighbours' look nor Astryx's theme contract. The ⋯ menu on
+ * kept tiles is the shadcn DropdownMenu the rest of the app already uses.
  */
 
 export const REJECTION_REASONS: ReadonlyArray<{ reason: MatchFeedbackReason; label: string }> = [
@@ -48,9 +62,9 @@ export function deckQueue(matches: ClipMatch[]): ClipMatch[] {
     .sort((a, b) => b.confidence - a.confidence)
 }
 
-function CheckIcon() {
+function CheckIcon({ size = 24 }: { size?: number }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M4 12.5l5 5L20 6.5" />
     </svg>
   )
@@ -58,7 +72,7 @@ function CheckIcon() {
 
 function CrossIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M6 6l12 12M18 6L6 18" />
     </svg>
   )
@@ -85,10 +99,10 @@ export function ReclipIcon({ spinning }: { spinning: boolean }) {
 }
 
 /**
- * The two decision buttons under the card. Skip is the quiet outline
- * circle, Keep the solid one — the reference deck's language. `deciding`
- * fills the chosen control for the beat before the card transitions out;
- * it is a confirmation of the tap, not a lasting state.
+ * The two decision buttons under the card, on the white stage: Skip the
+ * quiet outline circle, Keep the solid dark one — the owner's screens.
+ * `deciding` fills the chosen control for the beat before the card
+ * transitions out; a confirmation of the tap, not a lasting state.
  */
 export function DeckControls({
   onSkip,
@@ -102,7 +116,7 @@ export function DeckControls({
   deciding: "keep" | "skip" | null
 }) {
   return (
-    <div className="flex items-center justify-center gap-10" data-testid="deck-controls">
+    <div className="flex items-center justify-center gap-7" data-testid="deck-controls">
       <button
         type="button"
         aria-label="Skip — not useful, move on"
@@ -110,10 +124,10 @@ export function DeckControls({
         aria-pressed={deciding === "skip"}
         onClick={onSkip}
         disabled={disabled || deciding !== null}
-        className={`flex h-11 w-11 items-center justify-center rounded-full ring-1 transition-colors ${
+        className={`flex h-14 w-14 items-center justify-center rounded-full ring-1 transition-all ${
           deciding === "skip"
-            ? "bg-red-400/90 text-black ring-red-300"
-            : "text-white/70 ring-white/25 hover:text-white hover:ring-white/60"
+            ? "scale-95 bg-red-500 text-white ring-red-500"
+            : "bg-shcard text-foreground ring-shborder hover:bg-shaccent"
         } disabled:cursor-default ${deciding === null ? "disabled:opacity-40" : ""}`}
       >
         <CrossIcon />
@@ -125,10 +139,10 @@ export function DeckControls({
         aria-pressed={deciding === "keep"}
         onClick={onKeep}
         disabled={disabled || deciding !== null}
-        className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
+        className={`flex h-16 w-16 items-center justify-center rounded-full transition-all ${
           deciding === "keep"
-            ? "bg-emerald-300 text-black"
-            : "bg-white text-black hover:bg-white/85"
+            ? "scale-95 bg-emerald-500 text-white"
+            : "bg-shprimary text-primary-foreground hover:opacity-90"
         } disabled:cursor-default ${deciding === null ? "disabled:opacity-40" : ""}`}
       >
         <CheckIcon />
@@ -139,7 +153,8 @@ export function DeckControls({
 
 /**
  * The Re-clip button, riding the card's corner like the reference deck.
- * Same moment, new edit — never a different moment.
+ * Same moment, new edit — never a different moment. Dark glass: it sits on
+ * footage.
  */
 export function ReclipCardButton({
   pending,
@@ -164,7 +179,7 @@ export function ReclipCardButton({
             ? "Re-clip limit reached for this moment"
             : "Re-clip — same moment, new edit"
       }
-      className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/25 backdrop-blur-sm transition-colors hover:bg-black/75 disabled:cursor-default disabled:opacity-50"
+      className="absolute right-2.5 top-2.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/25 backdrop-blur-sm transition-colors hover:bg-black/75 disabled:cursor-default disabled:opacity-50"
     >
       <ReclipIcon spinning={pending} />
     </button>
@@ -195,6 +210,7 @@ export function RegeneratingOverlay() {
  * and the next card already up when this appears; it offers Undo, the
  * optional reasons, and — for "Timing is off" — the automated recovery,
  * since a right moment with a poor cut is exactly what ↻ exists for.
+ * Dark glass: it floats over the card's footage.
  */
 export function SkipPill({
   match,
@@ -250,22 +266,201 @@ export function SkipPill({
   )
 }
 
-/** The deck ran out: every moment got a decision. */
-export function DeckEndState({ kept, total }: { kept: number; total: number }) {
+/**
+ * The deck ran out and nothing was kept: the honest fork. With keeps, the
+ * kept grid is the end state instead — the outcome is worth looking at.
+ */
+export function DeckEndState({
+  kept,
+  total,
+  onUploadMore,
+}: {
+  kept: number
+  total: number
+  onUploadMore?: () => void
+}) {
   return (
-    <div className="flex flex-col items-center gap-1 px-4 py-8 text-center" data-testid="deck-end">
-      <p className="text-[14px] font-semibold text-white">That&apos;s every moment</p>
-      <p className="text-[12.5px] text-white/70">
+    <div className="flex flex-col items-center gap-1 px-5 py-12 text-center" data-testid="deck-end">
+      <p className="text-lg font-semibold text-foreground">That&apos;s every moment</p>
+      <p className="max-w-[17rem] text-[13px] leading-snug text-muted-foreground">
         {kept === 0
-          ? `You skipped all ${total}. Try asking a different way.`
-          : `You kept ${kept} of ${total}. ${kept === 1 ? "It's" : "They're"} in your library.`}
+          ? `You skipped all ${total}. Try asking for the moment a different way.`
+          : `Find more moments by uploading more video, or work with what you kept.`}
       </p>
-      {kept > 0 && (
+      <div className="mt-6 flex w-full max-w-[19rem] flex-col gap-2.5">
+        {onUploadMore && (
+          <button
+            type="button"
+            onClick={onUploadMore}
+            className="w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3 text-[13.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+          >
+            Upload more video
+          </button>
+        )}
         <a
           href="/clips"
-          className="mt-3 whitespace-nowrap rounded-full bg-white px-4 py-2 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
+          className={`w-full whitespace-nowrap rounded-full px-4 py-3 text-center text-[13.5px] font-medium transition-colors ${
+            onUploadMore
+              ? "text-foreground ring-1 ring-shborder hover:bg-shaccent"
+              : "bg-shprimary font-semibold text-primary-foreground"
+          }`}
         >
-          Open your library
+          Go to your library
+        </a>
+      </div>
+    </div>
+  )
+}
+
+/** One tile of the kept grid, with everything the panel knows about it. */
+export interface KeptClipTile {
+  /** The clip's id when the cut exists; the match id stands in before it. */
+  id: string
+  title: string
+  /** m:ss, or null while the length is not yet known. */
+  duration: string | null
+  url: string | null
+  poster: string | null
+  status: "ready" | "cutting" | "failed"
+  error: string | null
+}
+
+/**
+ * What was kept, in the owner's grid: portrait tiles, name and length over
+ * the footage, a ⋯ menu per tile, Review and export beneath. Tiles tell the
+ * truth about their state — a clip still cutting says so and a failed cut
+ * shows its reason, because a grid of green rectangles is not a library.
+ *
+ * The ⋯ menu carries what a tile can actually do here: Rename and Delete
+ * act in place; captions, sharing to a room, and downloading live in the
+ * Library, one click away, rather than duplicated into this flow.
+ */
+export function KeptGrid({
+  clips,
+  onReview,
+  onRename,
+  onDelete,
+}: {
+  clips: KeptClipTile[]
+  /** Move on to publishing what's ready. Absent → the button links to the library. */
+  onReview?: () => void
+  onRename: (id: string, title: string) => void
+  onDelete: (id: string) => void
+}) {
+  const [playingId, setPlayingId] = useState<string | null>(null)
+  if (clips.length === 0) return null
+  const readyCount = clips.filter((clip) => clip.status === "ready").length
+  const cutting = clips.length - readyCount - clips.filter((clip) => clip.status === "failed").length
+
+  const rename = (tile: KeptClipTile) => {
+    // window.prompt over a bespoke dialog: one field, one act, and the
+    // browser's own affordance is unmistakably "type a name".
+    const title = window.prompt("Name this clip", tile.title)
+    if (title !== null && title.trim() !== "" && title.trim() !== tile.title) onRename(tile.id, title.trim())
+  }
+
+  return (
+    <div className="px-1 pb-1" data-testid="kept-grid">
+      <p className="pb-3 text-lg font-semibold text-foreground">
+        {clips.length} {clips.length === 1 ? "clip" : "clips"} kept
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        {clips.map((tile) => (
+          <div
+            key={tile.id}
+            className="group relative block aspect-[9/16] overflow-hidden rounded-2xl bg-[#101013] ring-1 ring-shborder"
+            data-testid="kept-tile"
+          >
+            {tile.status === "ready" && tile.url && playingId === tile.id ? (
+              <video src={tile.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
+            ) : (
+              <button
+                type="button"
+                onClick={() => tile.status === "ready" && tile.url && setPlayingId(tile.id)}
+                className="block h-full w-full text-left"
+                aria-label={tile.status === "ready" ? `Play ${tile.title}` : tile.title}
+              >
+                {tile.poster ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={tile.poster} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="block h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
+                )}
+                {tile.status === "cutting" && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/45">
+                    <span className="rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
+                      Cutting…
+                    </span>
+                  </span>
+                )}
+                {tile.status === "failed" && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/55 p-3">
+                    <span className="text-center text-[11px] leading-snug text-red-200">
+                      {tile.error ?? "The cut failed. Keep it again to retry."}
+                    </span>
+                  </span>
+                )}
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 pt-9 text-left">
+                  <span className="block truncate text-[12.5px] font-medium text-white">{tile.title}</span>
+                  <span className="block h-4 font-mono text-[11px] tabular-nums text-white/70">{tile.duration ?? ""}</span>
+                </span>
+              </button>
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Options for ${tile.title}`}
+                  className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-black/75"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <circle cx="5" cy="12" r="1.6" />
+                    <circle cx="12" cy="12" r="1.6" />
+                    <circle cx="19" cy="12" r="1.6" />
+                  </svg>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem disabled={tile.status !== "ready"} onSelect={() => rename(tile)}>
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href="/clips">Edit &amp; share in Library</a>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={tile.status === "cutting"}
+                  onSelect={() => onDelete(tile.id)}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ))}
+      </div>
+
+      {/* One reserved line: "still cutting" news must not reflow the button. */}
+      <p className="mt-2 h-4 text-center text-[11.5px] text-muted-foreground">
+        {cutting > 0 ? `${cutting} still cutting — ${cutting === 1 ? "it joins" : "they join"} the grid when done` : ""}
+      </p>
+      {onReview ? (
+        <button
+          type="button"
+          onClick={onReview}
+          disabled={readyCount === 0}
+          className="mt-1 block w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3 text-center text-[13.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
+        >
+          Review and export
+        </button>
+      ) : (
+        <a
+          href="/clips"
+          className="mt-1 block w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3 text-center text-[13.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+        >
+          Review and export
         </a>
       )}
     </div>
