@@ -167,7 +167,7 @@ function ClipsBody() {
    * lets the same render be started twice.
    */
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
-  const { requireSignIn } = useWorkspaceSignInGate()
+  const { requireSignIn, askToSignIn, isSignedIn } = useWorkspaceSignInGate()
 
   // Signed in from the prompt and come back? Reopen the clip they were about
   // to publish, rather than dropping them on the library with no idea where
@@ -520,24 +520,51 @@ function ClipsBody() {
             ))}
           </div>
         ) : clips.length === 0 ? (
-          // The empty page holds its room instead of huddling under the
-          // heading — the same dashed-card state the other screens use.
+          // An empty list means one of two different things, and saying the
+          // wrong one tells a person their work is gone.
+          //
+          // Signed out, the API scopes this list to the anonymous session —
+          // this browser tab. It never looked at the account's clips. So
+          // "No clips yet" would assert an absence nobody verified, which is
+          // the failure CLAUDE.md names first. Signed in, the list IS the
+          // whole answer and the original words are true.
           <Card className="flex flex-1 items-center justify-center border-dashed">
             <CardContent className="flex max-w-md flex-col items-center gap-3 py-12 text-center">
               <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
                 <HugeiconsIcon icon={VideoReplayIcon} className="size-6" />
               </span>
-              <h2 className="text-lg font-semibold">No clips yet</h2>
-              <p className="text-sm text-muted-foreground">
-                Cut a moment from any video and it lands here — ready to play, download, caption,
-                and publish.
-              </p>
-              <Button className="mt-2" asChild>
-                <a href="/start">
-                  <HugeiconsIcon icon={ScissorsIcon} />
-                  Clip a video
-                </a>
-              </Button>
+              {isSignedIn ? (
+                <>
+                  <h2 className="text-lg font-semibold">No clips yet</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Cut a moment from any video and it lands here — ready to play, download,
+                    caption, and publish.
+                  </p>
+                  <Button className="mt-2" asChild>
+                    <a href="/start">
+                      <HugeiconsIcon icon={ScissorsIcon} />
+                      Clip a video
+                    </a>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold">Sign in to see your clips</h2>
+                  <p className="text-sm text-muted-foreground">
+                    This page is only showing clips made in this browser tab. Anything saved to
+                    your account is waiting behind sign-in.
+                  </p>
+                  <Button className="mt-2" onClick={askToSignIn}>
+                    Sign in
+                  </Button>
+                  <Button variant="secondary" asChild>
+                    <a href="/start">
+                      <HugeiconsIcon icon={ScissorsIcon} />
+                      Clip a video
+                    </a>
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         ) : (
