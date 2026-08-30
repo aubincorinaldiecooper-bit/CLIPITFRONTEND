@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { Clip, ClipRequest, MatchFeedback, Video } from "@/lib/types"
+import type { Clip, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowLeft01Icon, ArrowRight01Icon, ScissorsIcon } from "@hugeicons/core-free-icons"
@@ -283,6 +283,32 @@ export default function StartPage() {
     [fail],
   )
 
+  /**
+   * The person moving a clip to where the moment actually is. The server
+   * answers at once with the clip back in `pending` and re-renders in the
+   * background; merging that row into the exchange is what wakes the same
+   * polling that watches a fresh cut.
+   */
+  const adjustClip = useCallback(
+    async (exchangeRequestId: string, clipId: string, startSeconds: number, endSeconds: number) => {
+      setError(null)
+      try {
+        const { clip } = await api.setClipBoundaries(clipId, startSeconds, endSeconds)
+        setExchanges((previous) =>
+          previous.map((exchange) => {
+            if (exchange.request.id !== exchangeRequestId) return exchange
+            const merged = new Map(exchange.clips.map((existing) => [existing.id, existing]))
+            merged.set(clip.id, clip)
+            return { ...exchange, clips: Array.from(merged.values()) }
+          }),
+        )
+      } catch (cause) {
+        fail(cause)
+      }
+    },
+    [fail],
+  )
+
   const showVerdict = useCallback(
     (exchangeRequestId: string, matchId: string, verdict: MatchFeedback | null) =>
       setExchanges((previous) =>
@@ -307,7 +333,12 @@ export default function StartPage() {
    * user has since replaced, which would resurrect a moment they removed twice.
    */
   const rateMatch = useCallback(
-    async (exchangeRequestId: string, matchId: string, verdict: MatchFeedback | null) => {
+    async (
+      exchangeRequestId: string,
+      matchId: string,
+      verdict: MatchFeedback | null,
+      reason?: MatchFeedbackReason | null,
+    ) => {
       setError(null)
 
       const previousVerdict =
@@ -323,7 +354,7 @@ export default function StartPage() {
       showVerdict(exchangeRequestId, matchId, verdict)
 
       try {
-        const { match } = await api.rateMatch(exchangeRequestId, matchId, verdict)
+        const { match } = await api.rateMatch(exchangeRequestId, matchId, verdict, reason ?? null)
         if (!isCurrent()) return
         // Trust the row the server returned rather than what was sent, and keep
         // holding it until a poll comes back agreeing.
@@ -537,6 +568,7 @@ export default function StartPage() {
             onSeek={seekTo}
             onClip={clipMatch}
             onRate={rateMatch}
+            onAdjust={adjustClip}
           />
         </div>
       )}
