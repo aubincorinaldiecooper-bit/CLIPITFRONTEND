@@ -266,26 +266,6 @@ export default function StartPage() {
     [video, busy, fail],
   )
 
-  const clipMatch = useCallback(
-    async (exchangeRequestId: string, matchId: string) => {
-      setError(null)
-      try {
-        const { clips: created } = await api.generateClips(exchangeRequestId, [matchId])
-        setExchanges((previous) =>
-          previous.map((exchange) => {
-            if (exchange.request.id !== exchangeRequestId) return exchange
-            const merged = new Map(exchange.clips.map((clip) => [clip.id, clip]))
-            for (const clip of created) merged.set(clip.id, clip)
-            return { ...exchange, clips: Array.from(merged.values()) }
-          }),
-        )
-      } catch (cause) {
-        fail(cause)
-      }
-    },
-    [fail],
-  )
-
   /**
    * Asking the system to reconsider a moment. The tap lands instantly as a
    * pending mark on the match; the server answers with the same, and the
@@ -419,6 +399,59 @@ export default function StartPage() {
       }
     },
     [exchanges, fail, showVerdict],
+  )
+
+  /**
+   * Keep, as ONE act: the verdict and the cut stand or fall together.
+   *
+   * The card leaves the deck the instant the check is tapped, so a half
+   * success must not be able to hide behind that exit. If the verdict fails,
+   * nothing else runs and the card returns. If the verdict lands but the cut
+   * cannot even be queued, the verdict is rolled back — server and screen —
+   * so the deck's end state can never claim a clip the library will not
+   * have. A queued cut that later fails to render shows on the clip itself,
+   * exactly as saving always has.
+   */
+  const keepMatch = useCallback(
+    async (exchangeRequestId: string, matchId: string) => {
+      setError(null)
+      const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
+      verdictAttempts.current.set(matchId, attempt)
+      const isCurrent = () => verdictAttempts.current.get(matchId) === attempt
+
+      pendingVerdicts.current.set(matchId, { verdict: "approved", reason: null })
+      showVerdict(exchangeRequestId, matchId, "approved", null)
+
+      try {
+        await api.rateMatch(exchangeRequestId, matchId, "approved", null)
+      } catch (cause) {
+        if (!isCurrent()) return
+        pendingVerdicts.current.delete(matchId)
+        showVerdict(exchangeRequestId, matchId, null, null)
+        fail(cause)
+        return
+      }
+
+      try {
+        const { clips: created } = await api.generateClips(exchangeRequestId, [matchId])
+        setExchanges((previous) =>
+          previous.map((exchange) => {
+            if (exchange.request.id !== exchangeRequestId) return exchange
+            const merged = new Map(exchange.clips.map((clip) => [clip.id, clip]))
+            for (const clip of created) merged.set(clip.id, clip)
+            return { ...exchange, clips: Array.from(merged.values()) }
+          }),
+        )
+      } catch (cause) {
+        if (!isCurrent()) return
+        // Keep means SAVED. No queued cut → the whole keep is taken back.
+        pendingVerdicts.current.set(matchId, { verdict: null, reason: null })
+        showVerdict(exchangeRequestId, matchId, null, null)
+        void api.rateMatch(exchangeRequestId, matchId, null, null).catch(() => undefined)
+        fail(cause)
+      }
+    },
+    [fail, showVerdict],
   )
 
   const seekTo = useCallback((seconds: number) => {
@@ -617,7 +650,7 @@ export default function StartPage() {
             busy={busy}
             onSearch={startSearch}
             onSeek={seekTo}
-            onClip={clipMatch}
+            onKeep={keepMatch}
             onRate={rateMatch}
             onReclip={reclipMatch}
           />

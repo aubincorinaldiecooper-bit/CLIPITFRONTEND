@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import type { Clip, ClipMatch, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
-import { MatchFeedbackControls } from "./match-feedback"
+import { DeckControls, DeckEndState, ReclipCardButton, RegeneratingOverlay, SkipPill, deckQueue } from "./review-deck"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 
@@ -94,7 +94,9 @@ function answerLine(request: ClipRequest, readThroughSeconds?: number | null): s
   }
 
   const found = count === 1 ? "Found one moment." : `Found ${count} moments.`
-  return `${found} Click one to jump there, or cut it into a clip.`
+  return count === 1
+    ? `${found} Keep it, skip it, or have me re-cut it.`
+    : `${found} Keep, skip, or re-cut each one.`
 }
 
 /** Whole minutes and seconds, for a duration rather than a position. */
@@ -262,7 +264,7 @@ export function QueryDrawer({
   busy,
   onSearch,
   onSeek,
-  onClip,
+  onKeep,
   onRate,
   onReclip,
 }: {
@@ -271,7 +273,8 @@ export function QueryDrawer({
   busy: boolean
   onSearch: (instruction: string) => void
   onSeek: (seconds: number) => void
-  onClip: (requestId: string, matchId: string) => void
+  /** Keep: persist the verdict AND queue the cut, as one coordinated act. */
+  onKeep: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
   /** Ask the system to re-evaluate this SAME moment and cut it better. */
   onReclip: (requestId: string, matchId: string) => void
@@ -403,7 +406,7 @@ export function QueryDrawer({
                   exchange={exchange}
                   playbackUrl={video.playback?.url ?? null}
                   onSeek={onSeek}
-                  onClip={onClip}
+                  onKeep={onKeep}
                   onRate={onRate}
                   onReclip={onReclip}
                   onSearch={onSearch}
@@ -478,7 +481,7 @@ function ExchangeBlock({
   exchange,
   playbackUrl,
   onSeek,
-  onClip,
+  onKeep,
   onRate,
   onReclip,
   onSearch,
@@ -491,7 +494,7 @@ function ExchangeBlock({
   /** The source video's own stream, for previewing a moment in place. */
   playbackUrl: string | null
   onSeek: (seconds: number) => void
-  onClip: (requestId: string, matchId: string) => void
+  onKeep: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
   onReclip: (requestId: string, matchId: string) => void
   onSearch: (instruction: string) => void
@@ -565,9 +568,10 @@ function ExchangeBlock({
           clipByMatch={clipByMatch}
           playbackUrl={playbackUrl}
           onSeek={onSeek}
-          onClip={(matchId) => onClip(request.id, matchId)}
+          onKeep={(matchId) => onKeep(request.id, matchId)}
           onRate={(matchId, verdict, reason) => onRate(request.id, matchId, verdict, reason)}
           onReclip={(matchId) => onReclip(request.id, matchId)}
+          hotkeys={isLatest}
         />
       )}
     </div>
@@ -671,282 +675,308 @@ function EvidencePicker({
   clipByMatch,
   playbackUrl,
   onSeek,
-  onClip,
+  onKeep,
   onRate,
   onReclip,
+  hotkeys = false,
 }: {
   matches: ClipMatch[]
   clipByMatch: Map<string, Clip>
   playbackUrl: string | null
   onSeek: (seconds: number) => void
-  onClip: (matchId: string) => void
+  onKeep: (matchId: string) => void
   onRate: (matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
   onReclip: (matchId: string) => void
+  /** Arrow keys decide, u/Backspace undoes — only for the newest answer. */
+  hotkeys?: boolean
 }) {
-  // Best first, so the promoted one is the model's strongest answer rather
-  // than whichever chunk happened to finish first. Rejected moments STAY —
-  // the owner's rule is that a verdict remains visible as a filled icon, and
-  // a visible verdict needs a visible card. They sink below everything not
-  // rejected, so waving one off still promotes the next best moment.
-  const ranked = useMemo(
-    () =>
-      [...matches].sort((a, b) => {
-        const aRejected = a.feedback === "rejected" ? 1 : 0
-        const bRejected = b.feedback === "rejected" ? 1 : 0
-        if (aRejected !== bRejected) return aRejected - bRejected
-        return b.confidence - a.confidence
-      }),
-    [matches],
-  )
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
   /** The moment playing IN the card, right where its still was. */
   const [previewingId, setPreviewingId] = useState<string | null>(null)
+  /**
+   * A decision just made: the chosen control fills for a beat before the
+   * card leaves. The card is held on screen through the flash even though
+   * its verdict is already persisted — confirmation first, then exit.
+   */
+  const [deciding, setDeciding] = useState<{ id: string; decision: "keep" | "skip" } | null>(null)
+  /** The last skip, kept only so it can be taken back or explained. */
+  const [undoableId, setUndoableId] = useState<string | null>(null)
 
-  const rate = (match: ClipMatch, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => {
-    // Rejecting the active moment pins it: the verdict must stay lookable-at
-    // (filled icon, optional reasons), not vanish under an auto-promotion
-    // the instant it lands.
-    if (verdict === "rejected") setSelectedId(match.id)
-    onRate(match.id, verdict, reason)
+  // The deck: undecided moments, strongest first. Kept and skipped cards
+  // are gone from here — deciding is what removes them.
+  const queue = useMemo(() => deckQueue(matches), [matches])
+
+  useEffect(() => {
+    if (!deciding) return
+    const timer = setTimeout(() => setDeciding(null), 240)
+    return () => clearTimeout(timer)
+  }, [deciding])
+
+  // The pill leaves on its own — unless the deck is empty, where it is the
+  // only trace of the last decision and removing it on a timer would yank
+  // the layout upward for no reason.
+  useEffect(() => {
+    if (!undoableId || queue.length === 0) return
+    const timer = setTimeout(() => setUndoableId(null), 6000)
+    return () => clearTimeout(timer)
+  }, [undoableId, queue.length])
+
+  const decidingMatch = deciding ? matches.find((match) => match.id === deciding.id) : undefined
+  const active = decidingMatch ?? queue[0]
+  const undoable = matches.find((match) => match.id === undoableId && match.feedback === "rejected") ?? null
+
+  const keep = (match: ClipMatch) => {
+    if (deciding || match.reclipStatus === "pending") return
+    // Persist FIRST, confirm second. Keep is ONE act — verdict and cut
+    // together, coordinated upstream so a half-failure rolls the whole
+    // decision back and the card returns instead of the library lying.
+    onKeep(match.id)
+    setUndoableId(null)
+    setDeciding({ id: match.id, decision: "keep" })
+    setPreviewingId(null)
   }
 
-  // Fall back rather than pin an index: polling replaces the match list, and
-  // a stale index would silently promote a different moment.
-  const active = ranked.find((match) => match.id === selectedId) ?? ranked[0]
+  const skip = (match: ClipMatch) => {
+    if (deciding || match.reclipStatus === "pending") return
+    onRate(match.id, "rejected")
+    setUndoableId(match.id)
+    setDeciding({ id: match.id, decision: "skip" })
+    setPreviewingId(null)
+  }
 
-  if (!active) return null
+  const undoSkip = (match: ClipMatch) => {
+    onRate(match.id, null)
+    setUndoableId(null)
+  }
 
-  const others = ranked.filter((match) => match.id !== active.id)
+  // The reference deck's keyboard: → keeps, ← skips, u/Backspace brings the
+  // last skip back. Only on the newest answer, and never while typing.
+  useEffect(() => {
+    if (!hotkeys) return
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      // Not just text fields: a focused video player owns its arrow keys
+      // (they seek), and stealing them would turn a scrub into a decision.
+      if (
+        target &&
+        (["INPUT", "TEXTAREA", "SELECT", "VIDEO", "AUDIO"].includes(target.tagName) || target.isContentEditable)
+      )
+        return
+      if (event.key === "ArrowRight" && active) keep(active)
+      else if (event.key === "ArrowLeft" && active) skip(active)
+      else if ((event.key === "u" || event.key === "Backspace") && undoable) undoSkip(undoable)
+      else return
+      event.preventDefault()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotkeys, active?.id, active?.reclipStatus, undoable?.id, deciding])
+
+  if (!active) {
+    // Every moment decided. Say what happened; the kept cuts live in the
+    // library, and the last skip can still be taken back from here.
+    const kept = matches.filter((match) => match.feedback === "approved").length
+    return (
+      <div
+        className="relative overflow-hidden rounded-xl bg-[#101013]"
+        style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
+      >
+        <DeckEndState kept={kept} total={matches.length} />
+        {undoable && (
+          <div className="px-3 pb-3">
+            <SkipPill
+              match={undoable}
+              onUndo={() => undoSkip(undoable)}
+              onReason={(reason) => onRate(undoable.id, "rejected", reason)}
+              onReclipInstead={() => {
+                onRate(undoable.id, null)
+                setUndoableId(null)
+                onReclip(undoable.id)
+              }}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const activeThumbnail = thumbnails[active.id] ?? null
   const clip = clipByMatch.get(active.id) ?? null
-  const busy = clip?.status === "pending" || clip?.status === "generating"
-  // Three separate facts, because one flag conflated them. A cut clip is
-  // playable as soon as it has a url; it is downloadable only once the backend
-  // also signs an attachment url. Gating playback on the download url hid the
-  // player for a clip that existed AND offered to cut it again — an action
-  // that cannot progress, since polling stops once a clip reports ready.
   const cut = clip?.status === "ready"
   const playable = cut && clip?.url
-  const downloadable = cut && clip?.downloadUrl
+  const regenerating = active.reclipStatus === "pending"
+  const behindCount = Math.min(2, Math.max(0, queue.length - 1))
 
   return (
-    <div
-      className="relative overflow-hidden rounded-xl bg-[#101013]"
-      style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) 200ms both" }}
-    >
-      <div className="p-3">
-        {/* The moment, watchable right here. The still carries a play mark
-            and the timecode in its corner; pressing it plays THIS moment in
-            place, cued from the source video's own stream, and stops when the
-            moment ends. Before the source is streamable the press falls back
-            to jumping the main player. */}
-        {!playable && previewingId !== active.id && (
-          <button
-            type="button"
-            onClick={() => (playbackUrl ? setPreviewingId(active.id) : onSeek(active.startSeconds))}
-            className="group/still relative block w-full overflow-hidden rounded-lg"
-            aria-label={`Play this moment (${asPlayerTime(active.startSeconds)} to ${asPlayerTime(active.endSeconds)})`}
-          >
-            {/* No still is not no moment: the pane keeps its shape and its
-                play control either way (a match's thumbnail is best-effort on
-                the backend and the type says so). */}
-            {activeThumbnail ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={activeThumbnail}
-                alt=""
-                onError={() => refreshThumbnail(active.id)}
-                className="aspect-video w-full bg-black/50 object-cover"
-                style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
-              />
-            ) : (
-              <span className="block aspect-video w-full bg-[#0b0e12]" />
-            )}
-            <span className="absolute inset-0 m-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover/still:scale-105">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
-              </svg>
-            </span>
-            <span className="absolute bottom-1.5 right-1.5 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-white">
-              {asPlayerTime(active.endSeconds - active.startSeconds)}
-            </span>
-          </button>
-        )}
+    <div className="relative">
+      {/* The deck's depth: shells for the candidates waiting behind this
+          one, exactly as many as exist (capped at two). Pure information —
+          "there is more after this decision". */}
+      {Array.from({ length: behindCount }, (_, i) => (
+        <div
+          key={i}
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-10 rounded-xl bg-white/[0.045] ring-1 ring-white/5"
+          style={{ transform: `scale(${1 - (i + 1) * 0.04}) translateY(-${(i + 1) * 7}px)`, zIndex: -1 - i, opacity: 0.7 - i * 0.3 }}
+        />
+      ))}
 
-        {!playable && previewingId === active.id && playbackUrl && (
-          <span className="relative block overflow-hidden rounded-lg">
-            <video
-              src={playbackUrl}
-              autoPlay
-              controls
-              playsInline
-              onLoadedMetadata={(event) => {
-                event.currentTarget.currentTime = active.startSeconds
-              }}
-              onPlay={(event) => {
-                const element = event.currentTarget
-                // One soundtrack at a time: starting the preview silences any
-                // other player on the page — the stage most of all.
-                for (const other of document.querySelectorAll("video")) {
-                  if (other !== element) other.pause()
-                }
-                // Play after the cutoff means "again": rewind to the moment's
-                // start instead of resuming past its end just to re-pause.
-                if (element.currentTime >= active.endSeconds - 0.05) {
-                  element.currentTime = active.startSeconds
-                }
-              }}
-              onTimeUpdate={(event) => {
-                // The preview is the MOMENT, not the film: stop at its end.
-                if (event.currentTarget.currentTime >= active.endSeconds) event.currentTarget.pause()
-              }}
-              className="aspect-video w-full bg-black"
-            />
-            <span className="pointer-events-none absolute right-1.5 top-1.5 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-white">
-              {asPlayerTime(active.endSeconds - active.startSeconds)}
-            </span>
-          </span>
-        )}
-
-        {playable && clip?.url && (
-          <video
-            src={clip.url}
-            controls
-            preload="metadata"
-            playsInline
-            className="w-full rounded-lg bg-black/60"
-            style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
-          />
-        )}
-      </div>
-
-      {/* Alternatives, as their own section of the card rather than a popover. */}
       <div
-        className="grid transition-[grid-template-rows,opacity] duration-300"
-        style={{
-          gridTemplateRows: open ? "1fr" : "0fr",
-          opacity: open ? 1 : 0,
-          transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
+        className="relative overflow-hidden rounded-xl bg-[#101013]"
+        style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) 200ms both" }}
       >
-        <div className="overflow-hidden">
-          <div className="border-t border-white/10 bg-black/20 p-1.5">
-            <p className="px-1.5 pb-1 text-[11px] font-medium text-white/40">Other moments</p>
-            {others.map((match) => (
-              <button
-                key={match.id}
-                type="button"
-                onClick={() => {
-                  setSelectedId(match.id)
-                  setPreviewingId(null)
-                  // Seek too: switching the answer should move the player to it,
-                  // otherwise the card and the video disagree about the subject.
-                  onSeek(match.startSeconds)
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors duration-100 hover:bg-white/5"
-              >
-                <Meter confidence={match.confidence} />
-                {/* 16:9 whether or not the image loads, so a row without a
-                    still keeps the same shape as the ones around it. */}
-                <span className="relative h-9 w-16 shrink-0 overflow-hidden rounded bg-black/50 ring-1 ring-white/10">
-                  {thumbnails[match.id] && (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={thumbnails[match.id]}
-                      alt=""
-                      loading="lazy"
-                      onError={() => refreshThumbnail(match.id)}
-                      className="h-full w-full object-cover"
-                    />
-                  )}
-                </span>
-                <span className="shrink-0 font-mono text-[11px] tabular-nums text-amber-300/70">
-                  {match.startTimecode}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-white/80">
-                  {match.description || SOURCE_LABEL[match.source]}
-                </span>
-                <span className="shrink-0 text-[11px] text-white/45">
-                  {shortConfidence(match.confidence)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+        <div className="relative p-3">
+          <ReclipCardButton
+            pending={regenerating}
+            remaining={active.reclipsRemaining ?? 0}
+            onReclip={() => onReclip(active.id)}
+          />
+          {regenerating && <RegeneratingOverlay />}
 
-      {/* Two rows, because six controls do not fit across a 380px column. The
-          previous single row squeezed "Save clip" until it wrapped onto
-          three lines inside its own button. */}
-      <div className="border-t border-white/10 bg-black/20 px-2.5 py-2">
-        <MatchFeedbackControls
-          match={active}
-          onRate={(verdict, reason) => rate(active, verdict, reason)}
-          onReclip={() => onReclip(active.id)}
-          leading={
+          {/* The moment, watchable right here. The still carries a play mark
+              and the timecode in its corner; pressing it plays THIS moment in
+              place, cued from the source video's own stream, and stops when
+              the moment ends. Before the source is streamable the press falls
+              back to jumping the main player. */}
+          {!playable && previewingId !== active.id && (
+            <button
+              type="button"
+              onClick={() => (playbackUrl ? setPreviewingId(active.id) : onSeek(active.startSeconds))}
+              className="group/still relative block w-full overflow-hidden rounded-lg"
+              aria-label={`Play this moment (${asPlayerTime(active.startSeconds)} to ${asPlayerTime(active.endSeconds)})`}
+            >
+              {activeThumbnail ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={activeThumbnail}
+                  alt=""
+                  onError={() => refreshThumbnail(active.id)}
+                  className="aspect-video w-full bg-black/50 object-cover"
+                  style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+                />
+              ) : (
+                <span className="block aspect-video w-full bg-[#0b0e12]" />
+              )}
+              <span className="absolute inset-0 m-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover/still:scale-105">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
+                </svg>
+              </span>
+              <span className="absolute bottom-1.5 right-1.5 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-white">
+                {asPlayerTime(active.endSeconds - active.startSeconds)}
+              </span>
+            </button>
+          )}
+
+          {!playable && previewingId === active.id && playbackUrl && (
+            <span className="relative block overflow-hidden rounded-lg">
+              <video
+                src={playbackUrl}
+                autoPlay
+                controls
+                playsInline
+                onLoadedMetadata={(event) => {
+                  event.currentTarget.currentTime = active.startSeconds
+                }}
+                onPlay={(event) => {
+                  const element = event.currentTarget
+                  // One soundtrack at a time: starting the preview silences
+                  // any other player on the page — the stage most of all.
+                  for (const other of document.querySelectorAll("video")) {
+                    if (other !== element) other.pause()
+                  }
+                  if (element.currentTime >= active.endSeconds - 0.05) {
+                    element.currentTime = active.startSeconds
+                  }
+                }}
+                onTimeUpdate={(event) => {
+                  // The preview is the MOMENT, not the film: stop at its end.
+                  if (event.currentTarget.currentTime >= active.endSeconds) event.currentTarget.pause()
+                }}
+                className="aspect-video w-full bg-black"
+              />
+              <span className="pointer-events-none absolute right-1.5 top-1.5 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-white">
+                {asPlayerTime(active.endSeconds - active.startSeconds)}
+              </span>
+            </span>
+          )}
+
+          {playable && clip?.url && (
+            <video
+              src={clip.url}
+              controls
+              preload="metadata"
+              playsInline
+              className="w-full rounded-lg bg-black/60"
+              style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+            />
+          )}
+        </div>
+
+        <div className="border-t border-white/10 bg-black/20 px-2.5 py-2.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-2">
               <Meter confidence={active.confidence} />
               <span className="truncate text-[12px] font-medium text-white/60">
                 {Math.round(active.confidence * 100)}% accuracy
               </span>
             </span>
-          }
-        />
-
-        <div className="mt-2 flex items-center gap-2">
-          {others.length > 0 && (
-            <button
-              type="button"
-              aria-expanded={open}
-              onClick={() => setOpen((current) => !current)}
-              className="flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-[12.5px] text-white/70 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              {open ? "Hide other moments" : `Other moments (${others.length})`}
-            </button>
-          )}
-
-          {downloadable ? (
-            /* A plain link, not a fetch: the URL is signed with an attachment
-               disposition, so the browser saves it without the page touching
-               the bytes. `download` alone would not work cross-origin. */
-            <a
-              href={clip!.downloadUrl!}
-              download
-              className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97]"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 3v12M7 12l5 5 5-5M5 21h14" />
-              </svg>
-              Download
-            </a>
-          ) : cut ? (
-            /* Cut, but this deployment has no attachment url yet. The player
-               above is the affordance; offering to cut it again would be a
-               button that cannot do anything. */
-            null
-          ) : (
-            <button
-              type="button"
-              onClick={() => onClip(active.id)}
-              disabled={busy}
-              /* Fixed width for the label that changes: "Cutting…" and "Cut
-                 this clip" must not resize the button under the cursor. */
-              className="flex-1 whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[12.5px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-50"
-            >
-              {busy ? (
-                <span style={{ animation: "pulse-soft 1.6s ease-in-out infinite" }}>Saving…</span>
-              ) : clip?.status === "failed" ? (
-                "Try again"
-              ) : (
-                "Save clip"
+            <span className="flex items-center gap-1.5">
+              {(active.reclipCount ?? 0) > 0 && !regenerating && (
+                <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/60 ring-1 ring-white/15">
+                  Re-clipped
+                </span>
               )}
-            </button>
-          )}
+              {queue.length > 1 && (
+                <span className="whitespace-nowrap text-[11px] tabular-nums text-white/60">
+                  {queue.length} to review
+                </span>
+              )}
+            </span>
+          </div>
+
+          <DeckControls
+            onSkip={() => skip(active)}
+            onKeep={() => keep(active)}
+            disabled={regenerating}
+            deciding={deciding?.id === active.id ? deciding.decision : null}
+          />
+
+          {/* One reserved line for status, so a failure appearing cannot
+              resize the card under the person's cursor. */}
+          <p className="mt-1.5 h-4 truncate text-center text-[11px] text-amber-300/80" data-testid="deck-status">
+            {active.reclipStatus === "failed" ? (active.reclipError ?? "Re-clip didn't work. The original is untouched — try again.") : ""}
+          </p>
         </div>
       </div>
 
+      {/* Floated over the card rather than added to it: the skip is done and
+          the next candidate already up; this is the take-back and the
+          optional word, leaving on its own. */}
+      <AnimatePresence>
+        {undoable && (
+          <motion.div
+            key="skip-pill"
+            className="pointer-events-none absolute inset-x-3 top-3 z-20"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: EASE }}
+          >
+            <SkipPill
+              match={undoable}
+              onUndo={() => undoSkip(undoable)}
+              onReason={(reason) => onRate(undoable.id, "rejected", reason)}
+              onReclipInstead={() => {
+                onRate(undoable.id, null)
+                setUndoableId(null)
+                onReclip(undoable.id)
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
