@@ -30,7 +30,11 @@ import type { LibraryClip, SocialAccount } from "@/lib/types"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
-import { useWorkspaceResumeIntent, useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
+import {
+  useAuthConfigured,
+  useWorkspaceResumeIntent,
+  useWorkspaceSignInGate,
+} from "@/components/workspace/sign-in-gate"
 import { PlatformLogo } from "@/components/platform-logos"
 import { ChosenTick, PublishPreview } from "@/components/publish-preview"
 import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
@@ -168,6 +172,8 @@ function ClipsBody() {
    */
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
   const { requireSignIn, askToSignIn, isSignedIn } = useWorkspaceSignInGate()
+  /** Null while unknown, false on a guest-only deployment. See the empty state. */
+  const authConfigured = useAuthConfigured()
 
   // Signed in from the prompt and come back? Reopen the clip they were about
   // to publish, rather than dropping them on the library with no idea where
@@ -547,6 +553,24 @@ function ClipsBody() {
                     </a>
                   </Button>
                 </>
+              ) : authConfigured === false ? (
+                // Guest-only deployment: there is no sign-in to offer, so
+                // pointing at one would be a second false promise on top of
+                // the one this whole change exists to remove. Codex caught
+                // this on #62. Say what is actually true of this tab.
+                <>
+                  <h2 className="text-lg font-semibold">No clips in this tab yet</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Clips live with the browser tab that made them on this deployment, and
+                    accounts aren&apos;t switched on. Cut one and it lands here.
+                  </p>
+                  <Button className="mt-2" asChild>
+                    <a href="/start">
+                      <HugeiconsIcon icon={ScissorsIcon} />
+                      Clip a video
+                    </a>
+                  </Button>
+                </>
               ) : (
                 <>
                   <h2 className="text-lg font-semibold">Sign in to see your clips</h2>
@@ -554,7 +578,9 @@ function ClipsBody() {
                     This page is only showing clips made in this browser tab. Anything saved to
                     your account is waiting behind sign-in.
                   </p>
-                  <Button className="mt-2" onClick={askToSignIn}>
+                  {/* Null while the check is in flight: the button waits
+                      rather than flashing an offer that may not exist. */}
+                  <Button className="mt-2" disabled={authConfigured === null} onClick={askToSignIn}>
                     Sign in
                   </Button>
                   <Button variant="secondary" asChild>
