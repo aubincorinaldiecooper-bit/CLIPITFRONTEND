@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node scripts/auth-migrate.mjs && next dev",
     "build": "next build",
-    "start": "node scripts/auth-migrate.mjs && next start"
+    "start": "node scripts/auth-migrate.mjs && next start",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.4.5",
@@ -31,11 +32,16 @@
   "devDependencies": {
     "@astryxdesign/cli": "^0.4.5",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "jsdom": "^30.0.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }

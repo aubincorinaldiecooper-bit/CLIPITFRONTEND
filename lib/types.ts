@@ -109,6 +109,7 @@ export interface EvaluationReport {
     model: string | null
     promptVersion: string | null
     durationBucket: string | null
+    stage?: string | null
   }
   quality: {
     momentsReturned: number
@@ -132,26 +133,33 @@ export interface EvaluationReport {
     searchesMarkedMissed: number
     observedMissRate: number | null
   }
-  timestamps: {
-    clipsMeasured: number
-    states: {
-      editedAndKept: number
-      acceptedWithoutEdit: number
-      generatedNeverReviewed: number
-      rejected: number
-    }
-    noEditRate: number | null
-    errors: {
-      editedClips: number
-      startMaeSeconds: number | null
-      endMaeSeconds: number | null
-      boundaryMaeSeconds: number | null
-      medianBoundaryErrorSeconds: number | null
-      p90BoundaryErrorSeconds: number | null
+  boundaries: {
+    eligibleReviewedMoments: number
+    momentsNeverReviewed: number
+    firstPassSuccesses: number
+    firstPassSuccessRate: number | null
+    momentsReclipped: number
+    reclipRate: number | null
+    reviewedReclips: number
+    acceptedReclips: number
+    reclipAcceptanceRate: number | null
+    momentsWithExplicitFeedback: number
+    timingDownvotes: number
+    timingDownvoteRate: number | null
+    shifts: {
+      reclipsMeasured: number
+      averageAbsoluteStartShiftSeconds: number | null
+      averageAbsoluteEndShiftSeconds: number | null
+      averageSignedStartShiftSeconds: number | null
+      averageSignedEndShiftSeconds: number | null
+      medianBoundaryShiftSeconds: number | null
+      p90BoundaryShiftSeconds: number | null
       withinSeconds: { "1": number | null; "2": number | null; "3": number | null; "5": number | null }
-      averageStartShiftSeconds: number | null
-      averageEndShiftSeconds: number | null
     }
+  }
+  labelledAccuracy: {
+    available: false
+    note: string
   }
   economics: {
     sourceVideoHoursAnalyzed: number
@@ -163,6 +171,13 @@ export interface EvaluationReport {
     marginalCostPerSourceHourUsd: number | null
     effectiveCostPerSourceHourUsd: null
     inferenceSecondsPerSourceHour: number | null
+    initialAnalysisCalls: number
+    reclipCalls: number
+    initialInferenceMs: number | null
+    reclipInferenceMs: number | null
+    initialCostUsd: number | null
+    reclipCostUsd: number | null
+    reclipCostShare: number | null
     analysisMsPerSourceHour: number | null
     segments: Array<{
       provider: string
@@ -209,6 +224,17 @@ export interface ClipMatch {
   feedback: MatchFeedback | null
   /** The optional word after a thumbs-down; null until (and unless) given. */
   feedbackReason?: MatchFeedbackReason | null
+  /**
+   * The Re-clip lifecycle: 'pending' while the system re-evaluates this
+   * moment (it can take minutes on a cold GPU), 'failed' with a showable
+   * reason when the last attempt produced nothing. Null when idle.
+   */
+  reclipStatus?: "pending" | "failed" | null
+  reclipError?: string | null
+  /** How many re-evaluations this moment has spent, and how many remain. */
+  reclipCount?: number
+  reclipsRemaining?: number
+  reclippedAt?: string | null
   clip: { id: string; status: ClipStatus } | null
 }
 

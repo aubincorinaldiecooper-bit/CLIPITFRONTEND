@@ -497,18 +497,15 @@ export const api = {
   },
 
   /**
-   * Moves a clip's start/end to where the person says the moment is. Answers
-   * immediately with the clip set back to `pending`; the file re-renders in
-   * the background — poll getClipRequest/getClip until ready, same as a cut.
+   * Asks the system to re-evaluate this SAME moment and cut it better.
+   * Answers immediately with the moment marked pending; the re-evaluation
+   * runs in the background — poll getClipRequest until the pending state
+   * clears, same rhythm as a cut.
    */
-  async setClipBoundaries(
-    clipId: string,
-    startSeconds: number,
-    endSeconds: number,
-  ): Promise<{ clip: Clip }> {
-    return request(`/api/clips/${clipId}/boundaries`, {
+  async reclipMatch(requestId: string, matchId: string): Promise<{ match: ClipMatch }> {
+    return request(`/api/clip-requests/${requestId}/matches/${matchId}/reclip`, {
       method: "POST",
-      body: JSON.stringify({ startSeconds, endSeconds }),
+      body: JSON.stringify({}),
     })
   },
 
@@ -536,6 +533,7 @@ export const api = {
     model?: string
     promptVersion?: string
     durationBucket?: string
+    stage?: string
   }): Promise<EvaluationReport> {
     const params = new URLSearchParams()
     for (const [key, value] of Object.entries(filters)) {

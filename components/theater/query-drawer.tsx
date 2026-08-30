@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import type { Clip, ClipMatch, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import { MatchFeedbackControls } from "./match-feedback"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 
@@ -263,7 +264,7 @@ export function QueryDrawer({
   onSeek,
   onClip,
   onRate,
-  onAdjust,
+  onReclip,
 }: {
   video: Video
   exchanges: DrawerExchange[]
@@ -272,8 +273,8 @@ export function QueryDrawer({
   onSeek: (seconds: number) => void
   onClip: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
-  /** The person moving a saved clip's boundaries; re-renders in the background. */
-  onAdjust: (requestId: string, clipId: string, startSeconds: number, endSeconds: number) => void
+  /** Ask the system to re-evaluate this SAME moment and cut it better. */
+  onReclip: (requestId: string, matchId: string) => void
 }) {
   const [open, setOpen] = useState(true)
   const [draft, setDraft] = useState("")
@@ -404,7 +405,7 @@ export function QueryDrawer({
                   onSeek={onSeek}
                   onClip={onClip}
                   onRate={onRate}
-                  onAdjust={onAdjust}
+                  onReclip={onReclip}
                   onSearch={onSearch}
                   stillWatching={understanding}
                   readThroughSeconds={video.index?.readThroughSeconds ?? null}
@@ -479,7 +480,7 @@ function ExchangeBlock({
   onSeek,
   onClip,
   onRate,
-  onAdjust,
+  onReclip,
   onSearch,
   isLatest,
   canAsk,
@@ -492,7 +493,7 @@ function ExchangeBlock({
   onSeek: (seconds: number) => void
   onClip: (requestId: string, matchId: string) => void
   onRate: (requestId: string, matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
-  onAdjust: (requestId: string, clipId: string, startSeconds: number, endSeconds: number) => void
+  onReclip: (requestId: string, matchId: string) => void
   onSearch: (instruction: string) => void
   isLatest: boolean
   canAsk: boolean
@@ -566,7 +567,7 @@ function ExchangeBlock({
           onSeek={onSeek}
           onClip={(matchId) => onClip(request.id, matchId)}
           onRate={(matchId, verdict, reason) => onRate(request.id, matchId, verdict, reason)}
-          onAdjust={(clipId, startSeconds, endSeconds) => onAdjust(request.id, clipId, startSeconds, endSeconds)}
+          onReclip={(matchId) => onReclip(request.id, matchId)}
         />
       )}
     </div>
@@ -672,7 +673,7 @@ function EvidencePicker({
   onSeek,
   onClip,
   onRate,
-  onAdjust,
+  onReclip,
 }: {
   matches: ClipMatch[]
   clipByMatch: Map<string, Clip>
@@ -680,109 +681,42 @@ function EvidencePicker({
   onSeek: (seconds: number) => void
   onClip: (matchId: string) => void
   onRate: (matchId: string, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => void
-  onAdjust: (clipId: string, startSeconds: number, endSeconds: number) => void
+  onReclip: (matchId: string) => void
 }) {
   // Best first, so the promoted one is the model's strongest answer rather
-  // than whichever chunk happened to finish first. Rejected moments drop out
-  // entirely: a thumbs-down means "this is not what I asked for", and leaving
-  // it in the list would be arguing with the person who said so.
+  // than whichever chunk happened to finish first. Rejected moments STAY —
+  // the owner's rule is that a verdict remains visible as a filled icon, and
+  // a visible verdict needs a visible card. They sink below everything not
+  // rejected, so waving one off still promotes the next best moment.
   const ranked = useMemo(
-    () => matches.filter((match) => match.feedback !== "rejected").sort((a, b) => b.confidence - a.confidence),
+    () =>
+      [...matches].sort((a, b) => {
+        const aRejected = a.feedback === "rejected" ? 1 : 0
+        const bRejected = b.feedback === "rejected" ? 1 : 0
+        if (aRejected !== bRejected) return aRejected - bRejected
+        return b.confidence - a.confidence
+      }),
     [matches],
   )
-  // The moment most recently waved off, kept only so it can be put back. A
-  // thumbs-down is one tap and removes something from view, which is exactly
-  // the shape of action that needs an undo next to it.
-  const [undoableId, setUndoableId] = useState<string | null>(null)
-
-  /**
-   * The undo offer leaves on its own.
-   *
-   * It was a strip welded to the bottom of the card, which is the wrong shape
-   * for it: a permanent row in a card reads as a permanent fact, and this is
-   * news about something that just happened. Six seconds is long enough to
-   * catch a mis-tap and short enough not to become furniture.
-   */
-  useEffect(() => {
-    if (!undoableId) return
-    // Only the floating toast expires. When every moment has been waved off
-    // the undo is the only thing left in that answer — not news over a card
-    // but the record of what happened — and removing it on a timer would make
-    // the whole thread jump upward six seconds after a click.
-    if (ranked.length === 0) return
-    const timer = setTimeout(() => setUndoableId(null), 6000)
-    return () => clearTimeout(timer)
-  }, [undoableId, ranked.length])
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   /** The moment playing IN the card, right where its still was. */
   const [previewingId, setPreviewingId] = useState<string | null>(null)
 
-  // Looked up rather than stored, so the strip cannot outlive the rejection it
-  // describes. A failed thumbs-down is rolled back upstream and the moment
-  // reappears in the list — a remembered copy would leave the card showing
-  // both the moment and an offer to undo removing it.
-  const undoable = matches.find((match) => match.id === undoableId && match.feedback === "rejected") ?? null
-
-  const rate = (match: ClipMatch, verdict: MatchFeedback | null) => {
-    setUndoableId(verdict === "rejected" ? match.id : null)
-    onRate(match.id, verdict)
-  }
-
-  /**
-   * The optional word after a thumbs-down. Sends the same rejection again
-   * with the reason attached — the verdict is unchanged, so a failure here
-   * loses a word, never a vote — and lets the offer leave.
-   */
-  const explain = (match: ClipMatch, reason: MatchFeedbackReason) => {
-    onRate(match.id, "rejected", reason)
-    setUndoableId(null)
+  const rate = (match: ClipMatch, verdict: MatchFeedback | null, reason?: MatchFeedbackReason | null) => {
+    // Rejecting the active moment pins it: the verdict must stay lookable-at
+    // (filled icon, optional reasons), not vanish under an auto-promotion
+    // the instant it lands.
+    if (verdict === "rejected") setSelectedId(match.id)
+    onRate(match.id, verdict, reason)
   }
 
   // Fall back rather than pin an index: polling replaces the match list, and
   // a stale index would silently promote a different moment.
   const active = ranked.find((match) => match.id === selectedId) ?? ranked[0]
 
-  // Everything has been waved off. The undo has to outlive the card it came
-  // from, or rejecting the last moment would take its own undo with it.
-  if (!active) {
-    // Nothing to float over, so this is not a toast. Inline, quiet, and it
-    // stays: it is the only trace of what was removed.
-    return undoable ? (
-      <div className="rounded-xl bg-shmuted/60 px-3 py-2 ring-1 ring-shborder">
-        <div className="flex items-center justify-between gap-3">
-          <span className="truncate text-[12px] text-muted-foreground">
-            Removed <span className="font-mono tabular-nums">{undoable.startTimecode}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => rate(undoable, null)}
-            className="shrink-0 whitespace-nowrap text-[12px] font-medium text-amber-700 transition-colors hover:text-amber-800"
-          >
-            Undo
-          </button>
-        </div>
-        {/* Same optional word as the floating pill. This one matters more:
-            with every moment waved off, "missed what I wanted" is the only
-            way left to say the right moment never appeared at all. */}
-        {undoable.feedbackReason == null && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {REJECTION_REASONS.map(({ reason, label }) => (
-              <button
-                key={reason}
-                type="button"
-                onClick={() => explain(undoable, reason)}
-                className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] text-muted-foreground ring-1 ring-shborder transition-colors hover:bg-shmuted hover:text-foreground"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    ) : null
-  }
+  if (!active) return null
 
   const others = ranked.filter((match) => match.id !== active.id)
   const activeThumbnail = thumbnails[active.id] ?? null
@@ -947,15 +881,19 @@ function EvidencePicker({
           previous single row squeezed "Save clip" until it wrapped onto
           three lines inside its own button. */}
       <div className="border-t border-white/10 bg-black/20 px-2.5 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-2">
-            <Meter confidence={active.confidence} />
-            <span className="truncate text-[12px] font-medium text-white/60">
-              {Math.round(active.confidence * 100)}% accuracy
+        <MatchFeedbackControls
+          match={active}
+          onRate={(verdict, reason) => rate(active, verdict, reason)}
+          onReclip={() => onReclip(active.id)}
+          leading={
+            <span className="flex min-w-0 items-center gap-2">
+              <Meter confidence={active.confidence} />
+              <span className="truncate text-[12px] font-medium text-white/60">
+                {Math.round(active.confidence * 100)}% accuracy
+              </span>
             </span>
-          </span>
-          <Verdict match={active} onRate={(verdict) => rate(active, verdict)} />
-        </div>
+          }
+        />
 
         <div className="mt-2 flex items-center gap-2">
           {others.length > 0 && (
@@ -1007,288 +945,8 @@ function EvidencePicker({
             </button>
           )}
         </div>
-
-        {/* Only a finished clip can be moved: while it renders there is
-            nothing to compare against, and the whole footer is already the
-            busy state. A deliberate disclosure like "Other moments" above —
-            opening it is a click, so the card growing here is the person's
-            own doing, not something reacting under them. */}
-        {cut && clip && (
-          <BoundaryAdjuster
-            clip={clip}
-            onSave={(startSeconds, endSeconds) => onAdjust(clip.id, startSeconds, endSeconds)}
-          />
-        )}
       </div>
 
-      {/* Floated over the card rather than added to it: removing a moment must
-          not also resize the thing you are looking at. */}
-      <AnimatePresence>
-        {undoable && (
-          <motion.div
-            key="undo"
-            className="pointer-events-none absolute right-2 top-2 flex justify-end"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.25, ease: EASE }}
-          >
-            <UndoRejection
-              match={undoable}
-              onUndo={() => rate(undoable, null)}
-              onReason={(reason) => explain(undoable, reason)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-/**
- * Thumbs up and down on the promoted moment.
- *
- * Only on the promoted one: rating every alternative row in place would put
- * two more targets in a line that is already a timecode, a description and a
- * confidence, and choosing an alternative promotes it anyway. So the moment
- * you are looking at is the moment you can judge.
- *
- * Approving replaces both icons with the verdict itself. The rating gesture is
- * finished, and leaving a live thumbs-up next to an approved clip invites the
- * question of whether the first tap registered — but the mark stays clickable,
- * because the only thing worse than no undo is an undo you cannot find.
- */
-function Verdict({ match, onRate }: { match: ClipMatch; onRate: (verdict: MatchFeedback | null) => void }) {
-  if (match.feedback === "approved") {
-    return (
-      <button
-        type="button"
-        onClick={() => onRate(null)}
-        title="Approved — click to undo"
-        className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-medium text-emerald-300/80 transition-colors hover:bg-white/5"
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M4 12.5l5 5L20 6.5" />
-        </svg>
-        Approved
-      </button>
-    )
-  }
-
-  return (
-    <span className="flex items-center gap-0.5">
-      <button
-        type="button"
-        onClick={() => onRate("approved")}
-        aria-label="This clip is right"
-        title="This clip is right"
-        className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-emerald-300"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M7 22V10l5-8a2.5 2.5 0 0 1 2.4 3.2L13.5 9H19a2 2 0 0 1 2 2.4l-1.6 8A2 2 0 0 1 17.4 21H7Z" />
-          <path d="M7 10H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        onClick={() => onRate("rejected")}
-        aria-label="This clip is wrong — remove it"
-        title="This clip is wrong — remove it"
-        className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-red-300"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M17 2v12l-5 8a2.5 2.5 0 0 1-2.4-3.2L10.5 15H5a2 2 0 0 1-2-2.4l1.6-8A2 2 0 0 1 6.6 3H17Z" />
-          <path d="M17 14h3a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1h-3" />
-        </svg>
-      </button>
-    </span>
-  )
-}
-
-/**
- * Moving a saved clip to where the moment actually is.
- *
- * Closed, it is one quiet line. Open, each boundary gets nudge buttons —
- * a second for the coarse move, a tenth for the fine one — against a live
- * timecode. Save hands the new boundaries to the server and the card falls
- * back into its rendering state; Cancel puts the drafts back and folds the
- * row away. The maths of it is the point: the model's original prediction
- * is kept server-side, so every save here is also a measurement of how far
- * off the model was.
- */
-function BoundaryAdjuster({
-  clip,
-  onSave,
-}: {
-  clip: Clip
-  onSave: (startSeconds: number, endSeconds: number) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [start, setStart] = useState(clip.startSeconds)
-  const [end, setEnd] = useState(clip.endSeconds)
-
-  // A re-render replaces the clip row; drafts from the previous file would
-  // silently offer boundaries the person already saved.
-  useEffect(() => {
-    setStart(clip.startSeconds)
-    setEnd(clip.endSeconds)
-  }, [clip.startSeconds, clip.endSeconds])
-
-  const dirty = start !== clip.startSeconds || end !== clip.endSeconds
-  const valid = end - start >= 0.5
-
-  const nudge = (which: "start" | "end", delta: number) => {
-    if (which === "start") setStart((current) => Math.max(0, Number((current + delta).toFixed(1))))
-    else setEnd((current) => Math.max(0, Number((current + delta).toFixed(1))))
-  }
-
-  // The toggle row is permanent while the clip is ready, so the card's
-  // height never depends on whether the editor is open. The editor itself
-  // FLOATS over the card (same rule as the undo pill): a card must not
-  // resize, jump or reorder because something inside it was clicked.
-  return (
-    <>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="mt-2 w-full whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] text-white/60 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-white/80"
-      >
-        {open ? "Close timing" : clip.boundariesEditedAt ? "Adjust timing again" : "Adjust timing"}
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            key="boundary-editor"
-            className="absolute inset-x-2 bottom-12 z-10"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.25, ease: EASE }}
-          >
-            <div className="rounded-lg bg-black/90 p-2 shadow-lg ring-1 ring-white/15 backdrop-blur">
-              {(["start", "end"] as const).map((which) => (
-                <div key={which} className="flex items-center justify-between gap-1 py-0.5">
-                  <span className="w-9 shrink-0 text-[11px] uppercase tracking-wide text-white/65">{which}</span>
-                  <span className="flex items-center gap-1">
-                    {[-1, -0.1].map((delta) => (
-                      <NudgeButton key={delta} label={delta === -1 ? "−1s" : "−0.1"} onClick={() => nudge(which, delta)} />
-                    ))}
-                    <span className="w-[72px] text-center font-mono text-[12px] tabular-nums text-white/85">
-                      {asPlayerTime(which === "start" ? start : end)}
-                    </span>
-                    {[0.1, 1].map((delta) => (
-                      <NudgeButton key={delta} label={delta === 1 ? "+1s" : "+0.1"} onClick={() => nudge(which, delta)} />
-                    ))}
-                  </span>
-                </div>
-              ))}
-
-              <div className="mt-1.5 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStart(clip.startSeconds)
-                    setEnd(clip.endSeconds)
-                    setOpen(false)
-                  }}
-                  className="flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={!dirty || !valid}
-                  onClick={() => {
-                    onSave(start, end)
-                    setOpen(false)
-                  }}
-                  className="flex-1 whitespace-nowrap rounded-lg bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-40"
-                >
-                  {valid ? "Save timing" : "End must follow start"}
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  )
-}
-
-function NudgeButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="whitespace-nowrap rounded-md px-1.5 py-1 font-mono text-[10.5px] tabular-nums text-white/60 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white/90"
-    >
-      {label}
-    </button>
-  )
-}
-
-/**
- * The reasons a thumbs-down may (but never must) carry, in the product's own
- * words. Four, not nine: the backend accepts finer distinctions, but a row
- * of chips is an offer, and nine offers is a survey.
- */
-const REJECTION_REASONS: ReadonlyArray<{ reason: MatchFeedbackReason; label: string }> = [
-  { reason: "wrong_moment", label: "Wrong moment" },
-  { reason: "missed_moment", label: "Missed what I wanted" },
-  { reason: "bad_boundaries", label: "Timing is off" },
-  { reason: "not_relevant", label: "Not useful" },
-]
-
-/**
- * A toast: which moment went, a way back, and one optional word on why —
- * for a few seconds.
- *
- * Only the buttons take clicks. The pill floats over the card, and anything
- * beneath the rest of it — including whichever button happens to be under
- * there — has to stay usable rather than being blocked for six seconds by a
- * label. The reasons are chips, not a form: tapping one is the whole
- * interaction, ignoring them costs nothing, and the toast leaves on its own
- * either way.
- */
-function UndoRejection({
-  match,
-  onUndo,
-  onReason,
-}: {
-  match: ClipMatch
-  onUndo: () => void
-  onReason: (reason: MatchFeedbackReason) => void
-}) {
-  return (
-    <div className="rounded-2xl bg-black/85 px-3 py-1.5 shadow-lg ring-1 ring-white/15 backdrop-blur">
-      <div className="flex items-center gap-3">
-        <span className="whitespace-nowrap text-[11.5px] text-white/60">
-          Removed <span className="font-mono tabular-nums">{match.startTimecode}</span>
-        </span>
-        <button
-          type="button"
-          onClick={onUndo}
-          className="pointer-events-auto whitespace-nowrap text-[11.5px] font-medium text-amber-300/90 transition-colors hover:text-amber-300"
-        >
-          Undo
-        </button>
-      </div>
-      {match.feedbackReason == null && (
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          {REJECTION_REASONS.map(({ reason, label }) => (
-            <button
-              key={reason}
-              type="button"
-              onClick={() => onReason(reason)}
-              className="pointer-events-auto whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] text-white/60 ring-1 ring-white/20 transition-colors hover:bg-white/10 hover:text-white/90"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
