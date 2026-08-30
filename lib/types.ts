@@ -404,6 +404,14 @@ export interface ScheduledPost {
   scheduledAt: string
   status: "waiting" | "firing" | "fired" | "failed" | "canceled"
   error: string | null
+  /**
+   * What the platforms actually did, read from the posts the fire created
+   * — not from `status`, which only says the worker ran. Null while the
+   * promise is still waiting. A schedule can be 'fired' with a shape still
+   * being cut, and that cut can still fail.
+   */
+  outcome?: "posting" | "posted" | "partly_failed" | "failed" | null
+  firedAt?: string | null
 }
 
 export interface SocialAccountsPage {

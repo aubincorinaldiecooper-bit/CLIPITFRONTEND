@@ -360,6 +360,8 @@ export interface KeptClipTile {
   /** The clip's id when the cut exists; the match id stands in before it. */
   id: string
   title: string
+  /** The video this came from, for the card's second line. */
+  videoTitle: string | null
   /** m:ss, or null while the length is not yet known. */
   duration: string | null
   url: string | null
@@ -369,14 +371,19 @@ export interface KeptClipTile {
 }
 
 /**
- * What was kept, in the owner's grid: portrait tiles, name and length over
- * the footage, a ⋯ menu per tile, Review and export beneath. Tiles tell the
- * truth about their state — a clip still cutting says so and a failed cut
- * shows its reason, because a grid of green rectangles is not a library.
+ * What was kept, in the library's own card layout — the owner's call
+ * (2026-08-30): the clips you keep look the same here as they do in the
+ * Library, in the same responsive grid, with no panel drawn around them.
  *
- * The ⋯ menu carries what a tile can actually do here: Rename and Delete
- * act in place; captions, sharing to a room, and downloading live in the
- * Library, one click away, rather than duplicated into this flow.
+ * The card is rebuilt rather than ClipCard imported because a keep can be
+ * on screen BEFORE its cut exists, and ClipCard takes a finished clip. The
+ * shape, spacing and behaviour follow it exactly: 16:9 still, play in
+ * place, duration over the frame's corner, description then source line,
+ * an actions row beneath.
+ *
+ * Tiles tell the truth about their state — a clip still cutting says so and
+ * a failed cut shows its reason, because a grid of finished-looking cards
+ * that aren't finished is the false impression this codebase keeps banning.
  */
 export function KeptGrid({
   clips,
@@ -396,7 +403,7 @@ export function KeptGrid({
   const [playingId, setPlayingId] = useState<string | null>(null)
   if (clips.length === 0) return null
   const readyCount = clips.filter((clip) => clip.status === "ready").length
-  const cutting = clips.length - readyCount - clips.filter((clip) => clip.status === "failed").length
+  const cutting = clips.filter((clip) => clip.status === "cutting").length
 
   const rename = (tile: KeptClipTile) => {
     // window.prompt over a bespoke dialog: one field, one act, and the
@@ -406,123 +413,149 @@ export function KeptGrid({
   }
 
   return (
-    <div className="px-1 pb-1" data-testid="kept-grid">
-      <p className="pb-3 text-lg font-semibold text-foreground">
-        {clips.length} {clips.length === 1 ? "clip" : "clips"} kept
-      </p>
-      <div className="grid grid-cols-2 gap-3">
+    <section data-testid="kept-grid" aria-label="Clips you kept">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-4">
+        <h2 className="text-xl font-semibold tracking-tight">
+          {clips.length} {clips.length === 1 ? "clip" : "clips"} kept
+        </h2>
+        {/* One reserved line: "still cutting" news must not reflow the row. */}
+        <p className="h-5 text-[13px] text-muted-foreground">
+          {cutting > 0 ? `${cutting} still cutting` : ""}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {clips.map((tile) => (
-          <div
-            key={tile.id}
-            className="group relative block aspect-[9/16] overflow-hidden rounded-2xl bg-[#101013] ring-1 ring-shborder"
-            data-testid="kept-tile"
-          >
+          <div key={tile.id} className="flex flex-col overflow-hidden rounded-2xl bg-shcard ring-1 ring-shborder" data-testid="kept-tile">
             {tile.status === "ready" && tile.url && playingId === tile.id ? (
-              <video src={tile.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
+              <video src={tile.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
             ) : (
               <button
                 type="button"
                 onClick={() => tile.status === "ready" && tile.url && setPlayingId(tile.id)}
-                className="block h-full w-full text-left"
-                aria-label={tile.status === "ready" ? `Play ${tile.title}` : tile.title}
+                disabled={tile.status !== "ready" || !tile.url}
+                aria-label={tile.status === "ready" ? `Play: ${tile.title}` : tile.title}
+                className="group relative block aspect-video w-full bg-black disabled:cursor-default"
               >
-                {tile.poster ? (
+                {tile.poster && (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={tile.poster} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="block h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
+                  <img src={tile.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                )}
+                {tile.status === "ready" && tile.url && (
+                  <span className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover:scale-105">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11-6.86a1.05 1.05 0 0 0 0-1.76l-11-6.86A1.03 1.03 0 0 0 8 5.14Z" />
+                    </svg>
+                  </span>
                 )}
                 {tile.status === "cutting" && (
                   <span className="absolute inset-0 flex items-center justify-center bg-black/45">
-                    <span className="rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
+                    <span className="rounded-full bg-black/70 px-2.5 py-1 text-[11.5px] font-medium text-white" style={{ animation: "pulse-soft 1.8s ease-in-out infinite" }}>
                       Cutting…
                     </span>
                   </span>
                 )}
                 {tile.status === "failed" && (
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/55 p-3">
-                    <span className="text-center text-[11px] leading-snug text-red-200">
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/60 p-3">
+                    <span className="text-center text-[11.5px] leading-snug text-red-200">
                       {tile.error ?? "The cut failed. Keep it again to retry."}
                     </span>
                   </span>
                 )}
-                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 pt-9 text-left">
-                  <span className="block truncate text-[12.5px] font-medium text-white">{tile.title}</span>
-                  <span className="block h-4 font-mono text-[11px] tabular-nums text-white/70">{tile.duration ?? ""}</span>
-                </span>
+                {tile.duration && (
+                  <span className="absolute bottom-2 right-2 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[11.5px] font-medium tabular-nums text-white">
+                    {tile.duration}
+                  </span>
+                )}
               </button>
             )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`Options for ${tile.title}`}
-                  className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-black/75"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                    <circle cx="5" cy="12" r="1.6" />
-                    <circle cx="12" cy="12" r="1.6" />
-                    <circle cx="19" cy="12" r="1.6" />
-                  </svg>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                {/* Every clip carries its own Publish — the owner's menu.
-                    Only a finished cut can go out, so it waits while the
-                    clip is still being made rather than failing later. */}
+            <div className="flex flex-col gap-3 p-4">
+              <div className="flex flex-col gap-1">
+                <p className="line-clamp-2 min-h-[2.5rem] text-[13.5px] leading-snug text-foreground/90">
+                  {tile.title || "A moment from your video"}
+                </p>
+                <p className="truncate text-[12px] text-foreground/60">{tile.videoTitle ?? "Your video"}</p>
+              </div>
+              <div className="flex items-center gap-2">
                 {onPublish && (
-                  <DropdownMenuItem disabled={tile.status !== "ready"} onSelect={() => onPublish(tile.id)}>
+                  <button
+                    type="button"
+                    onClick={() => onPublish(tile.id)}
+                    disabled={tile.status !== "ready"}
+                    className="h-8 whitespace-nowrap rounded-full bg-shprimary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.96] disabled:opacity-40"
+                  >
                     Publish
-                  </DropdownMenuItem>
+                  </button>
                 )}
-                {/* Edit and Share are the Library's — the caption editor and
-                    room sharing live there, and pointing at them beats a
-                    second, thinner copy inside this flow. */}
-                <DropdownMenuItem asChild>
-                  <a href="/clips">Edit</a>
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled={tile.status !== "ready"} onSelect={() => rename(tile)}>
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href="/clips">Share</a>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  disabled={tile.status === "cutting"}
-                  onSelect={() => onDelete(tile.id)}
-                >
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`More options for ${tile.title}`}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-shborder transition-colors hover:bg-shaccent"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <circle cx="5" cy="12" r="1.6" />
+                        <circle cx="12" cy="12" r="1.6" />
+                        <circle cx="19" cy="12" r="1.6" />
+                      </svg>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40">
+                    {/* Edit and Share are the Library's — the caption editor
+                        and room sharing live there, and pointing at them
+                        beats a second, thinner copy inside this flow. */}
+                    <DropdownMenuItem asChild>
+                      <a href="/clips">Edit</a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={tile.status !== "ready"} onSelect={() => rename(tile)}>
+                      Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/clips">Share</a>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={tile.status === "cutting"}
+                      onSelect={() => onDelete(tile.id)}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* One reserved line: "still cutting" news must not reflow the button. */}
-      <p className="mt-2 h-4 text-center text-[11.5px] text-muted-foreground">
-        {cutting > 0 ? `${cutting} still cutting — ${cutting === 1 ? "it joins" : "they join"} the grid when done` : ""}
-      </p>
-      {onReview ? (
-        <button
-          type="button"
-          onClick={onReview}
-          disabled={readyCount === 0}
-          className="mt-1 block w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3 text-center text-[13.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
-        >
-          Review and export
-        </button>
-      ) : (
+      <div className="flex flex-wrap items-center gap-3 pt-5">
+        {onReview ? (
+          <button
+            type="button"
+            onClick={onReview}
+            disabled={readyCount === 0}
+            className="h-11 whitespace-nowrap rounded-full bg-shprimary px-6 text-[14px] font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
+          >
+            Publish {readyCount > 1 ? `all ${readyCount}` : "this clip"}
+          </button>
+        ) : (
+          <a
+            href="/clips"
+            className="flex h-11 items-center whitespace-nowrap rounded-full bg-shprimary px-6 text-[14px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+          >
+            Review and export
+          </a>
+        )}
         <a
           href="/clips"
-          className="mt-1 block w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3 text-center text-[13.5px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+          className="flex h-11 items-center whitespace-nowrap rounded-full px-5 text-[14px] font-medium text-foreground ring-1 ring-shborder transition-colors hover:bg-shaccent"
         >
-          Review and export
+          Go to your library
         </a>
-      )}
-    </div>
+      </div>
+    </section>
   )
 }

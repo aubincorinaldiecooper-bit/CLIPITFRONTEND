@@ -208,14 +208,14 @@ export function WhereTo({
               mark, the account it posts as, and a switch. A platform with
               no connected account is dimmed with its switch off and leads
               to Publishing — off and unavailable are different states. */}
-          <div className="overflow-hidden rounded-2xl ring-1 ring-shborder">
+          <div>
             {connected.map((account, index) => {
               const on = chosen.has(account.id)
               const label = PLATFORM_LABELS[account.platform] ?? account.platform
               return (
                 <div
                   key={account.id}
-                  className={`flex items-center gap-3.5 px-4 py-3.5 ${index > 0 ? "border-t border-shborder" : ""}`}
+                  className={`flex items-center gap-3.5 py-4 ${index > 0 ? "border-t border-shborder" : ""}`}
                 >
                   <PlatformLogo platform={account.platform} size="sm" />
                   <span className="min-w-0 flex-1">
@@ -237,7 +237,7 @@ export function WhereTo({
               <a
                 key={platform}
                 href="/publishing"
-                className={`flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-shaccent ${
+                className={`flex items-center gap-3.5 py-4 transition-colors ${
                   connected.length > 0 || index > 0 ? "border-t border-shborder" : ""
                 }`}
               >
@@ -255,7 +255,7 @@ export function WhereTo({
             ))}
 
             {/* What the switches add up to, in the owner's words. */}
-            <p className="border-t border-shborder px-4 py-3 text-[14px] text-muted-foreground">
+            <p className="border-t border-shborder py-3.5 text-[14px] text-muted-foreground">
               {chosen.size === 0 ? (
                 "No channels on — switch one on to post."
               ) : (

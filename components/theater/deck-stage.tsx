@@ -255,6 +255,27 @@ function UncertainMoments({
 }
 
 /**
+ * Holds a signed URL at the first value it arrived with.
+ *
+ * The backend re-signs playback URLs per request and this page polls every
+ * two seconds while a video is still being read, so binding a <video src>
+ * to the newest one reloads the player mid-watch and throws the viewer back
+ * to the start of the moment. VideoStage pins for the same reason. The
+ * newest value is taken only when the pinned one actually fails.
+ */
+function usePinnedUrl(latest: string | null): readonly [string | null, () => void] {
+  const [pinned, setPinned] = useState<string | null>(latest)
+  useEffect(() => {
+    // Pin the first real URL, and drop the pin if the source goes away.
+    setPinned((current) => (current === null || latest === null ? latest : current))
+  }, [latest])
+  const refresh = useCallback(() => {
+    setPinned((current) => (latest && latest !== current ? latest : current))
+  }, [latest])
+  return [pinned, refresh] as const
+}
+
+/**
  * Holds each match's thumbnail at the first URL it arrived with. The
  * backend signs thumbnail URLs per request, so binding src to the newest
  * one refetches every image on every poll; pin the first and move only
@@ -302,6 +323,7 @@ function usePinnedThumbnails(matches: ClipMatch[]) {
 function Deck({
   matches,
   clipByMatch,
+  requestIdByMatch,
   playbackUrl,
   onSeek,
   onKeep,
@@ -311,6 +333,8 @@ function Deck({
 }: {
   matches: ClipMatch[]
   clipByMatch: Map<string, Clip>
+  /** Which answer each moment came from — a moment outlives its answer. */
+  requestIdByMatch: Map<string, string>
   playbackUrl: string | null
   onSeek: (seconds: number) => void
   onKeep: (matchId: string) => void
@@ -319,6 +343,7 @@ function Deck({
   hotkeys: boolean
 }) {
   const [thumbnails, refreshThumbnail] = usePinnedThumbnails(matches)
+  const [pinnedPlayback, refreshPlayback] = usePinnedUrl(playbackUrl)
   const [previewingId, setPreviewingId] = useState<string | null>(null)
   /** A decision just made: the chosen control fills for a beat before the
    *  card leaves — confirmation first, then exit. */
@@ -333,6 +358,8 @@ function Deck({
     return () => clearTimeout(timer)
   }, [deciding])
 
+  // The pill leaves on its own — unless the deck is empty, where it is the
+  // only trace of the last decision and the only way to take it back.
   useEffect(() => {
     if (!undoableId || queue.length === 0) return
     const timer = setTimeout(() => setUndoableId(null), 6000)
@@ -387,7 +414,27 @@ function Deck({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotkeys, active?.id, active?.reclipStatus, undoable?.id, deciding])
 
-  if (!active) return null
+  if (!active) {
+    // Every moment is decided — but the last skip must still be takeable
+    // back. Returning null here unmounted this component and its undo
+    // state with it, so the FINAL skip was the one skip you could not
+    // undo, alone among all of them. The card is gone; the pill is not.
+    if (!undoable) return null
+    return (
+      <div className="pb-4" data-testid="deck-undo-only">
+        <SkipPill
+          match={undoable}
+          onUndo={() => undoSkip(undoable)}
+          onReason={(reason) => onRate(undoable.id, "rejected", reason)}
+          onReclipInstead={() => {
+            onRate(undoable.id, null)
+            setUndoableId(null)
+            onReclip(undoable.id)
+          }}
+        />
+      </div>
+    )
+  }
 
   const activeThumbnail = thumbnails[active.id] ?? null
   const clip = clipByMatch.get(active.id) ?? null
@@ -442,7 +489,7 @@ function Deck({
           {!playable && previewingId !== active.id && (
             <button
               type="button"
-              onClick={() => (playbackUrl ? setPreviewingId(active.id) : onSeek(active.startSeconds))}
+              onClick={() => (pinnedPlayback ? setPreviewingId(active.id) : onSeek(active.startSeconds))}
               className="group/still relative block h-full w-full"
               aria-label={`Play this moment (${asPlayerTime(active.startSeconds)} to ${asPlayerTime(active.endSeconds)})`}
             >
@@ -466,12 +513,15 @@ function Deck({
             </button>
           )}
 
-          {!playable && previewingId === active.id && playbackUrl && (
+          {!playable && previewingId === active.id && pinnedPlayback && (
             <video
-              src={playbackUrl}
+              src={pinnedPlayback ?? undefined}
               autoPlay
               controls
               playsInline
+              // A signature can expire mid-session; only then take the
+              // newest one, and never on the two-second poll cadence.
+              onError={refreshPlayback}
               onLoadedMetadata={(event) => {
                 event.currentTarget.currentTime = active.startSeconds
               }}
@@ -610,11 +660,31 @@ export function DeckStage({
     onSearch(instruction)
   }
 
-  const matches = current?.request.status === "completed" ? (current.request.matches ?? []) : []
-  const clipByMatch = useMemo(
-    () => new Map((current?.clips ?? []).map((clip) => [clip.clipMatchId, clip])),
-    [current?.clips],
-  )
+  /**
+   * Every moment this video has produced, across every question asked of
+   * it — newest answer first.
+   *
+   * Deliberately NOT just the newest answer. Asking a second question while
+   * moments from the first are still undecided used to strand them: the
+   * deck switched wholesale and there was no way back to them. A moment is
+   * undecided until someone decides it, whichever question found it.
+   */
+  const { matches, clipByMatch, requestIdByMatch } = useMemo(() => {
+    const collected: ClipMatch[] = []
+    const clips = new Map<string, Clip>()
+    const owners = new Map<string, string>()
+    // Newest first, so the freshest answer's moments lead the queue.
+    for (const exchange of [...exchanges].reverse()) {
+      if (exchange.request.status !== "completed") continue
+      for (const match of exchange.request.matches ?? []) {
+        collected.push(match)
+        owners.set(match.id, exchange.request.id)
+      }
+      for (const clip of exchange.clips) clips.set(clip.clipMatchId, clip)
+    }
+    return { matches: collected, clipByMatch: clips, requestIdByMatch: owners }
+  }, [exchanges])
+
   const queue = useMemo(() => deckQueue(matches), [matches])
 
   /**
@@ -634,6 +704,7 @@ export function DeckStage({
         tiles.push({
           id,
           title: titleOverrides[id] ?? match.description ?? "Kept moment",
+          videoTitle: video.title ?? video.originalFilename ?? null,
           duration: durationSeconds != null ? asPlayerTime(durationSeconds) : null,
           url: clip?.status === "ready" ? (clip.url ?? null) : null,
           poster: match.thumbnailUrl ?? null,
@@ -648,7 +719,7 @@ export function DeckStage({
       }
     }
     return tiles
-  }, [exchanges, titleOverrides, removedClipIds])
+  }, [exchanges, titleOverrides, removedClipIds, video.title, video.originalFilename])
 
   const publishable: PublishableClip[] = useMemo(
     () => keptTiles.map((tile) => ({ id: tile.id, title: tile.title, ready: tile.status === "ready" && tile.url != null })),
@@ -747,15 +818,19 @@ export function DeckStage({
   // --- What the panel shows -----------------------------------------------
 
   const leader = !video.readyForSearch
+  /** The deck is done and there are keeps: the grid becomes the whole view,
+   *  at the library's full width rather than in a narrow column. */
+  const keptOnly =
+    !searching && queue.length === 0 && current != null && matches.length > 0 && keptTiles.length > 0
   const showAskIdle = !leader && exchanges.length === 0
 
   return (
-    <section
-      className="mx-auto w-full max-w-[34rem]"
-      aria-label="Review your moments"
-      data-testid="deck-stage"
-    >
-      <div className="rounded-3xl bg-shcard p-5 shadow-sm ring-1 ring-shborder sm:p-6">
+    <section className="w-full" aria-label="Review your moments" data-testid="deck-stage">
+      {/* No panel around any of this — the owner's call (2026-08-30). The
+          deck and the publish steps hold a centred column so a decision
+          stays in one place; the kept clips run the library's full grid
+          width, because they ARE the library's cards. */}
+      <div className={stage === "flow" && !leader && keptOnly ? "w-full" : "mx-auto w-full max-w-[34rem]"}>
         {stage === "publish" ? (
           <WhereTo
             clips={publishable}
@@ -872,15 +947,30 @@ export function DeckStage({
               <div className="aspect-[3/4] w-full animate-pulse rounded-2xl bg-shmuted" aria-hidden />
             )}
 
-            {!searching && queue.length > 0 && current && (
+            {/* The deck stays mounted while ANY moment exists, even with an
+                empty queue: the last skip's take-back lives inside it, and
+                unmounting on the final decision would swallow the one undo
+                that matters most. A moment carries its own answer's id, so
+                deciding still lands on the right request. */}
+            {!searching && matches.length > 0 && (
               <Deck
                 matches={matches}
                 clipByMatch={clipByMatch}
+                requestIdByMatch={requestIdByMatch}
                 playbackUrl={video.playback?.url ?? null}
                 onSeek={onSeek}
-                onKeep={(matchId) => onKeep(current.request.id, matchId)}
-                onRate={(matchId, verdict, reason) => onRate(current.request.id, matchId, verdict, reason)}
-                onReclip={(matchId) => onReclip(current.request.id, matchId)}
+                onKeep={(matchId) => {
+                  const requestId = requestIdByMatch.get(matchId)
+                  if (requestId) onKeep(requestId, matchId)
+                }}
+                onRate={(matchId, verdict, reason) => {
+                  const requestId = requestIdByMatch.get(matchId)
+                  if (requestId) onRate(requestId, matchId, verdict, reason)
+                }}
+                onReclip={(matchId) => {
+                  const requestId = requestIdByMatch.get(matchId)
+                  if (requestId) onReclip(requestId, matchId)
+                }}
                 hotkeys={stage === "flow"}
               />
             )}
@@ -888,7 +978,7 @@ export function DeckStage({
             {/* The deck ran out (or the answer had no deck): what remains is
                 the outcome — the kept grid when there is one, the honest
                 fork when there is not. */}
-            {!searching && queue.length === 0 && current && matches.length > 0 && (
+            {!searching && queue.length === 0 && matches.length > 0 && (
               <div style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}>
                 {keptTiles.length > 0 ? (
                   <KeptGrid
@@ -910,14 +1000,13 @@ export function DeckStage({
               </div>
             )}
 
-            {/* Kept clips from EARLIER questions stay reachable while a new
-                answer's deck is up-front. */}
+            {/* Kept clips stay reachable while the deck is still going. */}
             {!searching && queue.length > 0 && keptTiles.length > 0 && (
               <details className="pt-1">
                 <summary className="cursor-pointer text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground">
                   {keptTiles.length} kept so far
                 </summary>
-                <div className="pt-3">
+                <div className="pt-4">
                   <KeptGrid
                     clips={keptTiles}
                     onReview={() => {

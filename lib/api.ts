@@ -598,7 +598,11 @@ export const api = {
     })
   },
 
-  /** Publishes promised for later and not yet fired, soonest first. */
+  /**
+   * Promised publishes: those still waiting, plus anything that fired or
+   * failed recently. A failed promise that vanished would turn a missed
+   * publication into a silent one.
+   */
   async listScheduledPosts(): Promise<{ scheduled: Array<ScheduledPost & { clipTitle: string | null }> }> {
     return request("/api/scheduled-posts")
   },
