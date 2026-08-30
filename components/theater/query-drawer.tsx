@@ -1142,63 +1142,78 @@ function BoundaryAdjuster({
     else setEnd((current) => Math.max(0, Number((current + delta).toFixed(1))))
   }
 
-  if (!open) {
-    return (
+  // The toggle row is permanent while the clip is ready, so the card's
+  // height never depends on whether the editor is open. The editor itself
+  // FLOATS over the card (same rule as the undo pill): a card must not
+  // resize, jump or reorder because something inside it was clicked.
+  return (
+    <>
       <button
         type="button"
-        aria-expanded={false}
-        onClick={() => setOpen(true)}
-        className="mt-2 w-full whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] text-white/50 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-white/80"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="mt-2 w-full whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] text-white/60 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-white/80"
       >
-        {clip.boundariesEditedAt ? "Adjust timing again" : "Adjust timing"}
+        {open ? "Close timing" : clip.boundariesEditedAt ? "Adjust timing again" : "Adjust timing"}
       </button>
-    )
-  }
 
-  return (
-    <div className="mt-2 rounded-lg bg-white/[0.04] p-2 ring-1 ring-white/10">
-      {(["start", "end"] as const).map((which) => (
-        <div key={which} className="flex items-center justify-between gap-1 py-0.5">
-          <span className="w-9 shrink-0 text-[11px] uppercase tracking-wide text-white/40">{which}</span>
-          <span className="flex items-center gap-1">
-            {[-1, -0.1].map((delta) => (
-              <NudgeButton key={delta} label={delta === -1 ? "−1s" : "−0.1"} onClick={() => nudge(which, delta)} />
-            ))}
-            <span className="w-[72px] text-center font-mono text-[12px] tabular-nums text-white/85">
-              {asPlayerTime(which === "start" ? start : end)}
-            </span>
-            {[0.1, 1].map((delta) => (
-              <NudgeButton key={delta} label={delta === 1 ? "+1s" : "+0.1"} onClick={() => nudge(which, delta)} />
-            ))}
-          </span>
-        </div>
-      ))}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="boundary-editor"
+            className="absolute inset-x-2 bottom-12 z-10"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.25, ease: EASE }}
+          >
+            <div className="rounded-lg bg-black/90 p-2 shadow-lg ring-1 ring-white/15 backdrop-blur">
+              {(["start", "end"] as const).map((which) => (
+                <div key={which} className="flex items-center justify-between gap-1 py-0.5">
+                  <span className="w-9 shrink-0 text-[11px] uppercase tracking-wide text-white/65">{which}</span>
+                  <span className="flex items-center gap-1">
+                    {[-1, -0.1].map((delta) => (
+                      <NudgeButton key={delta} label={delta === -1 ? "−1s" : "−0.1"} onClick={() => nudge(which, delta)} />
+                    ))}
+                    <span className="w-[72px] text-center font-mono text-[12px] tabular-nums text-white/85">
+                      {asPlayerTime(which === "start" ? start : end)}
+                    </span>
+                    {[0.1, 1].map((delta) => (
+                      <NudgeButton key={delta} label={delta === 1 ? "+1s" : "+0.1"} onClick={() => nudge(which, delta)} />
+                    ))}
+                  </span>
+                </div>
+              ))}
 
-      <div className="mt-1.5 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setStart(clip.startSeconds)
-            setEnd(clip.endSeconds)
-            setOpen(false)
-          }}
-          className="flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] text-white/60 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          disabled={!dirty || !valid}
-          onClick={() => {
-            onSave(start, end)
-            setOpen(false)
-          }}
-          className="flex-1 whitespace-nowrap rounded-lg bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-40"
-        >
-          {valid ? "Save timing" : "End must follow start"}
-        </button>
-      </div>
-    </div>
+              <div className="mt-1.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStart(clip.startSeconds)
+                    setEnd(clip.endSeconds)
+                    setOpen(false)
+                  }}
+                  className="flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!dirty || !valid}
+                  onClick={() => {
+                    onSave(start, end)
+                    setOpen(false)
+                  }}
+                  className="flex-1 whitespace-nowrap rounded-lg bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-transform active:scale-[0.97] disabled:opacity-40"
+                >
+                  {valid ? "Save timing" : "End must follow start"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
 
@@ -1207,7 +1222,7 @@ function NudgeButton({ label, onClick }: { label: string; onClick: () => void })
     <button
       type="button"
       onClick={onClick}
-      className="whitespace-nowrap rounded-md px-1.5 py-1 font-mono text-[10.5px] tabular-nums text-white/50 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white/90"
+      className="whitespace-nowrap rounded-md px-1.5 py-1 font-mono text-[10.5px] tabular-nums text-white/60 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white/90"
     >
       {label}
     </button>
@@ -1267,7 +1282,7 @@ function UndoRejection({
               key={reason}
               type="button"
               onClick={() => onReason(reason)}
-              className="pointer-events-auto whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] text-white/55 ring-1 ring-white/20 transition-colors hover:bg-white/10 hover:text-white/90"
+              className="pointer-events-auto whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] text-white/60 ring-1 ring-white/20 transition-colors hover:bg-white/10 hover:text-white/90"
             >
               {label}
             </button>

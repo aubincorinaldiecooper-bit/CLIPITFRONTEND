@@ -5,6 +5,8 @@ import { api, ApiError } from "@/lib/api"
 import type { EvaluationReport } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 /**
  * The owner's evaluation numbers, plainly.
@@ -83,7 +85,11 @@ export default function EvaluationPage() {
     try {
       const result = await api.getEvaluation({
         from: from ? new Date(from).toISOString() : undefined,
-        to: to ? new Date(to).toISOString() : undefined,
+        // The API's upper bound is exclusive and a date input means "that
+        // whole day": send the start of the FOLLOWING day, or picking the
+        // same From and To would return a report covering almost nothing
+        // of the day the person chose.
+        to: to ? new Date(new Date(to).getTime() + 86_400_000).toISOString() : undefined,
         provider: provider || undefined,
         model: model || undefined,
         promptVersion: promptVersion || undefined,
@@ -121,11 +127,8 @@ export default function EvaluationPage() {
   const t = report?.timestamps
   const e = report?.economics
 
-  const inputClass =
-    "h-9 rounded-md border border-border bg-transparent px-2.5 text-[13px] outline-none focus:ring-2 focus:ring-ring"
-
   return (
-    <main className="mx-auto w-full max-w-[860px] px-5 py-8">
+    <main className="mx-auto w-full max-w-4xl px-5 py-8">
       <div className="mb-5 flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Evaluation</h1>
         <p className="text-sm text-muted-foreground">
@@ -133,39 +136,49 @@ export default function EvaluationPage() {
         </p>
       </div>
 
-      {/* Filters. Text inputs on purpose: provider/model/prompt values are
-          discovered from the segments table below, then pasted here. */}
+      {/* Filters, from the repo's own form primitives (the shadcn/ui set the
+          workspace pilot standardised on). Free-text on purpose for
+          provider/model/prompt: their values are discovered from the
+          segments table below, then pasted here. */}
       <div className="mb-5 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-          From
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-          To
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-          Provider
-          <input value={provider} onChange={(event) => setProvider(event.target.value)} placeholder="modal" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-          Model
-          <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="openbmb/MiniCPM-V-4.6" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-          Prompt version
-          <input value={promptVersion} onChange={(event) => setPromptVersion(event.target.value)} className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-          Video length
-          <select value={bucket} onChange={(event) => setBucket(event.target.value)} className={inputClass}>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="eval-from" className="text-xs text-muted-foreground">From</Label>
+          <Input id="eval-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-9 w-36" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="eval-to" className="text-xs text-muted-foreground">To</Label>
+          <Input id="eval-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-9 w-36" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="eval-provider" className="text-xs text-muted-foreground">Provider</Label>
+          <Input id="eval-provider" value={provider} onChange={(event) => setProvider(event.target.value)} placeholder="modal" className="h-9 w-32" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="eval-model" className="text-xs text-muted-foreground">Model</Label>
+          <Input id="eval-model" value={model} onChange={(event) => setModel(event.target.value)} placeholder="openbmb/MiniCPM-V-4.6" className="h-9 w-52" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="eval-prompt" className="text-xs text-muted-foreground">Prompt version</Label>
+          <Input id="eval-prompt" value={promptVersion} onChange={(event) => setPromptVersion(event.target.value)} className="h-9 w-32" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="eval-bucket" className="text-xs text-muted-foreground">Video length</Label>
+          {/* No select primitive exists in components/ui yet; the native one
+              wears the Input styling so it sits in the row without a hand-
+              rolled look. */}
+          <select
+            id="eval-bucket"
+            value={bucket}
+            onChange={(event) => setBucket(event.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             {BUCKETS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
-        </label>
+        </div>
         <Button onClick={() => void load()} disabled={loading} className="h-9">
           {loading ? "Loading…" : "Apply"}
         </Button>
