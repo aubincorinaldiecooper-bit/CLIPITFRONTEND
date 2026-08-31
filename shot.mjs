@@ -1,0 +1,10 @@
+import { chromium } from "playwright-core"
+const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" })
+const p = await b.newPage({ viewport: { width: 1000, height: 620 }, deviceScaleFactor: 2 })
+await p.goto("http://localhost:3131/preview", { waitUntil: "domcontentloaded" })
+await p.waitForSelector("main img", { timeout: 30000 })
+await p.waitForTimeout(1200)
+const box = await p.locator("main > div > *").first().boundingBox()
+console.log("first frame box:", JSON.stringify(box), "ratio:", (box.width / box.height).toFixed(4))
+await p.screenshot({ path: "/tmp/claude-0/-home-user/3a747d83-91c5-5f54-84be-7b57ad18f577/scratchpad/astryx-aspect.png" })
+await b.close()

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { api } from "@/lib/api"
 import type { Clip, ClipMatch, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 import { FilmLeader } from "./film-leader"
+import { VerticalFrame } from "@/components/media/vertical-frame"
 import {
   DeckControls,
   DeckEndState,
@@ -455,26 +456,29 @@ function Deck({
           const rank = Math.floor(index / 2) + 1
           const peerThumb = thumbnails[peer.id] ?? null
           return (
-            <div
+            <VerticalFrame
               key={peer.id}
-              aria-hidden
-              className="pointer-events-none absolute aspect-[3/4] w-[48%] overflow-hidden rounded-[24px] bg-[#101013]"
+              isVertical
+              className="pointer-events-none absolute w-[48%] overflow-hidden rounded-[24px] bg-[#101013]"
               style={{
                 transform: `translateX(${side * rank * 30}%) scale(${1 - rank * 0.09})`,
                 zIndex: 10 - rank,
                 filter: `brightness(${0.55 - rank * 0.14})`,
               }}
             >
-              {peerThumb && (
+              {peerThumb ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={peerThumb} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="block h-full w-full" />
               )}
-            </div>
+            </VerticalFrame>
           )
         })}
 
-        <div
-          className="relative z-20 aspect-[3/4] w-[58%] overflow-hidden rounded-[26px] bg-[#101013] shadow-[0_18px_50px_rgba(17,17,22,0.22)]"
+        <VerticalFrame
+          isVertical
+          className="relative z-20 w-[58%] overflow-hidden rounded-[26px] bg-[#101013] shadow-[0_18px_50px_rgba(17,17,22,0.22)]"
           style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
         >
           <ReclipCardButton
@@ -553,7 +557,7 @@ function Deck({
               style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
             />
           )}
-        </div>
+        </VerticalFrame>
 
         {/* The take-back, floating over the stack and leaving on its own. */}
         <AnimatePresence>
@@ -866,7 +870,9 @@ export function DeckStage({
         ) : leader ? (
           <div>
             <div className="overflow-hidden rounded-2xl">
-              <FilmLeader className="aspect-[3/4] w-full" />
+              <VerticalFrame isVertical>
+                <FilmLeader className="h-full w-full" />
+              </VerticalFrame>
             </div>
             <p className="mt-3 h-5 text-center text-[13px] text-muted-foreground" style={{ animation: "pulse-soft 2.2s ease-in-out infinite" }}>
               {uploadFraction !== null
@@ -944,7 +950,9 @@ export function DeckStage({
             )}
 
             {searching && (
-              <div className="aspect-[3/4] w-full animate-pulse rounded-2xl bg-shmuted" aria-hidden />
+              <VerticalFrame isVertical>
+                <div className="h-full w-full animate-pulse rounded-2xl bg-shmuted" aria-hidden />
+              </VerticalFrame>
             )}
 
             {/* The deck stays mounted while ANY moment exists, even with an
