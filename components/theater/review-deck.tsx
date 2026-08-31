@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { ClipMatch, MatchFeedbackReason } from "@/lib/types"
+import { VerticalFrame } from "@/components/media/vertical-frame"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -428,14 +429,19 @@ export function KeptGrid({
         {clips.map((tile) => (
           <div key={tile.id} className="flex flex-col overflow-hidden rounded-2xl bg-shcard ring-1 ring-shborder" data-testid="kept-tile">
             {tile.status === "ready" && tile.url && playingId === tile.id ? (
-              <video src={tile.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
+              // Astryx owns the ratio box now. The file IS the 9:16
+              // derivative, so it fills rather than being letterboxed twice.
+              <VerticalFrame isVertical>
+                <video src={tile.url} controls autoPlay playsInline className="h-full w-full bg-black" />
+              </VerticalFrame>
             ) : (
+              <VerticalFrame isVertical>
               <button
                 type="button"
                 onClick={() => tile.status === "ready" && tile.url && setPlayingId(tile.id)}
                 disabled={tile.status !== "ready" || !tile.url}
                 aria-label={tile.status === "ready" ? `Play: ${tile.title}` : tile.title}
-                className="group relative block aspect-video w-full bg-black disabled:cursor-default"
+                className="group relative block h-full w-full bg-black disabled:cursor-default"
               >
                 {tile.poster && (
                   /* eslint-disable-next-line @next/next/no-img-element */
@@ -468,6 +474,7 @@ export function KeptGrid({
                   </span>
                 )}
               </button>
+              </VerticalFrame>
             )}
 
             <div className="flex flex-col gap-3 p-4">
