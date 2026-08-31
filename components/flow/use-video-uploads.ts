@@ -23,6 +23,9 @@ import { MAX_FILES, MAX_FILE_BYTES, type UploadEntry } from "@/components/flow/u
 export const FREE_MAX_VIDEO_MINUTES = 30
 const FREE_MAX_VIDEO_SECONDS = FREE_MAX_VIDEO_MINUTES * 60
 
+/** Temporarily disabled so long footage can be uploaded while the paid tiers are still being set up. */
+const FREE_VIDEO_CAP_ENABLED = false
+
 /** A file the free plan turned away, for the upgrade dialog to name. */
 export interface OverLimitFile {
   name: string
@@ -111,9 +114,13 @@ export function useVideoUploads({
         const tooLong: OverLimitFile[] = []
         const withinPlan: File[] = []
         for (const file of files) {
-          const seconds = await probeDuration(file)
-          if (seconds !== null && seconds > FREE_MAX_VIDEO_SECONDS) {
-            tooLong.push({ name: file.name, minutes: Math.round(seconds / 60) })
+          if (FREE_VIDEO_CAP_ENABLED) {
+            const seconds = await probeDuration(file)
+            if (seconds !== null && seconds > FREE_MAX_VIDEO_SECONDS) {
+              tooLong.push({ name: file.name, minutes: Math.round(seconds / 60) })
+            } else {
+              withinPlan.push(file)
+            }
           } else {
             withinPlan.push(file)
           }
