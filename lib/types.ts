@@ -14,6 +14,9 @@ export type ClipRequestStatus = "pending" | "searching" | "completed" | "failed"
 
 export type ClipStatus = "pending" | "generating" | "ready" | "failed"
 
+export type ClipPlatform = "tiktok" | "reels" | "shorts" | "original"
+export type ClipCompositionMode = "smart_crop" | "blurred_background" | "padded" | "original"
+
 export type MatchSource = "visual" | "transcript" | "multimodal"
 
 /**
@@ -349,6 +352,23 @@ export interface Clip {
   durationSeconds: number | null
   sizeBytes: number | null
   url: string | null
+  /** Dedicated still selected by the renderer (normally 25% into the cut). */
+  posterUrl?: string | null
+  posterTimestampSeconds?: number | null
+  posterGenerated?: boolean
+  /** The requested post surface and the asset the renderer actually returned. */
+  platform?: ClipPlatform | null
+  outputAspectRatio?: "9:16" | "16:9" | "source" | null
+  sourceAspectRatio?: string | null
+  compositionMode?: ClipCompositionMode | null
+  verticalDerivativeGenerated?: boolean
+  /** The untouched cut remains addressable when `url` is a platform derivative. */
+  canonicalUrl?: string | null
+  generationMetrics?: {
+    clipLatencyMs: number | null
+    posterLatencyMs: number | null
+    derivativeLatencyMs: number | null
+  } | null
   /** The caption spec this render carries, so the editor starts from it. */
   captions?: ClipCaption[] | null
   derivedFromClipId?: string | null

@@ -20,6 +20,7 @@ import type {
   UploadTarget,
   Video,
 } from "./types"
+import { presentationForInstruction } from "./clip-presentation"
 
 /**
  * Client for the CLIPIT backend.
@@ -468,9 +469,17 @@ export const api = {
   },
 
   async createClipRequest(videoId: string, instruction: string): Promise<{ clipRequest: ClipRequest }> {
+    const presentation = presentationForInstruction(instruction)
     return request(`/api/videos/${videoId}/clip-requests`, {
       method: "POST",
-      body: JSON.stringify({ instruction }),
+      body: JSON.stringify({
+        instruction,
+        // Duration was already inferred from these words server-side. Make
+        // framing equally explicit while old backends safely ignore it.
+        ...(presentation
+          ? { presentation }
+          : {}),
+      }),
     })
   },
 

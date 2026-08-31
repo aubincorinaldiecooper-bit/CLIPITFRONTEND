@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { api } from "@/lib/api"
 import type { Clip, ClipMatch, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import { clipPoster, isVerticalClip, needsComposedFallback } from "@/lib/clip-presentation"
 import { FilmLeader } from "./film-leader"
 import {
   DeckControls,
@@ -317,8 +318,8 @@ function usePinnedThumbnails(matches: ClipMatch[]) {
 
 /**
  * The deck itself: the tall card, ↻ on its corner, ✕/✓ beneath. The moment
- * plays IN the card — full frame, letterboxed rather than cropped, because
- * a decision made on a crop is a decision about a different clip.
+ * plays IN the card. Before a derivative exists the source stays intact on a
+ * blurred canvas; a finished vertical derivative can fill the post frame.
  */
 function Deck({
   matches,
@@ -439,6 +440,8 @@ function Deck({
   const activeThumbnail = thumbnails[active.id] ?? null
   const clip = clipByMatch.get(active.id) ?? null
   const playable = clip?.status === "ready" && clip?.url ? clip.url : null
+  const vertical = clip ? isVerticalClip(clip) : false
+  const composedFallback = clip ? needsComposedFallback(clip) : false
   const regenerating = active.reclipStatus === "pending"
   /** The cards waiting behind, fanned either side — the owner's stack. */
   const behind = queue.slice(1, 5)
@@ -458,7 +461,7 @@ function Deck({
             <div
               key={peer.id}
               aria-hidden
-              className="pointer-events-none absolute aspect-[3/4] w-[48%] overflow-hidden rounded-[24px] bg-[#101013]"
+              className="pointer-events-none absolute aspect-[9/16] w-[48%] overflow-hidden rounded-[24px] bg-[#101013]"
               style={{
                 transform: `translateX(${side * rank * 30}%) scale(${1 - rank * 0.09})`,
                 zIndex: 10 - rank,
@@ -474,7 +477,7 @@ function Deck({
         })}
 
         <div
-          className="relative z-20 aspect-[3/4] w-[58%] overflow-hidden rounded-[26px] bg-[#101013] shadow-[0_18px_50px_rgba(17,17,22,0.22)]"
+          className="relative z-20 aspect-[9/16] w-[58%] overflow-hidden rounded-[26px] bg-[#101013] shadow-[0_18px_50px_rgba(17,17,22,0.22)]"
           style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
         >
           <ReclipCardButton
@@ -544,14 +547,20 @@ function Deck({
           )}
 
           {playable && (
-            <video
-              src={playable}
-              controls
-              preload="metadata"
-              playsInline
-              className="h-full w-full bg-black object-contain"
-              style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
-            />
+            <>
+              {composedFallback && (
+                <video src={playable} muted aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl opacity-70" />
+              )}
+              <video
+                src={playable}
+                poster={(clip ? clipPoster(clip) : null) ?? activeThumbnail ?? undefined}
+                controls
+                preload="metadata"
+                playsInline
+                className={`relative h-full w-full bg-black/20 ${vertical && !composedFallback ? "object-cover" : "object-contain"}`}
+                style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+              />
+            </>
           )}
         </div>
 
@@ -707,7 +716,9 @@ export function DeckStage({
           videoTitle: video.title ?? video.originalFilename ?? null,
           duration: durationSeconds != null ? asPlayerTime(durationSeconds) : null,
           url: clip?.status === "ready" ? (clip.url ?? null) : null,
-          poster: match.thumbnailUrl ?? null,
+          poster: clip ? (clipPoster(clip) ?? match.thumbnailUrl ?? null) : (match.thumbnailUrl ?? null),
+          vertical: clip ? isVerticalClip(clip) : false,
+          composedFallback: clip ? needsComposedFallback(clip) : false,
           status:
             clip == null || clip.status === "pending" || clip.status === "generating"
               ? "cutting"

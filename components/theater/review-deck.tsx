@@ -366,6 +366,8 @@ export interface KeptClipTile {
   duration: string | null
   url: string | null
   poster: string | null
+  vertical?: boolean
+  composedFallback?: boolean
   status: "ready" | "cutting" | "failed"
   error: string | null
 }
@@ -377,7 +379,7 @@ export interface KeptClipTile {
  *
  * The card is rebuilt rather than ClipCard imported because a keep can be
  * on screen BEFORE its cut exists, and ClipCard takes a finished clip. The
- * shape, spacing and behaviour follow it exactly: 16:9 still, play in
+ * shape, spacing and behaviour follow it exactly: a post-shaped still, play in
  * place, duration over the frame's corner, description then source line,
  * an actions row beneath.
  *
@@ -428,14 +430,26 @@ export function KeptGrid({
         {clips.map((tile) => (
           <div key={tile.id} className="flex flex-col overflow-hidden rounded-2xl bg-shcard ring-1 ring-shborder" data-testid="kept-tile">
             {tile.status === "ready" && tile.url && playingId === tile.id ? (
-              <video src={tile.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
+              <div className={`relative w-full overflow-hidden bg-black ${tile.vertical ? "aspect-[9/16]" : "aspect-video"}`}>
+                {tile.composedFallback && (
+                  <video src={tile.url} muted aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl opacity-70" />
+                )}
+                <video
+                  src={tile.url}
+                  poster={tile.poster ?? undefined}
+                  controls
+                  autoPlay
+                  playsInline
+                  className={`relative h-full w-full ${tile.vertical && !tile.composedFallback ? "object-cover" : "object-contain"}`}
+                />
+              </div>
             ) : (
               <button
                 type="button"
                 onClick={() => tile.status === "ready" && tile.url && setPlayingId(tile.id)}
                 disabled={tile.status !== "ready" || !tile.url}
                 aria-label={tile.status === "ready" ? `Play: ${tile.title}` : tile.title}
-                className="group relative block aspect-video w-full bg-black disabled:cursor-default"
+                className={`group relative block w-full bg-black disabled:cursor-default ${tile.vertical ? "aspect-[9/16]" : "aspect-video"}`}
               >
                 {tile.poster && (
                   /* eslint-disable-next-line @next/next/no-img-element */
