@@ -44,7 +44,7 @@ function P() {
     return (
       <KeptGrid
         clips={[
-          { id: "c1", title: "Drone over the harbour at night", videoTitle: "night-shoot.mp4", duration: "0:24", url: "x", poster: g("#2b3f63", "#e07020"), status: "ready", error: null },
+          { id: "c1", title: "Drone over the harbour at night", videoTitle: "night-shoot.mp4", duration: "0:24", url: "x", poster: g("#2b3f63", "#e07020"), vertical: true, composedFallback: false, status: "ready", error: null },
           { id: "c2", title: "Green car pulls away from the lot", videoTitle: "night-shoot.mp4", duration: "0:19", url: "x", poster: g("#0d4d2e", "#67c23a"), status: "ready", error: null },
           { id: "c3", title: "Gas station at night", videoTitle: "night-shoot.mp4", duration: null, url: null, poster: g("#151528", "#c9a227"), status: "cutting", error: null },
         ]}

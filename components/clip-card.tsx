@@ -5,6 +5,7 @@ import { DownloadGlyph } from "@/components/clip-action-icons"
 import type { ReactNode } from "react"
 import { HStack } from "@astryxdesign/core/Stack"
 import type { LibraryClip } from "@/lib/types"
+import { clipPoster, isVerticalClip, needsComposedFallback } from "@/lib/clip-presentation"
 
 /**
  * The clip card: still, play-in-place video, description, timecode line, and
@@ -55,6 +56,10 @@ export function ClipCard({
     Number.isFinite(seconds) && seconds > 0
       ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
       : null
+  const vertical = isVerticalClip(clip)
+  const poster = clipPoster(clip)
+  const composedFallback = needsComposedFallback(clip)
+  const frameClass = vertical ? "aspect-[9/16] max-h-[34rem]" : "aspect-video"
 
   return (
     <div
@@ -66,18 +71,31 @@ export function ClipCard({
       }
     >
       {isPlaying && clip.url ? (
-        <video src={clip.url} controls autoPlay playsInline className="aspect-video w-full bg-black" />
+        <div className={`relative mx-auto w-full overflow-hidden bg-black ${frameClass}`} data-testid="clip-player-frame">
+          {composedFallback && (
+            <video src={clip.url} muted aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl opacity-70" />
+          )}
+          <video
+            src={clip.url}
+            poster={poster ?? undefined}
+            controls
+            autoPlay
+            playsInline
+            className={`relative h-full w-full ${vertical && !composedFallback ? "object-cover" : "object-contain"}`}
+          />
+        </div>
       ) : (
         <button
           type="button"
           onClick={onPlay}
           disabled={!clip.url}
           aria-label={`Play: ${clip.description}`}
-          className="group relative block aspect-video w-full bg-black disabled:cursor-default"
+          className={`group relative mx-auto block w-full bg-black disabled:cursor-default ${frameClass}`}
+          data-testid="clip-poster"
         >
-          {clip.thumbnailUrl && (
+          {poster && (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={clip.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+            <img src={poster} alt="" loading="lazy" className="h-full w-full object-cover" />
           )}
           {clip.url && (
             <span className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover:scale-105">
