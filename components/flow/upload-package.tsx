@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
@@ -9,8 +9,9 @@ import {
   CheckmarkCircle02Icon,
   RefreshIcon,
   SquareLock01Icon,
-  Upload01Icon,
 } from "@hugeicons/core-free-icons"
+import { Clapperboard, FileVideo, Film } from "lucide-react"
+import { FileUpload } from "@/components/extend/file-upload"
 import { cn } from "@/lib/utils"
 
 /**
@@ -113,29 +114,151 @@ function readyCount(entries: UploadEntry[]): number {
   return entries.filter((entry) => entry.phase === "ready").length
 }
 
+const VIDEO_ACCEPT = ["video/*", ".mp4", ".mov", ".mkv", ".webm"].join(",")
+
+const VIDEO_FILE_TYPES = [
+  { label: "MP4", icon: FileVideo },
+  { label: "MOV", icon: Clapperboard },
+  { label: "WebM", icon: Film },
+]
+
+function SingleUploadCard({
+  entry,
+  onRemove,
+  onRetry,
+}: {
+  entry: UploadEntry
+  onRemove: (id: string) => void
+  onRetry: (id: string) => void
+}) {
+  const isVideo = entry.file.type.startsWith("video/") || /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(entry.file.name)
+  const previewUrl = useMemo(() => URL.createObjectURL(entry.file), [entry.file])
+
+  useEffect(() => {
+    return () => {
+      URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-foreground/20 bg-card p-4">
+      <div className="relative flex h-64 items-center justify-center overflow-hidden rounded-xl bg-muted">
+        {isVideo ? (
+          <video
+            src={previewUrl}
+            preload="metadata"
+            disablePictureInPicture
+            controlsList="nodownload"
+            className="max-h-full max-w-full rounded-lg object-contain"
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <FileGlyph className="h-12 w-12" />
+            <span className="text-xs">{fileKind(entry.file)}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-shmuted text-muted-foreground ring-1 ring-shborder"
+        >
+          <FileGlyph className="h-5 w-5" />
+        </span>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-sm font-medium">{entry.file.name}</span>
+          <span className="truncate text-xs text-muted-foreground">{statusLine(entry)}</span>
+          {entry.phase !== "queued" && entry.phase !== "failed" && (
+            <span
+              role="progressbar"
+              aria-label={entry.phase === "ready" ? `${entry.file.name} uploaded` : `Uploading ${entry.file.name}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round((entry.progress ?? 0) * 100)}
+              className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-shmuted"
+            >
+              <span
+                className={cn(
+                  "block h-full rounded-full transition-[width] duration-200",
+                  entry.phase === "ready" ? "w-full bg-emerald-600" : "bg-shprimary",
+                )}
+                style={
+                  entry.phase === "ready"
+                    ? undefined
+                    : { width: `${Math.round((entry.progress ?? 0) * 100)}%` }
+                }
+              />
+            </span>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {entry.phase === "ready" && (
+            <span aria-label={`${entry.file.name} is ready`} role="status" className="text-emerald-600">
+              <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-5" />
+            </span>
+          )}
+          {entry.phase === "failed" && (
+            <>
+              <span aria-label={`${entry.file.name} failed`} role="status" className="text-destructive">
+                <HugeiconsIcon icon={Alert02Icon} className="size-5" />
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Try ${entry.file.name} again`}
+                title="Try again"
+                onClick={() => onRetry(entry.id)}
+              >
+                <HugeiconsIcon icon={RefreshIcon} />
+              </Button>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove ${entry.file.name}`}
+            title="Remove"
+            onClick={() => onRemove(entry.id)}
+          >
+            <HugeiconsIcon icon={Cancel01Icon} />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function UploadPackage({
   entries,
   onAdd,
   onRemove,
   onRetry,
+  single = false,
 }: {
   entries: UploadEntry[]
   onAdd: (files: File[]) => void
   onRemove: (id: string) => void
   onRetry: (id: string) => void
+  single?: boolean
 }) {
-  const [dragging, setDragging] = useState(false)
-  const fileInput = useRef<HTMLInputElement>(null)
-  const full = entries.length >= MAX_FILES
+  const limit = single ? 1 : MAX_FILES
+  const full = entries.length >= limit
+  const firstEntry = entries[0]
 
-  const take = (list: FileList | null) => {
-    if (!list) return
-    onAdd(Array.from(list))
+  if (single && firstEntry) {
+    return (
+      <div className="flex flex-col gap-4">
+        <SingleUploadCard entry={firstEntry} onRemove={onRemove} onRetry={onRetry} />
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {entries.length > 0 && (
+      {entries.length > 0 && !single && (
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-base font-semibold">Upload package</h2>
           <span className="text-sm text-muted-foreground">
@@ -144,78 +267,38 @@ export function UploadPackage({
         </div>
       )}
 
-      <div
-        onDragOver={(event) => {
-          if (full) return
-          event.preventDefault()
-          setDragging(true)
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault()
-          setDragging(false)
-          if (full) return
-          take(event.dataTransfer.files)
-        }}
-        className={cn(
-          "flex flex-col items-center justify-center gap-6 rounded-2xl border border-dashed border-shborder bg-shcard px-6 py-[4.75rem] text-center transition-colors",
-          dragging && "border-ring bg-shaccent",
-          full && "opacity-55",
-        )}
-      >
-        <span className="flex h-24 w-24 items-center justify-center rounded-full bg-shmuted text-muted-foreground ring-1 ring-shborder">
-          <HugeiconsIcon icon={Upload01Icon} className="size-9" />
-        </span>
-        <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-semibold">
-            {full ? "That's as many as one go takes" : "Drop videos to upload"}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {full
-              ? `${entries.length} of ${MAX_FILES} added — upload these, then add more`
-              : "MP4, MOV, MKV, WebM — up to 6 hours each"}
-          </p>
-        </div>
-        <Button
-          size="lg"
-          // Full is the only gate. It used to also disable while uploads ran,
-          // which quietly disagreed with drag-and-drop — a drop mid-batch was
-          // accepted while Browse refused. Adding to a running batch is fine:
-          // every file runs its own upload and reports on its own row.
-          disabled={full}
-          onClick={() => fileInput.current?.click()}
-        >
-          Browse
-        </Button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept="video/*"
-          // The whole point of this change: more than one at a time.
-          multiple
-          className="hidden"
-          onChange={(event) => {
-            take(event.target.files)
-            // Cleared so picking the same file twice still fires a change.
-            event.currentTarget.value = ""
-          }}
-        />
-      </div>
+      <FileUpload
+        accept={VIDEO_ACCEPT}
+        acceptedFileTypes={VIDEO_FILE_TYPES}
+        title={full ? "That's as many as one go takes" : "Drop videos to upload"}
+        description={
+          full
+            ? `${entries.length} of ${limit} added — upload these, then add more`
+            : "MP4, MOV, MKV, WebM — up to 6 hours each"
+        }
+        browseLabel="Browse"
+        draggingLabel="Drop to add"
+        multiple={single ? false : !full}
+        showFileList={false}
+        showIconCluster={!single}
+        onFilesAccepted={(files) => onAdd(files)}
+        className={cn(full && "pointer-events-none opacity-55")}
+      />
 
-      {entries.length > 0 ? (
+      {entries.length > 0 && !single ? (
         <ul className="flex list-none flex-col gap-2 p-0">
           {entries.map((entry) => (
             <li
               key={entry.id}
               className={cn(
-                "rounded-[14px] bg-shcard px-4 py-3 ring-1 ring-shborder",
+                "rounded-2xl bg-shcard px-4 py-3 ring-1 ring-shborder",
                 entry.phase === "failed" && "ring-destructive/40",
               )}
             >
               <div className="flex items-center gap-3">
                 <span
                   aria-hidden
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-shmuted text-muted-foreground ring-1 ring-shborder"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-shmuted text-muted-foreground ring-1 ring-shborder"
                 >
                   <FileGlyph className="h-5 w-5" />
                 </span>
@@ -225,11 +308,6 @@ export function UploadPackage({
                   <span className="truncate text-[13px] text-muted-foreground">
                     {statusLine(entry)}
                   </span>
-                  {/* The bar stays on a finished row, full and green, as the
-                      reference keeps it — the owner's call. The colour is what
-                      says "done", and a row that keeps its bar keeps the whole
-                      list the same shape as it fills up rather than having
-                      rows change height one by one. */}
                   {entry.phase !== "queued" && entry.phase !== "failed" && (
                     <span
                       role="progressbar"
