@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Card } from "@astryxdesign/core/Card"
 import { VStack, HStack } from "@astryxdesign/core/Stack"
 import { Text, Heading } from "@astryxdesign/core/Text"
@@ -34,6 +34,53 @@ function clipForMatch(match: ClipMatch, clips: Clip[]) {
   return clips.find((c) => c.id === clipId && c.status === "ready" && c.url) ?? null
 }
 
+interface PreviewSource {
+  url: string
+  start: number
+  end: number | null
+}
+
+/**
+ * What Play should show for a moment.
+ *
+ * A moment is only cut into its own file once it has been kept, so during
+ * review there is usually nothing rendered to play. The source video answers
+ * for it: same footage, seeked to the moment's bounds. Deciding whether to
+ * keep a clip you cannot watch is not a decision.
+ */
+function previewFor(match: ClipMatch, clips: Clip[], video: Video | null): PreviewSource | null {
+  const clip = clipForMatch(match, clips)
+  if (clip?.url) return { url: clip.url, start: 0, end: null }
+  const source = video?.playback?.url
+  if (!source) return null
+  return { url: source, start: match.startSeconds, end: match.endSeconds }
+}
+
+/** Plays a moment and stops at its out-point rather than running on. */
+function PreviewPlayer({ source }: { source: PreviewSource }) {
+  const ref = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const element = ref.current
+    if (element) element.currentTime = source.start
+  }, [source.url, source.start])
+
+  return (
+    <video
+      ref={ref}
+      src={`${source.url}#t=${source.start}`}
+      controls
+      autoPlay
+      muted
+      playsInline
+      onTimeUpdate={(event) => {
+        const element = event.currentTarget
+        if (source.end !== null && element.currentTime >= source.end) element.pause()
+      }}
+    />
+  )
+}
+
 export function ReviewStep({ request, clips, video, busy, onKeep, onSkip, onUploadMore }: ReviewStepProps) {
   const matches = request?.matches ?? []
   const pending = useMemo(() => matches.filter((m) => m.feedback == null), [matches])
@@ -54,19 +101,19 @@ export function ReviewStep({ request, clips, video, busy, onKeep, onSkip, onUplo
   const cards = useMemo(
     () =>
       pending.map((match) => {
-        const clip = clipForMatch(match, clips)
         return {
           id: match.id,
           src: match.thumbnailUrl ?? "",
           title: match.description || "Moment",
           description: `${videoLabel} · ${asMinutes(match.startSeconds)} – ${asMinutes(match.endSeconds)}`,
-          videoUrl: clip?.url ?? undefined,
+          videoUrl: previewFor(match, clips, video)?.url,
         }
       }),
-    [pending, clips, videoLabel],
+    [pending, clips, video, videoLabel],
   )
 
-  const previewClip = previewId ? clipForMatch(matches.find((m) => m.id === previewId) as ClipMatch, clips) : null
+  const previewMatch = previewId ? matches.find((m) => m.id === previewId) : undefined
+  const preview = previewMatch ? previewFor(previewMatch, clips, video) : null
 
   const keptCount = matches.filter((m) => m.feedback === "approved").length
   const skippedCount = matches.filter((m) => m.feedback === "rejected").length
@@ -162,15 +209,9 @@ export function ReviewStep({ request, clips, video, busy, onKeep, onSkip, onUplo
           }
           content={
             <LayoutContent padding={0} isScrollable={false}>
-              {previewClip?.url && (
+              {preview && (
                 <AspectRatio ratio={9 / 16} fit="cover">
-                  <video
-                    src={previewClip.url}
-                    controls
-                    autoPlay
-                    muted
-                    playsInline
-                  />
+                  <PreviewPlayer source={preview} />
                 </AspectRatio>
               )}
             </LayoutContent>

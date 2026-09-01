@@ -17,16 +17,22 @@ export interface AnalyzingUploadProps {
   /** 0–100. */
   percent?: number
   message?: string
-  onCancel?: () => void
+  actionLabel?: string
+  onAction?: () => void
 }
 
 /**
  * Loading card used while Clipit watches the uploaded video.
  *
  * Uses the shadcn Empty pattern + loading-ui animated icon/shimmer,
- * adapted to video with a progress bar and full-width outline Cancel.
+ * adapted to video with a progress bar and a full-width outline action.
  */
-export function AnalyzingUpload({ percent = 0, message, onCancel }: AnalyzingUploadProps) {
+export function AnalyzingUpload({
+  percent = 0,
+  message,
+  actionLabel = "Back",
+  onAction,
+}: AnalyzingUploadProps) {
   const clamped = Math.min(100, Math.max(0, percent))
 
   return (
@@ -51,9 +57,9 @@ export function AnalyzingUpload({ percent = 0, message, onCancel }: AnalyzingUpl
       </EmptyHeader>
 
       <EmptyContent className="w-full max-w-md">
-        {onCancel && (
-          <Button variant="outline" className="w-full" onClick={onCancel}>
-            Cancel
+        {onAction && (
+          <Button variant="outline" className="w-full whitespace-nowrap" onClick={onAction}>
+            {actionLabel}
           </Button>
         )}
       </EmptyContent>

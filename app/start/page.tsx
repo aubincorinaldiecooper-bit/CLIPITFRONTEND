@@ -208,6 +208,15 @@ export default function StartPage() {
 
   // --- actions ------------------------------------------------------------
 
+  const currentRequest = exchanges.at(-1)?.request ?? null
+
+  /**
+   * A search that is still running. Leaving the waiting screen does not stop
+   * it — nothing can, there is no cancel on the server — so asking again is
+   * routed back to the search in flight instead of starting a second one.
+   */
+  const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
+
   const startSearch = useCallback(
     async (instruction: string) => {
       if (!video || busy) return
@@ -228,6 +237,10 @@ export default function StartPage() {
 
   const handleNext = useCallback(() => {
     if (step === "upload") {
+      if (searchRunning) {
+        setStep("watch")
+        return
+      }
       const instruction = promptDraft.trim()
       if (!instruction || !video?.readyForSearch || busy) return
       setPromptDraft("")
@@ -235,13 +248,36 @@ export default function StartPage() {
     } else if (step === "watch") {
       setStep("review")
     }
-  }, [step, promptDraft, video, busy, startSearch])
+  }, [step, promptDraft, video, busy, searchRunning, startSearch])
 
   const handleBack = useCallback(() => {
     if (step === "watch") setStep("upload")
   }, [step])
 
-  const currentRequest = exchanges.at(-1)?.request ?? null
+  /** Drops the search that could not finish, so the prompt can be asked again. */
+  const retrySearch = useCallback(() => {
+    setExchanges((previous) => previous.slice(0, -1))
+    setError(null)
+    setStep("upload")
+  }, [])
+
+  /**
+   * Taking a file off the list takes it off the screen too: a video that was
+   * removed cannot stay the one being asked about.
+   */
+  const dropUpload = useCallback(
+    (entryId: string) => {
+      const dropped = uploads.find((entry) => entry.id === entryId)
+      removeUpload(entryId)
+      if (dropped?.videoId && dropped.videoId === video?.id) {
+        setVideo(null)
+        setExchanges([])
+        setPromptDraft("")
+        setStep("upload")
+      }
+    },
+    [uploads, removeUpload, video?.id],
+  )
 
   const reclipMatch = useCallback(
     async (exchangeRequestId: string, matchId: string) => {
@@ -430,9 +466,9 @@ export default function StartPage() {
 
   useEffect(() => {
     if (step !== "watch") return
-    if (currentRequest?.status === "completed" || currentRequest?.status === "failed") {
-      setStep("review")
-    }
+    // A search that failed has no moments to review; the waiting screen shows
+    // what went wrong and offers another go.
+    if (currentRequest?.status === "completed") setStep("review")
   }, [step, currentRequest?.status])
 
   if (!configured) {
@@ -459,13 +495,15 @@ export default function StartPage() {
                 promptValue={promptDraft}
                 onPromptChange={setPromptDraft}
                 onAdd={startUploads}
-                onRemove={removeUpload}
+                onRemove={dropUpload}
                 onRetry={retryUpload}
                 onSubmit={handleNext}
                 disabled={busy}
               />
             )}
-            {step === "watch" && <WatchStep request={currentRequest} onCancel={handleBack} />}
+            {step === "watch" && (
+              <WatchStep request={currentRequest} onBack={handleBack} onRetry={retrySearch} />
+            )}
           </Wizard>
         ) : (
           <ReviewStep

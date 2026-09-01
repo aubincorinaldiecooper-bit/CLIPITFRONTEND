@@ -37,6 +37,7 @@ import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
 import { UploadPackage } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
+import { TimelineAnimation } from "@/components/ui/timeline-animation"
 
 /**
  * The caption length to count against.
@@ -47,6 +48,24 @@ import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
  * us enforcing a rule that only one of them applies.
  */
 const CAPTION_LIMIT = 220
+
+/**
+ * How each card arrives: out of focus, then sharp, one after the next.
+ *
+ * The upstream timeline steps by half a second per item, which reads well for
+ * nine landing-page blocks and badly for a library — the twentieth clip would
+ * wait ten seconds to appear. A tenth of a second per card keeps the sweep and
+ * lets a full page finish while you are still looking at it.
+ */
+const CARD_REVEAL = {
+  visible: (i: number) => ({
+    y: 0,
+    opacity: 1,
+    filter: "blur(0px)",
+    transition: { delay: i * 0.1, duration: 0.5 },
+  }),
+  hidden: { y: -20, opacity: 0, filter: "blur(10px)" },
+}
 
 /**
  * Everything you have cut, newest first — on the app shell the Shared screens
@@ -109,6 +128,7 @@ function ClipsBody() {
     },
   })
   const uploadInput = useRef<HTMLInputElement>(null)
+  const timelineRef = useRef<HTMLDivElement>(null)
   /** Counts enters/leaves — a plain boolean flickers over child elements. */
   const dragDepth = useRef(0)
   const [dragging, setDragging] = useState(false)
@@ -444,6 +464,7 @@ function ClipsBody() {
   return (
     <>
       <div
+        ref={timelineRef}
         className="relative flex flex-1 flex-col gap-5"
         onDragEnter={(event) => {
           if (![...event.dataTransfer.items].some((item) => item.kind === "file")) return
@@ -543,113 +564,119 @@ function ClipsBody() {
         ) : (
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {clips.map((clip) => (
-                <ClipCard
+              {clips.map((clip, index) => (
+                <TimelineAnimation
                   key={clip.id}
-                  clip={clip}
-                  surface="light"
-                  isPlaying={playingId === clip.id}
-                  onPlay={() => setPlayingId(clip.id)}
-                  showDate
-                  actions={
-                    <>
-                      {clip.downloadUrl && (
-                        <ClipDownloadAction href={clip.downloadUrl} surface="light" />
-                      )}
-                      {clip.status === "ready" && (
-                        <ClipAction
-                          label="Captions"
-                          icon={SubtitleIcon}
-                          onClick={() => setCaptionClipId(clip.id)}
-                        />
-                      )}
-                      {clip.status === "ready" && (
-                        <ClipAction
-                          label="Publish"
-                          icon={Upload02Icon}
-                          onClick={() =>
-                            requireSignIn({ action: "publish", clipId: clip.id }, () =>
-                              setPublishTarget(clip.id),
-                            )
-                          }
-                        />
-                      )}
-                      {clip.status === "ready" && (
-                        <Popover
-                          open={sendOpenId === clip.id}
-                          onOpenChange={(open) => {
-                            if (open) {
-                              // Sending a clip into a shared room needs a
-                              // person: rooms outlive a browser tab.
-                              requireSignIn({ action: "send", clipId: clip.id }, () =>
-                                openSend(clip.id),
+                  animationNum={index}
+                  timelineRef={timelineRef}
+                  customVariants={CARD_REVEAL}
+                >
+                  <ClipCard
+                    clip={clip}
+                    surface="light"
+                    isPlaying={playingId === clip.id}
+                    onPlay={() => setPlayingId(clip.id)}
+                    showDate
+                    actions={
+                      <>
+                        {clip.downloadUrl && (
+                          <ClipDownloadAction href={clip.downloadUrl} surface="light" />
+                        )}
+                        {clip.status === "ready" && (
+                          <ClipAction
+                            label="Captions"
+                            icon={SubtitleIcon}
+                            onClick={() => setCaptionClipId(clip.id)}
+                          />
+                        )}
+                        {clip.status === "ready" && (
+                          <ClipAction
+                            label="Publish"
+                            icon={Upload02Icon}
+                            onClick={() =>
+                              requireSignIn({ action: "publish", clipId: clip.id }, () =>
+                                setPublishTarget(clip.id),
                               )
-                            } else if (sendOpenIdRef.current === clip.id) {
-                              setSendTarget(null)
                             }
-                          }}
-                        >
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="icon-sm"
-                              aria-label="Send to a room"
-                              title="Send to a room"
-                              className="rounded-full"
-                            >
-                              <HugeiconsIcon icon={Folder01Icon} />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="shadcn-scope w-[280px]" align="start">
-                            {sendFailed ? (
-                              <div className="flex flex-col gap-2">
+                          />
+                        )}
+                        {clip.status === "ready" && (
+                          <Popover
+                            open={sendOpenId === clip.id}
+                            onOpenChange={(open) => {
+                              if (open) {
+                                // Sending a clip into a shared room needs a
+                                // person: rooms outlive a browser tab.
+                                requireSignIn({ action: "send", clipId: clip.id }, () =>
+                                  openSend(clip.id),
+                                )
+                              } else if (sendOpenIdRef.current === clip.id) {
+                                setSendTarget(null)
+                              }
+                            }}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="secondary"
+                                size="icon-sm"
+                                aria-label="Send to a room"
+                                title="Send to a room"
+                                className="rounded-full"
+                              >
+                                <HugeiconsIcon icon={Folder01Icon} />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="shadcn-scope w-[280px]" align="start">
+                              {sendFailed ? (
+                                <div className="flex flex-col gap-2">
+                                  <p className="text-[13px] text-muted-foreground">
+                                    Couldn&apos;t load your rooms just now.
+                                  </p>
+                                  <Button variant="secondary" size="sm" onClick={() => openSend(clip.id)}>
+                                    Try again
+                                  </Button>
+                                </div>
+                              ) : rooms === null ? (
+                                <Skeleton className="h-[60px] w-full rounded-lg" />
+                              ) : sendSignInRequired ? (
                                 <p className="text-[13px] text-muted-foreground">
-                                  Couldn&apos;t load your rooms just now.
+                                  Shared rooms belong to you, not to a browser tab — sign in (top
+                                  right) to send clips to one.
                                 </p>
-                                <Button variant="secondary" size="sm" onClick={() => openSend(clip.id)}>
-                                  Try again
-                                </Button>
-                              </div>
-                            ) : rooms === null ? (
-                              <Skeleton className="h-[60px] w-full rounded-lg" />
-                            ) : sendSignInRequired ? (
-                              <p className="text-[13px] text-muted-foreground">
-                                Shared rooms belong to you, not to a browser tab — sign in (top
-                                right) to send clips to one.
-                              </p>
-                            ) : rooms.length === 0 ? (
-                              <p className="text-[13px] text-muted-foreground">
-                                You&apos;re not in any shared room yet. Make one on the Shared page,
-                                then send clips there.
-                              </p>
-                            ) : (
-                              <div className="flex flex-col gap-1">
-                                {rooms.map((room) =>
-                                  sharedWith.includes(room.id) ? (
-                                    <p key={room.id} className="px-1 py-1 text-[13px] text-muted-foreground">
-                                      ✓ Already in {room.name}
-                                    </p>
-                                  ) : (
-                                    <Button
-                                      key={room.id}
-                                      variant="secondary"
-                                      size="sm"
-                                      className="justify-start"
-                                      disabled={sendingTo === room.id}
-                                      onClick={() => void sendTo(clip.id, room.id, room.name)}
-                                    >
-                                      {sendingTo === room.id ? "Sending…" : `Send to ${room.name}`}
-                                    </Button>
-                                  ),
-                                )}
-                              </div>
-                            )}
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </>
-                  }
-                />
+                              ) : rooms.length === 0 ? (
+                                <p className="text-[13px] text-muted-foreground">
+                                  You&apos;re not in any shared room yet. Make one on the Shared page,
+                                  then send clips there.
+                                </p>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  {rooms.map((room) =>
+                                    sharedWith.includes(room.id) ? (
+                                      <p key={room.id} className="px-1 py-1 text-[13px] text-muted-foreground">
+                                        ✓ Already in {room.name}
+                                      </p>
+                                    ) : (
+                                      <Button
+                                        key={room.id}
+                                        variant="secondary"
+                                        size="sm"
+                                        className="justify-start"
+                                        disabled={sendingTo === room.id}
+                                        onClick={() => void sendTo(clip.id, room.id, room.name)}
+                                      >
+                                        {sendingTo === room.id ? "Sending…" : `Send to ${room.name}`}
+                                      </Button>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </>
+                    }
+                  />
+                </TimelineAnimation>
               ))}
             </div>
             {hasMore && (
