@@ -86,7 +86,11 @@ export function UploadStep({
                 else onSubmit?.()
               }
             }}
-            disabled={!ready || isSearching}
+            // Typing is allowed the moment there is a video, even while it is
+            // still uploading or being read. Only SENDING waits for ready — the
+            // line below the box has promised exactly that, and the field used
+            // to contradict it.
+            disabled={!video || disabled || isSearching}
             placeholder={video ? "Tell Clipit what to look for..." : "Upload a video first..."}
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed"
           />
@@ -117,7 +121,7 @@ export function UploadStep({
               <button
                 key={text}
                 type="button"
-                disabled={!ready}
+                disabled={!video || disabled}
                 onClick={() => onPromptChange(text)}
                 className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
               >
