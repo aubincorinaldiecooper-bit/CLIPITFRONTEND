@@ -100,6 +100,14 @@ describe('the ask box while a video is still being prepared', () => {
     expect(screen.getByText(/still being prepared/)).toBeTruthy()
   })
 
+  it('promises nothing when the only pick has failed to upload', () => {
+    // A refused file (too large, say) stays in the list with its reason; it
+    // is not "still being prepared".
+    renderStep({ video: null, entries: [{ ...uploading(), phase: 'failed', error: 'Too large' }] })
+    expect(screen.getByPlaceholderText<HTMLInputElement>('Upload a video first...').disabled).toBe(true)
+    expect(screen.queryByText(/still being prepared/)).toBeNull()
+  })
+
   it('promises nothing for a video whose preparation failed', () => {
     const failed = { id: 'video-1', status: 'failed', readyForSearch: false } as unknown as Video
     renderStep({ video: failed })

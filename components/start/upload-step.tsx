@@ -50,8 +50,10 @@ export function UploadStep({
   const failed = video?.status === "failed"
   // A file that has been picked is a video that is coming. The row for it
   // only exists once the bytes have landed, which for a long film is minutes
-  // — and those minutes are exactly when a person wants to type.
-  const somethingToAskAbout = !failed && (video != null || entries.length > 0)
+  // — and those minutes are exactly when a person wants to type. A pick that
+  // FAILED is not coming: it needs a retry or removal, and promising that it
+  // will be ready is the same false promise a failed video makes.
+  const somethingToAskAbout = !failed && (video != null || entries.some((entry) => entry.phase !== "failed"))
   const trimmed = promptValue.trim()
   const displayValue = isSearching ? searchInstruction : promptValue
 
