@@ -150,7 +150,7 @@ function ClipsBody() {
   const authConfigured = useAuthConfigured()
 
   /** Rename a clip — its title overrides the moment description in the library. */
-  const [renameTarget, setRenameTarget] = useState<{ clipId: string; value: string } | null>(null)
+  const [renameTarget, setRenameTarget] = useState<{ clipId: string; value: string; originalValue: string } | null>(null)
   const [renameBusy, setRenameBusy] = useState(false)
 
   /** Delete a clip after an explicit confirmation. */
@@ -218,11 +218,8 @@ function ClipsBody() {
   const handleRename = async (clipId: string, title: string) => {
     setRenameBusy(true)
     try {
-      await api.renameClip(clipId, title)
-      setClips((current) =>
-        current?.map((clip) => (clip.id === clipId ? { ...clip, description: title || clip.description } : clip)) ??
-        current,
-      )
+      const { clip: renamed } = await api.renameClip(clipId, title)
+      setClips((current) => current?.map((clip) => (clip.id === clipId ? renamed : clip)) ?? current)
       // A stale completion should not close a dialog the user already opened
       // for a different clip.
       setRenameTarget((current) => (current?.clipId === clipId ? null : current))
@@ -536,7 +533,7 @@ function ClipsBody() {
                             label="Rename"
                             icon={PencilEdit01Icon}
                             onClick={() =>
-                              setRenameTarget({ clipId: clip.id, value: clip.description })
+                              setRenameTarget({ clipId: clip.id, value: clip.description, originalValue: clip.description })
                             }
                           />
                         )}
@@ -634,7 +631,7 @@ function ClipsBody() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={renameBusy || !renameTarget.value.trim()}>
+                <Button type="submit" disabled={renameBusy || renameTarget.value === renameTarget.originalValue}>
                   {renameBusy ? "Saving…" : "Save"}
                 </Button>
               </div>

@@ -708,7 +708,7 @@ export const api = {
   },
 
   /** Give a clip a name of your own; an empty string brings the description back. */
-  async renameClip(clipId: string, title: string): Promise<{ clip: Clip }> {
+  async renameClip(clipId: string, title: string): Promise<{ clip: LibraryClip }> {
     return request(`/api/clips/${encodeURIComponent(clipId)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
