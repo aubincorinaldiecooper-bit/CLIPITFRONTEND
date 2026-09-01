@@ -254,12 +254,14 @@ export default function StartPage() {
     if (step === "watch") setStep("upload")
   }, [step])
 
-  /** Drops the search that could not finish, so the prompt can be asked again. */
+  /** Drops the search that could not finish, but keeps its text so the user can edit and resend. */
   const retrySearch = useCallback(() => {
+    const instruction = currentRequest?.instruction ?? ""
     setExchanges((previous) => previous.slice(0, -1))
+    setPromptDraft(instruction)
     setError(null)
     setStep("upload")
-  }, [])
+  }, [currentRequest?.instruction])
 
   /**
    * Taking a file off the list takes it off the screen too: a video that was
@@ -498,7 +500,9 @@ export default function StartPage() {
                 onRemove={dropUpload}
                 onRetry={retryUpload}
                 onSubmit={handleNext}
+                onResume={() => setStep("watch")}
                 disabled={busy}
+                searchInstruction={searchRunning ? currentRequest?.instruction : undefined}
               />
             )}
             {step === "watch" && (

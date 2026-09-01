@@ -128,7 +128,6 @@ function ClipsBody() {
     },
   })
   const uploadInput = useRef<HTMLInputElement>(null)
-  const timelineRef = useRef<HTMLDivElement>(null)
   /** Counts enters/leaves — a plain boolean flickers over child elements. */
   const dragDepth = useRef(0)
   const [dragging, setDragging] = useState(false)
@@ -464,7 +463,6 @@ function ClipsBody() {
   return (
     <>
       <div
-        ref={timelineRef}
         className="relative flex flex-1 flex-col gap-5"
         onDragEnter={(event) => {
           if (![...event.dataTransfer.items].some((item) => item.kind === "file")) return
@@ -532,33 +530,50 @@ function ClipsBody() {
           />
         )}
 
-        {failed ? (
-          <p className="text-sm text-destructive">Couldn&apos;t load your clips. Refresh to try again.</p>
-        ) : clips === null ? (
+        {clips === null ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[0, 1, 2, 3, 4, 5].map((index) => (
               <Skeleton key={index} className="h-[230px] w-full rounded-2xl" />
             ))}
           </div>
-        ) : clips.length === 0 ? (
+        ) : clips.length === 0 || failed ? (
           // The empty page holds its room instead of huddling under the
           // heading — the same dashed-card state the other screens use.
+          // A failed load shows the same CTA: refreshing is the next action.
           <Card className="flex flex-1 items-center justify-center border-dashed">
             <CardContent className="flex max-w-md flex-col items-center gap-3 py-12 text-center">
               <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
                 <HugeiconsIcon icon={VideoReplayIcon} className="size-6" />
               </span>
-              <h2 className="text-lg font-semibold">No clips yet</h2>
+              <h2 className="text-lg font-semibold">{failed ? "Couldn&apos;t load your clips" : "No clips yet"}</h2>
               <p className="text-sm text-muted-foreground">
-                Cut a moment from any video and it lands here — ready to play, download, caption,
-                and publish.
+                {failed
+                  ? "The library couldn&apos;t connect. Try again, or upload a video to get started."
+                  : "Cut a moment from any video and it lands here — ready to play, download, caption, and publish."}
               </p>
-              <Button className="mt-2" asChild>
-                <a href="/start">
-                  <HugeiconsIcon icon={ScissorsIcon} />
-                  Clip a video
-                </a>
-              </Button>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                {failed && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setFailed(false)
+                      setClips(null)
+                      void api.listClips().then((page) => {
+                        setClips(page.clips)
+                        setHasMore(page.nextBefore !== null)
+                      }).catch(() => setFailed(true))
+                    }}
+                  >
+                    Try again
+                  </Button>
+                )}
+                <Button asChild>
+                  <a href="/start">
+                    <HugeiconsIcon icon={ScissorsIcon} />
+                    Clip a video
+                  </a>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -568,7 +583,6 @@ function ClipsBody() {
                 <TimelineAnimation
                   key={clip.id}
                   animationNum={index}
-                  timelineRef={timelineRef}
                   customVariants={CARD_REVEAL}
                 >
                   <ClipCard

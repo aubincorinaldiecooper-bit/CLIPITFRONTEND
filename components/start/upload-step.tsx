@@ -1,6 +1,6 @@
 "use client"
 
-import { Send, Video as VideoIcon } from "lucide-react"
+import { ArrowRight, Send, Video as VideoIcon } from "lucide-react"
 import { UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
 import type { Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -20,7 +20,10 @@ export interface UploadStepProps {
   onRemove: (id: string) => void
   onRetry: (id: string) => void
   onSubmit?: () => void
+  onResume?: () => void
   disabled?: boolean
+  /** A search is already running for this instruction; the prompt becomes read-only and the action resumes watching. */
+  searchInstruction?: string
 }
 
 /**
@@ -37,10 +40,14 @@ export function UploadStep({
   onRemove,
   onRetry,
   onSubmit,
+  onResume,
   disabled,
+  searchInstruction,
 }: UploadStepProps) {
-  const ready = video?.readyForSearch === true && !disabled
+  const isSearching = searchInstruction !== undefined
+  const ready = (video?.readyForSearch === true && !disabled) || isSearching
   const trimmed = promptValue.trim()
+  const displayValue = isSearching ? searchInstruction : promptValue
 
   return (
     <div className="w-full max-w-md">
@@ -56,6 +63,10 @@ export function UploadStep({
         <form
           onSubmit={(event) => {
             event.preventDefault()
+            if (isSearching) {
+              onResume?.()
+              return
+            }
             if (ready && trimmed) onSubmit?.()
           }}
           className={cn(
@@ -66,30 +77,31 @@ export function UploadStep({
           <VideoIcon aria-hidden size={20} className="shrink-0 text-foreground" />
           <span aria-hidden className="h-6 w-px shrink-0 bg-border" />
           <input
-            value={promptValue}
+            value={displayValue}
             onChange={(event) => onPromptChange(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && ready && trimmed) {
+              if (event.key === "Enter" && ready && (trimmed || isSearching)) {
                 event.preventDefault()
-                onSubmit?.()
+                if (isSearching) onResume?.()
+                else onSubmit?.()
               }
             }}
-            disabled={!ready}
+            disabled={!ready || isSearching}
             placeholder={video ? "Tell Clipit what to look for..." : "Upload a video first..."}
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={!ready || trimmed === ""}
-            aria-label="Search"
+            disabled={!ready || (trimmed === "" && !isSearching)}
+            aria-label={isSearching ? "Resume search" : "Search"}
             className={cn(
               "grid h-9 w-9 shrink-0 place-items-center rounded-xl transition active:scale-95",
-              ready && trimmed !== ""
+              ready && (trimmed !== "" || isSearching)
                 ? "bg-foreground text-background hover:bg-foreground/90"
                 : "bg-muted text-muted-foreground",
             )}
           >
-            <Send size={17} />
+            {isSearching ? <ArrowRight size={17} /> : <Send size={17} />}
           </button>
         </form>
 
@@ -99,19 +111,21 @@ export function UploadStep({
           </p>
         )}
 
-        <div className="flex flex-wrap justify-center gap-2">
-          {SUGGESTIONS.map((text) => (
-            <button
-              key={text}
-              type="button"
-              disabled={!ready}
-              onClick={() => onPromptChange(text)}
-              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-            >
-              {text}
-            </button>
-          ))}
-        </div>
+        {!isSearching && (
+          <div className="flex flex-wrap justify-center gap-2">
+            {SUGGESTIONS.map((text) => (
+              <button
+                key={text}
+                type="button"
+                disabled={!ready}
+                onClick={() => onPromptChange(text)}
+                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
