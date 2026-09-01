@@ -163,9 +163,17 @@ export function useVideoUploads({
         if (accepted.length === 0) return
 
         setBusy(true)
-        void Promise.all(accepted.map((entry) => runUpload(entry)))
+        void Promise.all(
+          accepted.map(async (entry) => ({ entry, video: await runUpload(entry) })),
+        )
           .then((results) => {
-            const landed = results.filter((video): video is Video => video !== null)
+            // A file taken off the list while its bytes were still going up
+            // has been dismissed: it must not come back as a landed video and
+            // put itself on screen.
+            const landed = results
+              .filter((result) => uploadsRef.current.some((entry) => entry.id === result.entry.id))
+              .map((result) => result.video)
+              .filter((video): video is Video => video !== null)
             if (landed.length > 0) onBatchLanded?.(landed)
           })
           .finally(() => setBusy(false))
