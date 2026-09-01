@@ -659,7 +659,9 @@ export function DeckStage({
 
   const submit = () => {
     const instruction = draft.trim()
-    if (!instruction || busy || searching) return
+    // Enter goes through here, not through the button, so the button's
+    // gate has to be repeated: nothing sends until the video can be searched.
+    if (!instruction || busy || searching || !video.readyForSearch) return
     setDraft("")
     onSearch(instruction)
   }
@@ -1074,7 +1076,6 @@ export function DeckStage({
               rows={1}
               placeholder={exchanges.length === 0 ? "What should I find in this video?" : "Ask for another moment"}
               className="max-h-28 min-h-[2.25rem] w-full resize-none self-center bg-transparent py-1.5 text-[15px] outline-none placeholder:text-muted-foreground"
-              disabled={!video.readyForSearch}
             />
             <button
               type="submit"
@@ -1091,6 +1092,11 @@ export function DeckStage({
             </button>
           </div>
         </form>
+      )}
+      {!video.readyForSearch && (
+        <p className="pt-2 text-center text-xs text-muted-foreground">
+          Your video is still being prepared — you can type now, then send once it&apos;s ready.
+        </p>
       )}
     </section>
   )
