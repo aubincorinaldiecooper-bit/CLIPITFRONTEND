@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import type { ClipMatch, MatchFeedbackReason } from "@/lib/types"
-import { VerticalFrame } from "@/components/media/vertical-frame"
+import type { ClipComposition as Composition, ClipMatch, MatchFeedbackReason } from "@/lib/types"
+import { ClipComposition, centredComposition } from "@/components/media/clip-composition"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -367,6 +367,9 @@ export interface KeptClipTile {
   duration: string | null
   url: string | null
   poster: string | null
+  /** How the moment is framed — the same numbers the export was cut from. Centred 9:16 when absent. */
+  composition?: Composition
+  sourceAspectRatio?: string | null
   status: "ready" | "cutting" | "failed"
   error: string | null
 }
@@ -431,11 +434,14 @@ export function KeptGrid({
             {tile.status === "ready" && tile.url && playingId === tile.id ? (
               // Astryx owns the ratio box now. The file IS the 9:16
               // derivative, so it fills rather than being letterboxed twice.
-              <VerticalFrame isVertical>
-                <video src={tile.url} controls autoPlay playsInline className="h-full w-full bg-black" />
-              </VerticalFrame>
+              <ClipComposition composition={tile.composition ?? centredComposition("9:16")} sourceAspectRatio={tile.sourceAspectRatio}>
+                {(mediaStyle) => (
+                  <video src={tile.url ?? undefined} controls autoPlay playsInline className="h-full w-full bg-black" style={mediaStyle} />
+                )}
+              </ClipComposition>
             ) : (
-              <VerticalFrame isVertical>
+              <ClipComposition composition={tile.composition ?? centredComposition("9:16")} sourceAspectRatio={tile.sourceAspectRatio}>
+              {(mediaStyle) => (
               <button
                 type="button"
                 onClick={() => tile.status === "ready" && tile.url && setPlayingId(tile.id)}
@@ -445,7 +451,7 @@ export function KeptGrid({
               >
                 {tile.poster && (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={tile.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <img src={tile.poster} alt="" loading="lazy" className="h-full w-full object-cover" style={mediaStyle} />
                 )}
                 {tile.status === "ready" && tile.url && (
                   <span className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/30 transition-transform group-hover:scale-105">
@@ -474,7 +480,8 @@ export function KeptGrid({
                   </span>
                 )}
               </button>
-              </VerticalFrame>
+              )}
+              </ClipComposition>
             )}
 
             <div className="flex flex-col gap-3 p-4">

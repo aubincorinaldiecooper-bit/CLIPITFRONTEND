@@ -11,6 +11,7 @@ import {
   deckQueue,
 } from '../components/theater/review-deck'
 import type { ClipMatch } from '../lib/types'
+import { centredComposition } from '../components/media/clip-composition'
 
 /**
  * The owner's review flow, held by tests: one moment at a time; Keep, Skip
@@ -292,5 +293,68 @@ describe('ChannelToggle — a channel is on, off, or unavailable', () => {
     expect(toggle).toHaveProperty('disabled', true)
     await userEvent.click(toggle)
     expect(onToggle).not.toHaveBeenCalled()
+  })
+})
+
+describe('KeptGrid — a tile is shaped and framed by its composition, not by a fixed 9:16', () => {
+  const tile = (overrides: Record<string, unknown> = {}) => ({
+    id: 'clip-1',
+    title: 'Green Mercedes reveal',
+    videoTitle: 'night-shoot.mp4',
+    duration: '0:31',
+    url: 'https://cdn/clip.mp4',
+    poster: 'https://cdn/poster.jpg',
+    status: 'ready' as const,
+    error: null,
+    ...overrides,
+  })
+
+  const boxRatio = (el: Element) => {
+    const [w, h] = (el as HTMLElement).style.aspectRatio.split('/').map((part) => Number(part.trim()))
+    return w / (h || 1)
+  }
+
+  it('keeps a 16:9 moment landscape', () => {
+    cleanup()
+    render(
+      <KeptGrid
+        clips={[tile({ composition: centredComposition('16:9'), sourceAspectRatio: '16:9' })]}
+        onReview={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+    const box = screen.getByTestId('kept-tile').firstElementChild!
+    expect(boxRatio(box)).toBeCloseTo(16 / 9, 6)
+  })
+
+  it('positions a smart-cropped still where the export looked', () => {
+    cleanup()
+    render(
+      <KeptGrid
+        clips={[
+          tile({
+            composition: { aspectRatio: '9:16', mode: 'smart_crop', focalX: 0.8, focalY: 0.5, focusPct: 80, crop: { x: 0.64, y: 0, width: 0.3156, height: 1 } },
+            sourceAspectRatio: '16:9',
+          }),
+        ]}
+        onReview={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+    const box = screen.getByTestId('kept-tile').firstElementChild!
+    expect(boxRatio(box)).toBeCloseTo(9 / 16, 6)
+    const still = screen.getByTestId('kept-tile').querySelector('img') as HTMLElement
+    expect(still.style.objectPosition).toBe('80% 50%')
+  })
+
+  it('is centred 9:16 when no composition has been decided yet', () => {
+    cleanup()
+    render(<KeptGrid clips={[tile()]} onReview={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />)
+    const box = screen.getByTestId('kept-tile').firstElementChild!
+    expect(boxRatio(box)).toBeCloseTo(9 / 16, 6)
+    const still = screen.getByTestId('kept-tile').querySelector('img') as HTMLElement
+    expect(still.style.objectPosition).toBe('50% 50%')
   })
 })
