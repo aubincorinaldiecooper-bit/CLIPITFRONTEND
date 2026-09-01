@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { CreditCard, Library, LogIn, LogOut, Share2, User } from "lucide-react"
+import { Library, LogIn, LogOut, User } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,9 +34,6 @@ interface ProfileLink {
 
 const LINKS: ProfileLink[] = [
   { label: "Library", href: "/clips", icon: <Library className="size-4" /> },
-  { label: "Publishing", href: "/publishing", icon: <Share2 className="size-4" /> },
-  { label: "Shared", href: "/shared", icon: <Share2 className="size-4" /> },
-  { label: "Plan", href: "/clips", icon: <CreditCard className="size-4" />, value: "FREE" },
 ]
 
 function initialsOf(name: string) {
@@ -86,9 +83,9 @@ export function ProfileDropdown() {
               initialsOf(name)
             )}
           </span>
-          <span className="hidden min-w-0 flex-1 sm:block">
-            <span className="block truncate text-sm font-medium leading-tight">{name}</span>
-            <span className="block truncate text-xs leading-tight text-muted-foreground">{email}</span>
+          <span className="hidden min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden sm:flex">
+            <span className="truncate text-sm font-medium">{name}</span>
+            <span className="truncate text-xs text-muted-foreground">{email}</span>
           </span>
         </button>
       </DropdownMenuTrigger>

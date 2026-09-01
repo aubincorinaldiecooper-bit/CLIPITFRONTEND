@@ -125,14 +125,31 @@ function discardBody(response: Response): void {
   })
 }
 
-async function createSession(): Promise<string> {
-  const response = await fetch(`${API_BASE}/api/sessions`, { method: "POST" })
+/** How long a "yes, still signed in" answer is trusted before asking again. *
+ *
+ * Codex, P1 on this change: memoizing the promise for the whole page lifetime
+ * meant a tab left open never asked twice. Sign out in another tab and this
+ * one kept working indefinitely — sessionStorage is tab-local, so the other
+ * tab's clearToken() cannot reach it, and the shared sign-in cookie being
+ * gone went unnoticed.
+ *
+ * A minute bounds that window without making every request pay for it.
+ */
+const SESSION_RECHECK_MS = 60_000
+
+/** How long an in-flight identity check is allowed to run before it is abandoned. */
+const IDENTITY_TIMEOUT_MS = 10_000
+
+/** How long minting a guest session is allowed to run before it is abandoned. */
+const GUEST_SESSION_TIMEOUT_MS = 10_000
+
+async function createSession(signal: AbortSignal): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/sessions`, { method: "POST", signal })
   if (!response.ok) {
     discardBody(response)
     throw new ApiError(response.status, "session_failed", "Could not start a session with the backend")
   }
   const body = (await response.json()) as { token: string }
-  writeToken(body.token, "guest")
   return body.token
 }
 
@@ -145,48 +162,37 @@ async function createSession(): Promise<string> {
  * is asked once per page load, not once per request — a failed exchange is
  * remembered until the next full load, which is exactly when sign-in state
  * can have changed (the magic link lands on a fresh page).
- */
-let exchangePromise: Promise<string | null> | null = null
-/**
- * Returns the signed-in token, or null — and on a definite "not signed in",
- * THROWS AWAY any signed-in token this browser still holds.
  *
- * That last part is the security half. A sign-in can end without anyone
- * pressing Sign out: the session expires, the cookie is cleared, it is
- * revoked from another device. When that happened, the header correctly said
- * "Sign in" while the stored bearer token kept working — the app looked
- * signed out and still acted as the person, which is how an account got
- * connected by someone the interface considered a guest.
+ * The in-flight promise is shared by concurrent callers, but it carries its
+ * own timeout so a hung identity check cannot block every later action. A
+ * newer call can start a fresh exchange; the old one will not overwrite the
+ * result if it completes late.
  */
-/**
- * How long a "yes, still signed in" answer is trusted before asking again.
- *
- * Codex, P1 on this change: memoizing the promise for the whole page lifetime
- * meant a tab left open never asked twice. Sign out in another tab and this
- * one kept working indefinitely — sessionStorage is tab-local, so the other
- * tab's clearToken() cannot reach it, and the shared sign-in cookie being
- * gone went unnoticed.
- *
- * A minute bounds that window without making every request pay for it.
- */
-const SESSION_RECHECK_MS = 60_000
-let exchangeCheckedAt = 0
+type ExchangeState =
+  | { kind: "idle" }
+  | { kind: "inflight"; promise: Promise<string | null>; nonce: number; startedAt: number }
+  | { kind: "settled"; result: string | null; at: number }
+
+let exchangeState: ExchangeState = { kind: "idle" }
+let exchangeNonce = 0
 
 function exchangeSignedInToken(): Promise<string | null> {
   if (typeof window === "undefined") return Promise.resolve(null)
-  // A settled answer older than the window is stale: drop it so the next
-  // caller asks again. An IN-FLIGHT promise is never discarded — concurrent
-  // callers must still share one answer.
-  if (exchangeCheckedAt && Date.now() - exchangeCheckedAt > SESSION_RECHECK_MS) {
-    exchangePromise = null
+
+  const now = Date.now()
+  if (exchangeState.kind === "settled" && now - exchangeState.at < SESSION_RECHECK_MS) {
+    return Promise.resolve(exchangeState.result)
   }
-  // The in-flight PROMISE is memoized, not a boolean. A home screen fires two
-  // requests at once; with a flag, the second saw "already asked" while the
-  // first was still waiting, skipped the exchange, and minted a guest — so a
-  // signed-in person's two dashboard calls ran as two different people, and
-  // whichever token landed last became the tab. Sharing the promise means
-  // every concurrent caller waits for the same answer.
-  exchangePromise ??= (async () => {
+  if (exchangeState.kind === "inflight" && now - exchangeState.startedAt < IDENTITY_TIMEOUT_MS) {
+    return exchangeState.promise
+  }
+
+  const nonce = ++exchangeNonce
+  const startedAt = now
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), IDENTITY_TIMEOUT_MS)
+  const promise = (async (): Promise<string | null> => {
+    let shouldCache = false
     try {
       // Carry the guest token so the work done signed-out comes along. Read
       // BEFORE the exchange, because a successful exchange overwrites it.
@@ -195,6 +201,7 @@ function exchangeSignedInToken(): Promise<string | null> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(guestToken ? { guestToken } : {}),
+        signal: controller.signal,
       })
       if (!response.ok) {
         discardBody(response)
@@ -202,40 +209,76 @@ function exchangeSignedInToken(): Promise<string | null> {
         // nobody is signed in. A stored "user" token is then stale and must
         // not be used — dropping it downgrades this tab to a guest, which is
         // what the person actually is.
-        //
-        // 503 (sign-in not configured) and network failures are NOT that
-        // answer. Clearing on those would sign people out whenever the site
-        // hiccupped, so the token is left alone.
         if (response.status === 401 && readKind() === "user") clearToken()
+        // Only cache a definite 401; timeouts and transient errors should be
+        // retried so a stuck identity check does not lock the tab for a minute.
+        shouldCache = response.status === 401
         return null
       }
       const body = (await response.json()) as { token: string }
-      writeToken(body.token, "user")
-      return body.token
-    } catch {
+      if (nonce === exchangeNonce) {
+        writeToken(body.token, "user")
+      }
+      shouldCache = true
+      return readToken()
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return null
       return null
     } finally {
-      // Stamped on settle, not on start, so a slow answer is trusted for a
-      // full window from when it actually arrived.
-      exchangeCheckedAt = Date.now()
+      clearTimeout(timer)
+      if (nonce === exchangeNonce) {
+        if (shouldCache) {
+          exchangeState = { kind: "settled", result: readToken(), at: Date.now() }
+        } else {
+          exchangeState = { kind: "idle" }
+        }
+      }
     }
   })()
-  return exchangePromise
+
+  exchangeState = { kind: "inflight", promise, nonce, startedAt }
+  return promise
 }
 
-/**
- * The same dedup for minting a guest session: two concurrent first-requests
- * must become one session, not two sessions racing to own the tab.
- */
-let guestPromise: Promise<string> | null = null
+type GuestSessionState =
+  | { kind: "idle" }
+  | { kind: "inflight"; promise: Promise<string>; nonce: number; startedAt: number }
+
+let guestSessionState: GuestSessionState = { kind: "idle" }
+let guestSessionNonce = 0
+
 function mintGuestSession(): Promise<string> {
-  guestPromise ??= createSession().finally(() => {
-    // The token in sessionStorage is the durable record; the promise exists
-    // only to collapse concurrent minting. A failure clears it so the next
-    // attempt can try again.
-    guestPromise = null
-  })
-  return guestPromise
+  const now = Date.now()
+  if (guestSessionState.kind === "inflight" && now - guestSessionState.startedAt < GUEST_SESSION_TIMEOUT_MS) {
+    return guestSessionState.promise
+  }
+
+  const nonce = ++guestSessionNonce
+  const startedAt = now
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), GUEST_SESSION_TIMEOUT_MS)
+  const promise = createSession(controller.signal)
+    .then((token) => {
+      if (nonce === guestSessionNonce) {
+        writeToken(token, "guest")
+      }
+      return token
+    })
+    .catch((e) => {
+      if (e instanceof Error && e.name === "AbortError") {
+        throw new ApiError(0, "session_timeout", "Could not start a session with the backend")
+      }
+      throw e
+    })
+    .finally(() => {
+      clearTimeout(timer)
+      if (nonce === guestSessionNonce) {
+        guestSessionState = { kind: "idle" }
+      }
+    })
+
+  guestSessionState = { kind: "inflight", promise, nonce, startedAt }
+  return promise
 }
 
 async function ensureToken(): Promise<string> {
@@ -266,8 +309,10 @@ async function ensureToken(): Promise<string> {
 /** Forgets the API session. The caller also ends the Better Auth one. */
 export function forgetApiSession(): void {
   clearToken()
-  exchangePromise = null
-  exchangeCheckedAt = 0
+  exchangeState = { kind: "idle" }
+  exchangeNonce++
+  guestSessionState = { kind: "idle" }
+  guestSessionNonce++
 }
 
 async function parseError(response: Response): Promise<ApiError> {
@@ -285,31 +330,78 @@ async function parseError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, code, message)
 }
 
-async function request<T>(path: string, init: RequestInit = {}, retryOn401 = true): Promise<T> {
-  const token = await ensureToken()
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers ?? {}),
-      Authorization: `Bearer ${token}`,
-    },
+/**
+ * Resolves with `promise` unless `signal` aborts first. The promise is NOT
+ * cancelled: this lets a request timeout stop waiting while shared identity
+ * work (the memoized exchange / guest session) keeps running for later callers.
+ */
+function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason)
+      return
+    }
+    let settled = false
+    const onAbort = () => {
+      settled = true
+      reject(signal.reason)
+    }
+    signal.addEventListener("abort", onAbort, { once: true })
+    promise.then(
+      (value) => {
+        if (!settled) {
+          settled = true
+          signal.removeEventListener("abort", onAbort)
+          resolve(value)
+        }
+      },
+      (error) => {
+        if (!settled) {
+          settled = true
+          signal.removeEventListener("abort", onAbort)
+          reject(error)
+        }
+      },
+    )
   })
+}
 
-  if (response.status === 401 && retryOn401) {
-    discardBody(response)
-    // The stored token is no longer valid. Forget it AND the settled exchange:
-    // a signed-in person's expired token must be replaced by asking the
-    // sign-in cookie again, not by quietly minting a guest session — that
-    // would leave the header saying who they are while their new uploads
-    // belong to a tab-lifetime nobody.
-    forgetApiSession()
-    return request<T>(path, init, false)
+async function request<T>(path: string, init: RequestInit = {}, retryOn401 = true, timeoutMs = 0): Promise<T> {
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  if (timeoutMs > 0) {
+    timeout = setTimeout(() => controller.abort(), timeoutMs)
   }
 
-  if (!response.ok) throw await parseError(response)
-  return (await response.json()) as T
+  try {
+    const token = await raceWithSignal(ensureToken(), controller.signal)
+
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (response.status === 401 && retryOn401) {
+      discardBody(response)
+      // The stored token is no longer valid. Forget it AND the settled exchange:
+      // a signed-in person's expired token must be replaced by asking the
+      // sign-in cookie again, not by quietly minting a guest session — that
+      // would leave the header saying who they are while their new uploads
+      // belong to a tab-lifetime nobody.
+      forgetApiSession()
+      return request<T>(path, init, false, timeoutMs)
+    }
+
+    if (!response.ok) throw await parseError(response)
+    return (await response.json()) as T
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
 }
 
 
@@ -555,8 +647,11 @@ export const api = {
    * A page of the caller's finished clips, newest first. `nextBefore` is the
    * cursor for the page after it, or null when this is everything.
    */
-  async listClips(before?: string): Promise<{ clips: LibraryClip[]; nextBefore: string | null }> {
-    return request(`/api/clips${before ? `?before=${encodeURIComponent(before)}` : ""}`)
+  async listClips(
+    before?: string,
+    { timeoutMs = 10000 }: { timeoutMs?: number } = {},
+  ): Promise<{ clips: LibraryClip[]; nextBefore: string | null }> {
+    return request(`/api/clips${before ? `?before=${encodeURIComponent(before)}` : ""}`, {}, true, timeoutMs)
   },
 
   // --- Social publishing (Zernio) ------------------------------------------
@@ -613,7 +708,7 @@ export const api = {
   },
 
   /** Give a clip a name of your own; an empty string brings the description back. */
-  async renameClip(clipId: string, title: string): Promise<{ clip: Clip }> {
+  async renameClip(clipId: string, title: string): Promise<{ clip: LibraryClip }> {
     return request(`/api/clips/${encodeURIComponent(clipId)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

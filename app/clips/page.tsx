@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -12,46 +13,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import {
-  ArrowRight01Icon,
-  Folder01Icon,
+  CaptionsIcon,
+  Delete01Icon,
+  PencilEdit01Icon,
   ScissorsIcon,
-  SubtitleIcon,
   Upload01Icon,
-  Upload02Icon,
   VideoReplayIcon,
 } from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
-import type { LibraryClip, SocialAccount } from "@/lib/types"
+import type { LibraryClip } from "@/lib/types"
+import {
+  useAuthConfigured,
+  useWorkspaceSignInGate,
+} from "@/components/workspace/sign-in-gate"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
-import {
-  useAuthConfigured,
-  useWorkspaceResumeIntent,
-  useWorkspaceSignInGate,
-} from "@/components/workspace/sign-in-gate"
-import { PlatformLogo } from "@/components/platform-logos"
-import { ChosenTick, PublishPreview } from "@/components/publish-preview"
-import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
 import { UploadPackage } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { TimelineAnimation } from "@/components/ui/timeline-animation"
-
-/**
- * The caption length to count against.
- *
- * The shortest limit among the platforms this posts to, so a caption inside it
- * fits everywhere. Advisory: the counter turns red, nothing is blocked. A
- * platform trims what it minds about, and refusing to type past this would be
- * us enforcing a rule that only one of them applies.
- */
-const CAPTION_LIMIT = 220
 
 /**
  * How each card arrives: out of focus, then sharp, one after the next.
@@ -66,26 +50,19 @@ const CARD_REVEAL = {
     y: 0,
     opacity: 1,
     filter: "blur(0px)",
-    transition: { delay: i * 0.1, duration: 0.5 },
+    // Cap the stagger so cards far down the list do not wait seconds
+    // after they scroll into view. A short local stagger still feels stepped.
+    transition: { delay: Math.min(i, 3) * 0.05, duration: 0.5 },
   }),
   hidden: { y: -20, opacity: 0, filter: "blur(10px)" },
 }
 
 /**
- * Everything you have cut, newest first — on the app shell the Shared screens
- * proved out. Each card is the clip's still until you press play, then the
- * clip itself in place — no lightbox, no second page; media surfaces are the
- * owner's carve-out. Download uses the signed attachment URL, so the browser
- * saves the file without this page touching the bytes.
+ * Everything you have cut, newest first. Each card is the clip's still until
+ * you press play, then the clip itself in place — no lightbox, no second page;
+ * media surfaces are the owner's carve-out. Download uses the signed attachment
+ * URL, so the browser saves the file without this page touching the bytes.
  */
-/** Platform names as their own users write them, never a lowercased id. */
-const PLATFORM_LABELS: Record<string, string> = {
-  tiktok: "TikTok",
-  youtube: "YouTube",
-  instagram: "Instagram",
-  x: "X",
-}
-
 /** The square secondary buttons on a clip card's action row. */
 function ClipAction({
   label,
@@ -93,7 +70,7 @@ function ClipAction({
   onClick,
 }: {
   label: string
-  icon: typeof SubtitleIcon
+  icon: IconSvgElement
   onClick?: () => void
 }) {
   return (
@@ -132,7 +109,6 @@ function ClipsBody() {
     },
   })
   const uploadInput = useRef<HTMLInputElement>(null)
-  const timelineRef = useRef<HTMLDivElement>(null)
   /** Counts enters/leaves — a plain boolean flickers over child elements. */
   const dragDepth = useRef(0)
   const [dragging, setDragging] = useState(false)
@@ -140,48 +116,25 @@ function ClipsBody() {
   const [clips, setClips] = useState<LibraryClip[] | null>(null)
   /**
    * Whether older clips exist below what is currently held. The cursor is
-   * deliberately NOT stored: it is read off the last clip on screen at the
-   * moment the button is pressed, so a refresh that adds clips at the top
-   * can never leave it pointing into the middle of the list (which would
-   * re-fetch cards already on screen).
+   * deliberately kept in a ref as well as state, so async handlers read the
+   * latest value without a stale closure.
    */
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  /** Cursor for the next older page, so an emptied list can still load more. */
+  const [nextBefore, setNextBefore] = useState<string | null>(null)
+  const pagingRef = useRef({ hasMore, nextBefore })
   /** True once someone has paged past the newest page. */
   const pagedOlderRef = useRef(false)
+  /** Set while a delete is in progress, so the empty-state effect can load older. */
+  const loadOlderAfterDeleteRef = useRef<string | null>(null)
   const [failed, setFailed] = useState(false)
-  const [playingId, setPlayingId] = useState<string | null>(null)
-  /** The publish dialog's target clip; the ref mirrors it so a finishing
-   *  request can tell whether the open panel is still its own. */
-  const [publishOpenId, setPublishOpenId] = useState<string | null>(null)
-  /**
-   * The accounts a publish could go to, and which are ticked.
-   *
-   * Loaded when the dialog opens rather than with the page: most visits to
-   * the library never publish anything, and this is the only screen that
-   * needs it.
-   */
-  const [accounts, setAccounts] = useState<SocialAccount[] | null>(null)
-  const [accountsFailed, setAccountsFailed] = useState(false)
-  const [chosenAccountIds, setChosenAccountIds] = useState<string[]>([])
-  const publishOpenIdRef = useRef<string | null>(null)
-  /**
-   * Caption drafts, one per clip. A draft survives its dialog closing —
-   * clicking outside the panel must not erase a paragraph someone typed —
-   * and is dropped only when the publish it was written for lands.
-   *
-   * Seeded from the ones Save draft has written down, so a caption written
-   * yesterday is still there today.
-   */
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
 
-  // Read once, on the client. Deliberately not part of the initial state: this
-  // page is prerendered, and reading storage during the first render makes the
-  // server's HTML and the browser's disagree.
   useEffect(() => {
-    setDrafts((current) => ({ ...savedDrafts(), ...current }))
-  }, [])
-  const [publishingIds, setPublishingIds] = useState<string[]>([])
+    pagingRef.current = { hasMore, nextBefore }
+  }, [hasMore, nextBefore])
+  const [playingId, setPlayingId] = useState<string | null>(null)
+
   /** Which clip's caption editor is open — a modal visit, not a page. */
   const [captionClipId, setCaptionClipId] = useState<string | null>(null)
   /**
@@ -191,53 +144,18 @@ function ClipsBody() {
    * lets the same render be started twice.
    */
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
-  const { requireSignIn, askToSignIn, isSignedIn } = useWorkspaceSignInGate()
+
+  const { askToSignIn, isSignedIn } = useWorkspaceSignInGate()
   /** Null while unknown, false on a guest-only deployment. See the empty state. */
   const authConfigured = useAuthConfigured()
 
-  // Signed in from the prompt and come back? Reopen the clip they were about
-  // to publish, rather than dropping them on the library with no idea where
-  // they were. It opens the dialog — it does NOT publish: that button is
-  // theirs to press, and pressing it for them would post to the world on the
-  // strength of a URL parameter.
-  useWorkspaceResumeIntent(
-    (intent) => intent.action === "publish" || intent.action === "send",
-    (intent) => {
-      if (intent.action === "publish") setPublishTarget(intent.clipId)
-      if (intent.action === "send") openSend(intent.clipId)
-    },
-  )
+  /** Rename a clip — its title overrides the moment description in the library. */
+  const [renameTarget, setRenameTarget] = useState<{ clipId: string; value: string; originalValue: string } | null>(null)
+  const [renameBusy, setRenameBusy] = useState(false)
 
-  const setPublishTarget = (id: string | null) => {
-    publishOpenIdRef.current = id
-    setPublishOpenId(id)
-  }
-
-  // The accounts a publish can reach, fetched when the dialog opens. Every
-  // connected one starts ticked: the previous behaviour was "goes to all of
-  // them", and opening a picker that silently defaults to nothing would turn
-  // a familiar action into a puzzle.
-  useEffect(() => {
-    if (publishOpenId === null) return
-    let cancelled = false
-    setAccountsFailed(false)
-    void api
-      .listSocialAccounts()
-      .then((page) => {
-        if (cancelled) return
-        const connected = page.accounts.filter((account) => account.status === "connected")
-        setAccounts(connected)
-        setChosenAccountIds(connected.map((account) => account.id))
-      })
-      .catch(() => {
-        // A failed load is not "no accounts". Saying "connect one first" to
-        // someone who has three would be a lie about their own setup.
-        if (!cancelled) setAccountsFailed(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [publishOpenId])
+  /** Delete a clip after an explicit confirmation. */
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -247,125 +165,18 @@ function ClipsBody() {
         if (cancelled) return
         setClips(page.clips)
         setHasMore(page.nextBefore !== null)
+        setNextBefore(page.nextBefore)
       })
       .catch(() => {
-        if (!cancelled) setFailed(true)
+        if (!cancelled) {
+          setClips([])
+          setFailed(true)
+        }
       })
     return () => {
       cancelled = true
     }
   }, [])
-
-  const publish = async (clipId: string) => {
-    if (publishingIds.includes(clipId)) return
-    setPublishingIds((current) => [...current, clipId])
-    try {
-      const { posts } = await api.publishClip(clipId, {
-        caption: (drafts[clipId] ?? "").trim(),
-        // Omitted means "all" to the API. Sending the list only when it is a
-        // real subset keeps a publish working even if the account list could
-        // not be loaded — the old behaviour, unchanged, rather than a
-        // failure to fetch turning into a failure to post.
-        ...(accounts && chosenAccountIds.length > 0 && chosenAccountIds.length < accounts.length
-          ? { accountIds: chosenAccountIds }
-          : {}),
-      })
-      // Transient news is transient: the confirmation appears and leaves on
-      // its own instead of becoming permanent card content. When a platform
-      // needs a different shape than the clip was shot in, the file is cut
-      // first — say so, so a short delay reads as work, not silence.
-      const shaping = posts?.filter((entry) => entry.status === "rendering") ?? []
-      toast.success(
-        shaping.length > 0
-          ? `Sent — ${shaping
-              .flatMap((entry) => entry.targets.map((target) => target.platform))
-              .map((platform) => platform.charAt(0).toUpperCase() + platform.slice(1))
-              .join(" and ")} ${shaping.length === 1 && shaping[0]!.targets.length === 1 ? "gets" : "get"} a ${shaping
-              .map((entry) => entry.aspect)
-              .join(" and ")} cut first; it posts automatically when ready.`
-          : "Sent — it's on its way to your connected accounts.",
-      )
-      // The draft did its job; the panel closes only if it is still this
-      // clip's — another clip's dialog may have opened mid-flight. A saved
-      // copy goes too: keeping a caption that has already been published would
-      // hand it straight back the next time this clip was opened.
-      setDrafts((current) => {
-        const { [clipId]: _sent, ...rest } = current
-        return rest
-      })
-      clearDraft(clipId)
-      if (publishOpenIdRef.current === clipId) {
-        setPublishTarget(null)
-      }
-    } catch (cause) {
-      // The API's refusals are already written for people ("No connected
-      // accounts. Connect one on the Publishing page first.") — repeat them.
-      toast.error(
-        cause instanceof ApiError ? cause.message : "Couldn't publish just now. Try again.",
-        { duration: Infinity, closeButton: true },
-      )
-    } finally {
-      setPublishingIds((current) => current.filter((id) => id !== clipId))
-    }
-  }
-
-  /**
-   * The Send-to-room control: per clip, a popover listing the rooms the
-   * caller is in, saying which already have it. Rooms are fetched when the
-   * popover opens — the list is tiny and always current.
-   */
-  const [sendOpenId, setSendOpenId] = useState<string | null>(null)
-  const sendOpenIdRef = useRef<string | null>(null)
-  const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
-  /** The fetch failed — different answer from "you have no rooms". */
-  const [sendFailed, setSendFailed] = useState(false)
-  const [sharedWith, setSharedWith] = useState<string[]>([])
-  const [sendSignInRequired, setSendSignInRequired] = useState(false)
-  const [sendingTo, setSendingTo] = useState<string | null>(null)
-
-  const setSendTarget = (id: string | null) => {
-    sendOpenIdRef.current = id
-    setSendOpenId(id)
-  }
-
-  const openSend = (clipId: string) => {
-    setRooms(null)
-    setSharedWith([])
-    setSendSignInRequired(false)
-    setSendFailed(false)
-    setSendTarget(clipId)
-    void api
-      .getClipWorkspaces(clipId)
-      .then((result) => {
-        // Still this clip's popover? Someone may have moved on mid-fetch.
-        if (sendOpenIdRef.current !== clipId) return
-        setRooms(result.workspaces)
-        setSharedWith(result.sharedWith)
-        setSendSignInRequired(Boolean(result.signInRequired))
-      })
-      .catch(() => {
-        if (sendOpenIdRef.current !== clipId) return
-        // "The request failed" and "you are in no room" are different
-        // answers, and this popover must never return them as the same one.
-        setSendFailed(true)
-      })
-  }
-
-  const sendTo = async (clipId: string, workspaceId: string, name: string) => {
-    if (sendingTo) return
-    setSendingTo(workspaceId)
-    try {
-      await api.sendClipToWorkspace(workspaceId, clipId)
-      toast.success(`Sent to ${name}. It stays in your library too.`)
-      setSharedWith((current) => (current.includes(workspaceId) ? current : [...current, workspaceId]))
-    } catch (cause) {
-      toast.error(
-        cause instanceof ApiError ? cause.message : "Couldn't send that clip. Try again.",
-      )
-    } finally {
-      setSendingTo(null)
-    }
-  }
 
   /**
    * Re-read the newest page and MERGE it in: someone who paged down to find
@@ -386,7 +197,10 @@ function ClipsBody() {
     // Only the newest page can answer "is there more?" when it is all we
     // hold; once someone has paged deeper, the answer they have is the true
     // one.
-    if (!pagedOlderRef.current) setHasMore(page.nextBefore !== null)
+    if (!pagedOlderRef.current) {
+      setHasMore(page.nextBefore !== null)
+      setNextBefore(page.nextBefore)
+    }
   }
 
   /** Update one clip in place, wherever in the list it happens to be. */
@@ -399,6 +213,40 @@ function ClipsBody() {
         )
       })
       .catch(() => {})
+  }
+
+  const handleRename = async (clipId: string, title: string) => {
+    setRenameBusy(true)
+    try {
+      const { clip: renamed } = await api.renameClip(clipId, title)
+      setClips((current) => current?.map((clip) => (clip.id === clipId ? renamed : clip)) ?? current)
+      // A stale completion should not close a dialog the user already opened
+      // for a different clip.
+      setRenameTarget((current) => (current?.clipId === clipId ? null : current))
+    } catch (cause) {
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't rename that clip. Try again.")
+    } finally {
+      setRenameBusy(false)
+    }
+  }
+
+  const handleDelete = async (clipId: string) => {
+    setDeleteBusy(true)
+    try {
+      await api.deleteClip(clipId)
+      // Use a functional update so any loadOlder/refresh that completed while
+      // the delete was in flight is not overwritten by a stale closure.
+      setClips((current) => current?.filter((clip) => clip.id !== clipId) ?? [])
+      setPlayingId((current) => (current === clipId ? null : current))
+      setDeleteTargetId((current) => (current === clipId ? null : current))
+      // Let the empty-state effect decide whether to page in older clips,
+      // using the latest pagination values from a ref.
+      loadOlderAfterDeleteRef.current = clipId
+    } catch (cause) {
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't delete that clip. Try again.")
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   /**
@@ -446,19 +294,18 @@ function ClipsBody() {
   }
 
   const loadOlder = async () => {
-    const oldest = clips?.[clips.length - 1]
-    if (!hasMore || loadingMore || !oldest) return
+    const { hasMore: more, nextBefore: cursor } = pagingRef.current
+    if (!more || loadingMore || !cursor) return
     setLoadingMore(true)
     pagedOlderRef.current = true
     try {
-      // "Older than the oldest card on screen" — the server pages by
-      // creation time, so this is exact even if clips were added since.
-      const page = await api.listClips(oldest.createdAt)
+      const page = await api.listClips(cursor)
       setClips((current) => {
         const held = new Set((current ?? []).map((clip) => clip.id))
         return [...(current ?? []), ...page.clips.filter((clip) => !held.has(clip.id))]
       })
       setHasMore(page.nextBefore !== null)
+      setNextBefore(page.nextBefore)
     } catch {
       // The button stays; pressing it again retries. A failed "older clips"
       // fetch is not worth an error banner over a page that already works.
@@ -467,10 +314,28 @@ function ClipsBody() {
     }
   }
 
+  /**
+   * If the list ever becomes empty while the backend says there are older
+   * clips waiting, load them automatically. This covers deleting the last
+   * clip on a page without re-introducing stale closures into handleDelete.
+   */
+  useEffect(() => {
+    if (
+      loadOlderAfterDeleteRef.current &&
+      clips !== null &&
+      clips.length === 0 &&
+      pagingRef.current.hasMore &&
+      pagingRef.current.nextBefore &&
+      !loadingMore
+    ) {
+      void loadOlder()
+    }
+    loadOlderAfterDeleteRef.current = null
+  }, [clips, loadingMore])
+
   return (
     <>
       <div
-        ref={timelineRef}
         className="relative flex flex-1 flex-col gap-5"
         onDragEnter={(event) => {
           if (![...event.dataTransfer.items].some((item) => item.kind === "file")) return
@@ -538,59 +403,43 @@ function ClipsBody() {
           />
         )}
 
-        {failed ? (
-          <p className="text-sm text-destructive">Couldn&apos;t load your clips. Refresh to try again.</p>
-        ) : clips === null ? (
+        {clips === null ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[0, 1, 2, 3, 4, 5].map((index) => (
               <Skeleton key={index} className="h-[230px] w-full rounded-2xl" />
             ))}
           </div>
-        ) : clips.length === 0 ? (
-          // An empty list means one of two different things, and saying the
-          // wrong one tells a person their work is gone.
-          //
-          // Signed out, the API scopes this list to the anonymous session —
-          // this browser tab. It never looked at the account's clips. So
-          // "No clips yet" would assert an absence nobody verified, which is
-          // the failure CLAUDE.md names first. Signed in, the list IS the
-          // whole answer and the original words are true.
+        ) : clips.length === 0 || failed ? (
+          // The empty page holds its room instead of huddling under the
+          // heading — the same dashed-card state the other screens use.
+          // A failed load shows the same CTA: refreshing is the next action.
           <Card className="flex flex-1 items-center justify-center border-dashed">
             <CardContent className="flex max-w-md flex-col items-center gap-3 py-12 text-center">
               <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
                 <HugeiconsIcon icon={VideoReplayIcon} className="size-6" />
               </span>
-              {isSignedIn ? (
+              {failed ? (
+                <>
+                  <h2 className="text-lg font-semibold">Couldn’t load your clips</h2>
+                  <p className="text-sm text-muted-foreground">
+                    The library couldn’t connect. Try again, or upload a video to get started.
+                  </p>
+                </>
+              ) : isSignedIn ? (
                 <>
                   <h2 className="text-lg font-semibold">No clips yet</h2>
                   <p className="text-sm text-muted-foreground">
                     Cut a moment from any video and it lands here — ready to play, download,
-                    caption, and publish.
+                    edit, rename, or delete.
                   </p>
-                  <Button className="mt-2" asChild>
-                    <a href="/start">
-                      <HugeiconsIcon icon={ScissorsIcon} />
-                      Clip a video
-                    </a>
-                  </Button>
                 </>
               ) : authConfigured === false ? (
-                // Guest-only deployment: there is no sign-in to offer, so
-                // pointing at one would be a second false promise on top of
-                // the one this whole change exists to remove. Codex caught
-                // this on #62. Say what is actually true of this tab.
                 <>
                   <h2 className="text-lg font-semibold">No clips in this tab yet</h2>
                   <p className="text-sm text-muted-foreground">
                     Clips live with the browser tab that made them on this deployment, and
                     accounts aren&apos;t switched on. Cut one and it lands here.
                   </p>
-                  <Button className="mt-2" asChild>
-                    <a href="/start">
-                      <HugeiconsIcon icon={ScissorsIcon} />
-                      Clip a video
-                    </a>
-                  </Button>
                 </>
               ) : (
                 <>
@@ -599,18 +448,56 @@ function ClipsBody() {
                     This page is only showing clips made in this browser tab. Anything saved to
                     your account is waiting behind sign-in.
                   </p>
-                  {/* Null while the check is in flight: the button waits
-                      rather than flashing an offer that may not exist. */}
-                  <Button className="mt-2" disabled={authConfigured === null} onClick={askToSignIn}>
+                </>
+              )}
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                {failed && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setFailed(false)
+                      setClips(null)
+                      void api.listClips().then((page) => {
+                        setClips(page.clips)
+                        setHasMore(page.nextBefore !== null)
+                        setNextBefore(page.nextBefore)
+                      }).catch(() => {
+                        setClips([])
+                        setFailed(true)
+                      })
+                    }}
+                  >
+                    Try again
+                  </Button>
+                )}
+                {!failed && !isSignedIn && authConfigured !== false && (
+                  <Button
+                    disabled={authConfigured === null}
+                    onClick={askToSignIn}
+                    className="whitespace-nowrap"
+                  >
                     Sign in
                   </Button>
-                  <Button variant="secondary" asChild>
-                    <a href="/start">
-                      <HugeiconsIcon icon={ScissorsIcon} />
-                      Clip a video
-                    </a>
+                )}
+                <Button asChild className="whitespace-nowrap">
+                  <a href="/start">
+                    <HugeiconsIcon icon={ScissorsIcon} />
+                    Clip a video
+                  </a>
+                </Button>
+              </div>
+              {!failed && hasMore && nextBefore && (
+                <div className="mt-2 flex justify-center">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={loadingMore}
+                    onClick={() => void loadOlder()}
+                    className="whitespace-nowrap"
+                  >
+                    {loadingMore ? "Loading…" : "Show older clips"}
                   </Button>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -621,7 +508,6 @@ function ClipsBody() {
                 <TimelineAnimation
                   key={clip.id}
                   animationNum={index}
-                  timelineRef={timelineRef}
                   customVariants={CARD_REVEAL}
                 >
                   <ClipCard
@@ -637,95 +523,25 @@ function ClipsBody() {
                         )}
                         {clip.status === "ready" && (
                           <ClipAction
-                            label="Captions"
-                            icon={SubtitleIcon}
+                            label="Edit"
+                            icon={CaptionsIcon}
                             onClick={() => setCaptionClipId(clip.id)}
                           />
                         )}
                         {clip.status === "ready" && (
                           <ClipAction
-                            label="Publish"
-                            icon={Upload02Icon}
+                            label="Rename"
+                            icon={PencilEdit01Icon}
                             onClick={() =>
-                              requireSignIn({ action: "publish", clipId: clip.id }, () =>
-                                setPublishTarget(clip.id),
-                              )
+                              setRenameTarget({ clipId: clip.id, value: clip.description, originalValue: clip.description })
                             }
                           />
                         )}
-                        {clip.status === "ready" && (
-                          <Popover
-                            open={sendOpenId === clip.id}
-                            onOpenChange={(open) => {
-                              if (open) {
-                                // Sending a clip into a shared room needs a
-                                // person: rooms outlive a browser tab.
-                                requireSignIn({ action: "send", clipId: clip.id }, () =>
-                                  openSend(clip.id),
-                                )
-                              } else if (sendOpenIdRef.current === clip.id) {
-                                setSendTarget(null)
-                              }
-                            }}
-                          >
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="secondary"
-                                size="icon-sm"
-                                aria-label="Send to a room"
-                                title="Send to a room"
-                                className="rounded-full"
-                              >
-                                <HugeiconsIcon icon={Folder01Icon} />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="shadcn-scope w-[280px]" align="start">
-                              {sendFailed ? (
-                                <div className="flex flex-col gap-2">
-                                  <p className="text-[13px] text-muted-foreground">
-                                    Couldn&apos;t load your rooms just now.
-                                  </p>
-                                  <Button variant="secondary" size="sm" onClick={() => openSend(clip.id)}>
-                                    Try again
-                                  </Button>
-                                </div>
-                              ) : rooms === null ? (
-                                <Skeleton className="h-[60px] w-full rounded-lg" />
-                              ) : sendSignInRequired ? (
-                                <p className="text-[13px] text-muted-foreground">
-                                  Shared rooms belong to you, not to a browser tab — sign in (top
-                                  right) to send clips to one.
-                                </p>
-                              ) : rooms.length === 0 ? (
-                                <p className="text-[13px] text-muted-foreground">
-                                  You&apos;re not in any shared room yet. Make one on the Shared page,
-                                  then send clips there.
-                                </p>
-                              ) : (
-                                <div className="flex flex-col gap-1">
-                                  {rooms.map((room) =>
-                                    sharedWith.includes(room.id) ? (
-                                      <p key={room.id} className="px-1 py-1 text-[13px] text-muted-foreground">
-                                        ✓ Already in {room.name}
-                                      </p>
-                                    ) : (
-                                      <Button
-                                        key={room.id}
-                                        variant="secondary"
-                                        size="sm"
-                                        className="justify-start"
-                                        disabled={sendingTo === room.id}
-                                        onClick={() => void sendTo(clip.id, room.id, room.name)}
-                                      >
-                                        {sendingTo === room.id ? "Sending…" : `Send to ${room.name}`}
-                                      </Button>
-                                    ),
-                                  )}
-                                </div>
-                              )}
-                            </PopoverContent>
-                          </Popover>
-                        )}
+                        <ClipAction
+                          label="Delete"
+                          icon={Delete01Icon}
+                          onClick={() => setDeleteTargetId(clip.id)}
+                        />
                       </>
                     }
                   />
@@ -742,156 +558,6 @@ function ClipsBody() {
           </div>
         )}
       </div>
-
-      {/* Type a caption, send it. The cut each platform receives is made
-          server-side at publish time. */}
-      <Dialog
-        open={publishOpenId !== null}
-        onOpenChange={(open) => {
-          if (!open) setPublishTarget(null)
-        }}
-      >
-        <DialogContent className="shadcn-scope flex max-h-[90vh] flex-col sm:max-w-[740px]">
-          {publishOpenId && (
-            // The heading and the buttons stay put; only the middle scrolls.
-            // Four connected accounts and a preview frame were already enough
-            // to push Publish off the bottom of a laptop screen, and a button
-            // you cannot reach is the same as a button that is not there.
-            <div className="flex min-h-0 flex-col gap-4">
-              <DialogHeader>
-                <DialogTitle>Publish</DialogTitle>
-                <DialogDescription>Share your clip with the world.</DialogDescription>
-              </DialogHeader>
-
-              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-                <PublishPreview clip={clips?.find((clip) => clip.id === publishOpenId) ?? null} />
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="publish-caption" className="text-sm font-medium">
-                    Caption
-                  </label>
-                  <textarea
-                    id="publish-caption"
-                    rows={3}
-                    value={drafts[publishOpenId] ?? ""}
-                    onChange={(event) =>
-                      setDrafts((current) => ({ ...current, [publishOpenId]: event.target.value }))
-                    }
-                    placeholder="Write a caption..."
-                    // The shortest cap across the platforms this posts to, so
-                    // the count means "this will fit everywhere". Advisory,
-                    // not enforced.
-                    maxLength={CAPTION_LIMIT}
-                    className="w-full resize-y rounded-md border border-shborder bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                  />
-                  <p className="self-end text-[12px] tabular-nums text-muted-foreground">
-                    {(drafts[publishOpenId] ?? "").length}/{CAPTION_LIMIT}
-                  </p>
-                </div>
-
-                {/* Which accounts get it. Everything connected starts ticked,
-                    because "goes to all of them" is what this button did
-                    before and a picker that quietly defaulted to nothing
-                    would turn a familiar action into a puzzle. */}
-                {accountsFailed ? (
-                  <p className="text-[13px] text-muted-foreground">
-                    Couldn&apos;t load your accounts just now — posting will still go to all of them.
-                  </p>
-                ) : accounts === null ? (
-                  <Skeleton className="h-[72px] w-full rounded-lg" />
-                ) : accounts.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
-                    No connected accounts. Connect one on the Publishing page first.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-[13px] text-muted-foreground">Accounts</p>
-                    <ul className="flex flex-col gap-2">
-                      {accounts.map((account) => {
-                        const on = chosenAccountIds.includes(account.id)
-                        const platform = PLATFORM_LABELS[account.platform] ?? account.platform
-                        return (
-                          <li key={account.id}>
-                            <button
-                              type="button"
-                              role="checkbox"
-                              aria-checked={on}
-                              onClick={() =>
-                                setChosenAccountIds((current) =>
-                                  on
-                                    ? current.filter((id) => id !== account.id)
-                                    : [...current, account.id],
-                                )
-                              }
-                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ring-1 ring-shborder transition-colors hover:bg-shaccent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            >
-                              <PlatformLogo platform={account.platform} size="sm" />
-                              {/* Name and handle on ONE line: two accounts on
-                                  one platform is normal, so the handle is
-                                  never dropped. */}
-                              <span className="flex min-w-0 items-center gap-3">
-                                <span className="text-sm">{platform}</span>
-                                {account.displayName && (
-                                  <span className="truncate text-[13px] text-muted-foreground">
-                                    {account.displayName}
-                                  </span>
-                                )}
-                              </span>
-                              <span className="ml-auto">
-                                <ChosenTick isOn={on} />
-                              </span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[13px] text-muted-foreground">
-                  {accounts && accounts.length > 0
-                    ? chosenAccountIds.length === 0
-                      ? "Pick at least one account."
-                      : `${chosenAccountIds.length} ${chosenAccountIds.length === 1 ? "account" : "accounts"} selected`
-                    : "Goes to every account you have connected."}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      saveDraft(publishOpenId, drafts[publishOpenId] ?? "")
-                      setPublishTarget(null)
-                    }}
-                  >
-                    Save draft
-                  </Button>
-                  <Button
-                    // The guard stays on the page, not in the dialog: closing
-                    // this unmounts it, and a flag that reset would let a
-                    // second Post start a publish of a clip already on its
-                    // way out.
-                    disabled={
-                      publishingIds.includes(publishOpenId) ||
-                      // An empty tick-list is a refusal to pick, not
-                      // permission to post everywhere — the same rule the
-                      // API enforces.
-                      (accounts !== null && accounts.length > 0 && chosenAccountIds.length === 0)
-                    }
-                    onClick={() => void publish(publishOpenId)}
-                  >
-                    {publishingIds.includes(publishOpenId) ? "Publishing…" : "Publish"}
-                    <HugeiconsIcon icon={ArrowRight01Icon} />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* The caption editor keeps its own furniture for now: it is a working
           editor (toolbar, font pickers, undo) whose innards are still on the
@@ -928,6 +594,83 @@ function ClipsBody() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Rename the clip in the library. The API name is videoTitle; the page
+          displays it as the description when one exists. */}
+      <Dialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null)
+        }}
+      >
+        <DialogContent className="shadcn-scope sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Rename clip</DialogTitle>
+            <DialogDescription>This is what you’ll see in your library.</DialogDescription>
+          </DialogHeader>
+          {renameTarget && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void handleRename(renameTarget.clipId, renameTarget.value)
+              }}
+              className="flex flex-col gap-4"
+            >
+              <Input
+                value={renameTarget.value}
+                onChange={(e) => setRenameTarget((current) => (current ? { ...current, value: e.target.value } : null))}
+                placeholder="A moment from your video"
+                autoFocus
+              />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setRenameTarget(null)}
+                  disabled={renameBusy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={renameBusy || renameTarget.value === renameTarget.originalValue}>
+                  {renameBusy ? "Saving…" : "Save"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete a clip permanently. The source upload is untouched. */}
+      <Dialog
+        open={deleteTargetId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetId(null)
+        }}
+      >
+        <DialogContent className="shadcn-scope sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle>Delete this clip?</DialogTitle>
+            <DialogDescription>
+              This can’t be undone. The original video stays in your uploads.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeleteTargetId(null)} disabled={deleteBusy}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteBusy}
+              onClick={() => {
+                if (deleteTargetId) void handleDelete(deleteTargetId)
+              }}
+            >
+              {deleteBusy ? "Deleting…" : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <UpgradeDialog files={overLimit} onClose={clearOverLimit} />
     </>
   )

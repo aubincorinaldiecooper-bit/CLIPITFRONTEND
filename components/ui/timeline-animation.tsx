@@ -3,12 +3,12 @@
 import type { Variants } from "motion/react"
 import { type HTMLMotionProps, motion, useInView, useReducedMotion } from "motion/react"
 import type React from "react"
+import { useRef } from "react"
 
 type TimelineContentProps<T extends keyof HTMLElementTagNameMap> = {
   children?: React.ReactNode
   animationNum: number
   className?: string
-  timelineRef: React.RefObject<HTMLElement | null>
   as?: T
   customVariants?: Variants
   once?: boolean
@@ -17,7 +17,6 @@ type TimelineContentProps<T extends keyof HTMLElementTagNameMap> = {
 export const TimelineAnimation = <T extends keyof HTMLElementTagNameMap = "div">({
   children,
   animationNum,
-  timelineRef,
   className,
   as,
   customVariants,
@@ -25,6 +24,7 @@ export const TimelineAnimation = <T extends keyof HTMLElementTagNameMap = "div">
   ...props
 }: TimelineContentProps<T>) => {
   const reducedMotion = useReducedMotion()
+  const ref = useRef<HTMLElement>(null)
 
   const defaultSequenceVariants = {
     visible: (i: number) => ({
@@ -32,7 +32,9 @@ export const TimelineAnimation = <T extends keyof HTMLElementTagNameMap = "div">
       y: 0,
       opacity: 1,
       transition: {
-        delay: i * 0.5,
+        // Cap the stagger so deep cards do not wait seconds after they scroll
+        // into view. A short local stagger still feels stepped.
+        delay: Math.min(i, 3) * 0.05,
         duration: 0.5,
       },
     }),
@@ -45,9 +47,7 @@ export const TimelineAnimation = <T extends keyof HTMLElementTagNameMap = "div">
 
   const sequenceVariants = customVariants || defaultSequenceVariants
 
-  const isInView = useInView(timelineRef, {
-    once,
-  })
+  const isInView = useInView(ref, { once })
 
   const MotionComponent = motion[as || "div"] as React.ElementType
 
@@ -62,6 +62,7 @@ export const TimelineAnimation = <T extends keyof HTMLElementTagNameMap = "div">
 
   return (
     <MotionComponent
+      ref={ref}
       initial="hidden"
       animate={isInView ? "visible" : "hidden"}
       custom={animationNum}
