@@ -32,7 +32,9 @@ export const TimelineAnimation = <T extends keyof HTMLElementTagNameMap = "div">
       y: 0,
       opacity: 1,
       transition: {
-        delay: i * 0.5,
+        // Cap the stagger so deep cards do not wait seconds after they scroll
+        // into view. A short local stagger still feels stepped.
+        delay: Math.min(i, 3) * 0.05,
         duration: 0.5,
       },
     }),
