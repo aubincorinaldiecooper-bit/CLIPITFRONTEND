@@ -13,12 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import {
-  ArrowRight01Icon,
   CaptionsIcon,
   Delete01Icon,
   PencilEdit01Icon,
@@ -27,28 +24,14 @@ import {
   VideoReplayIcon,
 } from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
-import type { LibraryClip, SocialAccount } from "@/lib/types"
+import type { LibraryClip } from "@/lib/types"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
-import { useWorkspaceResumeIntent, useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
-import { PlatformLogo } from "@/components/platform-logos"
-import { ChosenTick, PublishPreview } from "@/components/publish-preview"
-import { clearDraft, saveDraft, savedDrafts } from "@/lib/drafts"
 import { UploadPackage } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { TimelineAnimation } from "@/components/ui/timeline-animation"
-
-/**
- * The caption length to count against.
- *
- * The shortest limit among the platforms this posts to, so a caption inside it
- * fits everywhere. Advisory: the counter turns red, nothing is blocked. A
- * platform trims what it minds about, and refusing to type past this would be
- * us enforcing a rule that only one of them applies.
- */
-const CAPTION_LIMIT = 220
 
 /**
  * How each card arrives: out of focus, then sharp, one after the next.
@@ -69,20 +52,11 @@ const CARD_REVEAL = {
 }
 
 /**
- * Everything you have cut, newest first — on the app shell the Shared screens
- * proved out. Each card is the clip's still until you press play, then the
- * clip itself in place — no lightbox, no second page; media surfaces are the
- * owner's carve-out. Download uses the signed attachment URL, so the browser
- * saves the file without this page touching the bytes.
+ * Everything you have cut, newest first. Each card is the clip's still until
+ * you press play, then the clip itself in place — no lightbox, no second page;
+ * media surfaces are the owner's carve-out. Download uses the signed attachment
+ * URL, so the browser saves the file without this page touching the bytes.
  */
-/** Platform names as their own users write them, never a lowercased id. */
-const PLATFORM_LABELS: Record<string, string> = {
-  tiktok: "TikTok",
-  youtube: "YouTube",
-  instagram: "Instagram",
-  x: "X",
-}
-
 /** The square secondary buttons on a clip card's action row. */
 function ClipAction({
   label,
@@ -147,37 +121,7 @@ function ClipsBody() {
   const pagedOlderRef = useRef(false)
   const [failed, setFailed] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
-  /** The publish dialog's target clip; the ref mirrors it so a finishing
-   *  request can tell whether the open panel is still its own. */
-  const [publishOpenId, setPublishOpenId] = useState<string | null>(null)
-  /**
-   * The accounts a publish could go to, and which are ticked.
-   *
-   * Loaded when the dialog opens rather than with the page: most visits to
-   * the library never publish anything, and this is the only screen that
-   * needs it.
-   */
-  const [accounts, setAccounts] = useState<SocialAccount[] | null>(null)
-  const [accountsFailed, setAccountsFailed] = useState(false)
-  const [chosenAccountIds, setChosenAccountIds] = useState<string[]>([])
-  const publishOpenIdRef = useRef<string | null>(null)
-  /**
-   * Caption drafts, one per clip. A draft survives its dialog closing —
-   * clicking outside the panel must not erase a paragraph someone typed —
-   * and is dropped only when the publish it was written for lands.
-   *
-   * Seeded from the ones Save draft has written down, so a caption written
-   * yesterday is still there today.
-   */
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
 
-  // Read once, on the client. Deliberately not part of the initial state: this
-  // page is prerendered, and reading storage during the first render makes the
-  // server's HTML and the browser's disagree.
-  useEffect(() => {
-    setDrafts((current) => ({ ...savedDrafts(), ...current }))
-  }, [])
-  const [publishingIds, setPublishingIds] = useState<string[]>([])
   /** Which clip's caption editor is open — a modal visit, not a page. */
   const [captionClipId, setCaptionClipId] = useState<string | null>(null)
   /**
@@ -187,7 +131,6 @@ function ClipsBody() {
    * lets the same render be started twice.
    */
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
-  const { requireSignIn } = useWorkspaceSignInGate()
 
   /** Rename a clip — its title overrides the moment description in the library. */
   const [renameTarget, setRenameTarget] = useState<{ clipId: string; value: string } | null>(null)
@@ -196,50 +139,6 @@ function ClipsBody() {
   /** Delete a clip after an explicit confirmation. */
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
-
-  // Signed in from the prompt and come back? Reopen the clip they were about
-  // to publish, rather than dropping them on the library with no idea where
-  // they were. It opens the dialog — it does NOT publish: that button is
-  // theirs to press, and pressing it for them would post to the world on the
-  // strength of a URL parameter.
-  useWorkspaceResumeIntent(
-    (intent) => intent.action === "publish" || intent.action === "send",
-    (intent) => {
-      if (intent.action === "publish") setPublishTarget(intent.clipId)
-      if (intent.action === "send") openSend(intent.clipId)
-    },
-  )
-
-  const setPublishTarget = (id: string | null) => {
-    publishOpenIdRef.current = id
-    setPublishOpenId(id)
-  }
-
-  // The accounts a publish can reach, fetched when the dialog opens. Every
-  // connected one starts ticked: the previous behaviour was "goes to all of
-  // them", and opening a picker that silently defaults to nothing would turn
-  // a familiar action into a puzzle.
-  useEffect(() => {
-    if (publishOpenId === null) return
-    let cancelled = false
-    setAccountsFailed(false)
-    void api
-      .listSocialAccounts()
-      .then((page) => {
-        if (cancelled) return
-        const connected = page.accounts.filter((account) => account.status === "connected")
-        setAccounts(connected)
-        setChosenAccountIds(connected.map((account) => account.id))
-      })
-      .catch(() => {
-        // A failed load is not "no accounts". Saying "connect one first" to
-        // someone who has three would be a lie about their own setup.
-        if (!cancelled) setAccountsFailed(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [publishOpenId])
 
   useEffect(() => {
     let cancelled = false
@@ -260,117 +159,6 @@ function ClipsBody() {
       cancelled = true
     }
   }, [])
-
-  const publish = async (clipId: string) => {
-    if (publishingIds.includes(clipId)) return
-    setPublishingIds((current) => [...current, clipId])
-    try {
-      const { posts } = await api.publishClip(clipId, {
-        caption: (drafts[clipId] ?? "").trim(),
-        // Omitted means "all" to the API. Sending the list only when it is a
-        // real subset keeps a publish working even if the account list could
-        // not be loaded — the old behaviour, unchanged, rather than a
-        // failure to fetch turning into a failure to post.
-        ...(accounts && chosenAccountIds.length > 0 && chosenAccountIds.length < accounts.length
-          ? { accountIds: chosenAccountIds }
-          : {}),
-      })
-      // Transient news is transient: the confirmation appears and leaves on
-      // its own instead of becoming permanent card content. When a platform
-      // needs a different shape than the clip was shot in, the file is cut
-      // first — say so, so a short delay reads as work, not silence.
-      const shaping = posts?.filter((entry) => entry.status === "rendering") ?? []
-      toast.success(
-        shaping.length > 0
-          ? `Sent — ${shaping
-              .flatMap((entry) => entry.targets.map((target) => target.platform))
-              .map((platform) => platform.charAt(0).toUpperCase() + platform.slice(1))
-              .join(" and ")} ${shaping.length === 1 && shaping[0]!.targets.length === 1 ? "gets" : "get"} a ${shaping
-              .map((entry) => entry.aspect)
-              .join(" and ")} cut first; it posts automatically when ready.`
-          : "Sent — it's on its way to your connected accounts.",
-      )
-      // The draft did its job; the panel closes only if it is still this
-      // clip's — another clip's dialog may have opened mid-flight. A saved
-      // copy goes too: keeping a caption that has already been published would
-      // hand it straight back the next time this clip was opened.
-      setDrafts((current) => {
-        const { [clipId]: _sent, ...rest } = current
-        return rest
-      })
-      clearDraft(clipId)
-      if (publishOpenIdRef.current === clipId) {
-        setPublishTarget(null)
-      }
-    } catch (cause) {
-      // The API's refusals are already written for people ("No connected
-      // accounts. Connect one on the Publishing page first.") — repeat them.
-      toast.error(
-        cause instanceof ApiError ? cause.message : "Couldn't publish just now. Try again.",
-        { duration: Infinity, closeButton: true },
-      )
-    } finally {
-      setPublishingIds((current) => current.filter((id) => id !== clipId))
-    }
-  }
-
-  /**
-   * The Send-to-room control: per clip, a popover listing the rooms the
-   * caller is in, saying which already have it. Rooms are fetched when the
-   * popover opens — the list is tiny and always current.
-   */
-  const [sendOpenId, setSendOpenId] = useState<string | null>(null)
-  const sendOpenIdRef = useRef<string | null>(null)
-  const [rooms, setRooms] = useState<Array<{ id: string; name: string }> | null>(null)
-  /** The fetch failed — different answer from "you have no rooms". */
-  const [sendFailed, setSendFailed] = useState(false)
-  const [sharedWith, setSharedWith] = useState<string[]>([])
-  const [sendSignInRequired, setSendSignInRequired] = useState(false)
-  const [sendingTo, setSendingTo] = useState<string | null>(null)
-
-  const setSendTarget = (id: string | null) => {
-    sendOpenIdRef.current = id
-    setSendOpenId(id)
-  }
-
-  const openSend = (clipId: string) => {
-    setRooms(null)
-    setSharedWith([])
-    setSendSignInRequired(false)
-    setSendFailed(false)
-    setSendTarget(clipId)
-    void api
-      .getClipWorkspaces(clipId)
-      .then((result) => {
-        // Still this clip's popover? Someone may have moved on mid-fetch.
-        if (sendOpenIdRef.current !== clipId) return
-        setRooms(result.workspaces)
-        setSharedWith(result.sharedWith)
-        setSendSignInRequired(Boolean(result.signInRequired))
-      })
-      .catch(() => {
-        if (sendOpenIdRef.current !== clipId) return
-        // "The request failed" and "you are in no room" are different
-        // answers, and this popover must never return them as the same one.
-        setSendFailed(true)
-      })
-  }
-
-  const sendTo = async (clipId: string, workspaceId: string, name: string) => {
-    if (sendingTo) return
-    setSendingTo(workspaceId)
-    try {
-      await api.sendClipToWorkspace(workspaceId, clipId)
-      toast.success(`Sent to ${name}. It stays in your library too.`)
-      setSharedWith((current) => (current.includes(workspaceId) ? current : [...current, workspaceId]))
-    } catch (cause) {
-      toast.error(
-        cause instanceof ApiError ? cause.message : "Couldn't send that clip. Try again.",
-      )
-    } finally {
-      setSendingTo(null)
-    }
-  }
 
   /**
    * Re-read the newest page and MERGE it in: someone who paged down to find
@@ -591,7 +379,7 @@ function ClipsBody() {
               <p className="text-sm text-muted-foreground">
                 {failed
                   ? "The library couldn’t connect. Try again, or upload a video to get started."
-                  : "Cut a moment from any video and it lands here — ready to play, download, caption, and publish."}
+                  : "Cut a moment and it lands here — ready to play, download, edit, rename, or delete."}
               </p>
               <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
                 {failed && (
@@ -678,156 +466,6 @@ function ClipsBody() {
           </div>
         )}
       </div>
-
-      {/* Type a caption, send it. The cut each platform receives is made
-          server-side at publish time. */}
-      <Dialog
-        open={publishOpenId !== null}
-        onOpenChange={(open) => {
-          if (!open) setPublishTarget(null)
-        }}
-      >
-        <DialogContent className="shadcn-scope flex max-h-[90vh] flex-col sm:max-w-[740px]">
-          {publishOpenId && (
-            // The heading and the buttons stay put; only the middle scrolls.
-            // Four connected accounts and a preview frame were already enough
-            // to push Publish off the bottom of a laptop screen, and a button
-            // you cannot reach is the same as a button that is not there.
-            <div className="flex min-h-0 flex-col gap-4">
-              <DialogHeader>
-                <DialogTitle>Publish</DialogTitle>
-                <DialogDescription>Share your clip with the world.</DialogDescription>
-              </DialogHeader>
-
-              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-                <PublishPreview clip={clips?.find((clip) => clip.id === publishOpenId) ?? null} />
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="publish-caption" className="text-sm font-medium">
-                    Caption
-                  </label>
-                  <textarea
-                    id="publish-caption"
-                    rows={3}
-                    value={drafts[publishOpenId] ?? ""}
-                    onChange={(event) =>
-                      setDrafts((current) => ({ ...current, [publishOpenId]: event.target.value }))
-                    }
-                    placeholder="Write a caption..."
-                    // The shortest cap across the platforms this posts to, so
-                    // the count means "this will fit everywhere". Advisory,
-                    // not enforced.
-                    maxLength={CAPTION_LIMIT}
-                    className="w-full resize-y rounded-md border border-shborder bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                  />
-                  <p className="self-end text-[12px] tabular-nums text-muted-foreground">
-                    {(drafts[publishOpenId] ?? "").length}/{CAPTION_LIMIT}
-                  </p>
-                </div>
-
-                {/* Which accounts get it. Everything connected starts ticked,
-                    because "goes to all of them" is what this button did
-                    before and a picker that quietly defaulted to nothing
-                    would turn a familiar action into a puzzle. */}
-                {accountsFailed ? (
-                  <p className="text-[13px] text-muted-foreground">
-                    Couldn’t load your accounts just now — posting will still go to all of them.
-                  </p>
-                ) : accounts === null ? (
-                  <Skeleton className="h-[72px] w-full rounded-lg" />
-                ) : accounts.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
-                    No connected accounts. Connect one on the Publishing page first.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-[13px] text-muted-foreground">Accounts</p>
-                    <ul className="flex flex-col gap-2">
-                      {accounts.map((account) => {
-                        const on = chosenAccountIds.includes(account.id)
-                        const platform = PLATFORM_LABELS[account.platform] ?? account.platform
-                        return (
-                          <li key={account.id}>
-                            <button
-                              type="button"
-                              role="checkbox"
-                              aria-checked={on}
-                              onClick={() =>
-                                setChosenAccountIds((current) =>
-                                  on
-                                    ? current.filter((id) => id !== account.id)
-                                    : [...current, account.id],
-                                )
-                              }
-                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ring-1 ring-shborder transition-colors hover:bg-shaccent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            >
-                              <PlatformLogo platform={account.platform} size="sm" />
-                              {/* Name and handle on ONE line: two accounts on
-                                  one platform is normal, so the handle is
-                                  never dropped. */}
-                              <span className="flex min-w-0 items-center gap-3">
-                                <span className="text-sm">{platform}</span>
-                                {account.displayName && (
-                                  <span className="truncate text-[13px] text-muted-foreground">
-                                    {account.displayName}
-                                  </span>
-                                )}
-                              </span>
-                              <span className="ml-auto">
-                                <ChosenTick isOn={on} />
-                              </span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[13px] text-muted-foreground">
-                  {accounts && accounts.length > 0
-                    ? chosenAccountIds.length === 0
-                      ? "Pick at least one account."
-                      : `${chosenAccountIds.length} ${chosenAccountIds.length === 1 ? "account" : "accounts"} selected`
-                    : "Goes to every account you have connected."}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      saveDraft(publishOpenId, drafts[publishOpenId] ?? "")
-                      setPublishTarget(null)
-                    }}
-                  >
-                    Save draft
-                  </Button>
-                  <Button
-                    // The guard stays on the page, not in the dialog: closing
-                    // this unmounts it, and a flag that reset would let a
-                    // second Post start a publish of a clip already on its
-                    // way out.
-                    disabled={
-                      publishingIds.includes(publishOpenId) ||
-                      // An empty tick-list is a refusal to pick, not
-                      // permission to post everywhere — the same rule the
-                      // API enforces.
-                      (accounts !== null && accounts.length > 0 && chosenAccountIds.length === 0)
-                    }
-                    onClick={() => void publish(publishOpenId)}
-                  >
-                    {publishingIds.includes(publishOpenId) ? "Publishing…" : "Publish"}
-                    <HugeiconsIcon icon={ArrowRight01Icon} />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* The caption editor keeps its own furniture for now: it is a working
           editor (toolbar, font pickers, undo) whose innards are still on the

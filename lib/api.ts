@@ -313,7 +313,7 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
       // would leave the header saying who they are while their new uploads
       // belong to a tab-lifetime nobody.
       forgetApiSession()
-      return request<T>(path, init, false)
+      return request<T>(path, init, false, timeoutMs)
     }
 
     if (!response.ok) throw await parseError(response)
