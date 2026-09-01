@@ -504,6 +504,9 @@ function Deck({
         <ClipComposition
           composition={composition}
           sourceAspectRatio={sourceAspect}
+          // The in-place preview plays the SOURCE; everything else in this
+          // box (the still, the finished cut) is already the moment's shape.
+          finished={!(!playable && previewingId === active.id && pinnedPlayback != null)}
           className="relative z-20 w-[58%] overflow-hidden rounded-[26px] bg-[#101013] shadow-[0_18px_50px_rgba(17,17,22,0.22)]"
           style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
         >
@@ -751,7 +754,11 @@ export function DeckStage({
           poster: clip?.media?.posterUrl ?? match.thumbnailUrl ?? null,
           composition:
             clip?.media?.composition ??
-            centredComposition(exchange.request.deck != null ? "9:16" : (clip?.media?.sourceAspectRatio ?? "16:9")),
+            centredComposition(
+              exchange.request.deck != null
+                ? "9:16"
+                : (clip?.media?.sourceAspectRatio ?? (video.width && video.height ? `${video.width}:${video.height}` : "16:9")),
+            ),
           sourceAspectRatio: clip?.media?.sourceAspectRatio ?? null,
           status:
             clip == null || clip.status === "pending" || clip.status === "generating"

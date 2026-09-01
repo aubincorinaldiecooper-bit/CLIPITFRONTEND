@@ -49,9 +49,31 @@ export function objectPositionFor(composition: Composition, sourceAspectRatio?: 
   return source > target ? `${focus}% 50%` : `50% ${focus}%`
 }
 
+/**
+ * How the box holds what it is given.
+ *
+ * A FINISHED file — the rendered derivative, or a poster cut from it — is
+ * already the composition's shape and fills the box. Raw source is another
+ * matter: only a smart crop can be reproduced by covering and positioning,
+ * because that is literally what the export does. A padded or blurred
+ * delivery keeps the WHOLE frame, so raw source shown for it must too; and
+ * a vertical moment whose framing has not been decided yet is shown whole
+ * rather than through a guessed crop, so nobody rejects a moment because a
+ * centre crop hid its subject.
+ */
+export function fitFor(composition: Composition, finished: boolean): "cover" | "contain" {
+  if (finished) return "cover"
+  if (composition.mode === "smart_crop") return "cover"
+  if (composition.crop) return "cover"
+  // Nothing decided, or a whole-frame mode: the source's own shape is the
+  // box's shape when the moment is not vertical, so nothing is cut either way.
+  return composition.aspectRatio === "9:16" ? "contain" : "cover"
+}
+
 export function ClipComposition({
   composition,
   sourceAspectRatio,
+  finished = true,
   className,
   style: frameStyle,
   children,
@@ -59,6 +81,11 @@ export function ClipComposition({
   composition: Composition
   /** The media's own shape, so the cut axis can be told when there is no crop yet. */
   sourceAspectRatio?: string | null
+  /**
+   * True when the child is a finished, framed file (the derivative or its
+   * poster). False for raw source shown in the moment's place.
+   */
+  finished?: boolean
   className?: string
   /** Forwarded to the box, as VerticalFrame does, so a fanned card can be the positioned element. */
   style?: CSSProperties
@@ -69,7 +96,12 @@ export function ClipComposition({
   // subject is 73% of the way across".
   const style: CSSProperties = { objectPosition: objectPositionFor(composition, sourceAspectRatio) }
   return (
-    <AspectRatio ratio={ratioFromLabel(composition.aspectRatio, 9 / 16)} fit="cover" className={className} style={frameStyle}>
+    <AspectRatio
+      ratio={ratioFromLabel(composition.aspectRatio, 9 / 16)}
+      fit={fitFor(composition, finished)}
+      className={className}
+      style={frameStyle}
+    >
       {children(style)}
     </AspectRatio>
   )

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
-import { ClipComposition, centredComposition, objectPositionFor, ratioFromLabel } from "../components/media/clip-composition"
+import { ClipComposition, centredComposition, fitFor, objectPositionFor, ratioFromLabel } from "../components/media/clip-composition"
 import type { ClipComposition as Composition } from "../lib/types"
 
 /**
@@ -73,5 +73,27 @@ describe("ClipComposition", () => {
     const box = container.firstElementChild as HTMLElement
     const [w, h] = box.style.aspectRatio.split("/").map((part) => Number(part.trim()))
     expect(w / (h || 1)).toBeCloseTo(16 / 9, 6)
+  })
+})
+
+describe("fitFor — raw source is never shown through a crop the export will not make", () => {
+  it("covers with a finished file, whatever its mode", () => {
+    expect(fitFor(smartCrop(), true)).toBe("cover")
+    expect(fitFor(smartCrop({ mode: "blurred_background", crop: null }), true)).toBe("cover")
+    expect(fitFor(centredComposition("9:16"), true)).toBe("cover")
+  })
+
+  it("covers raw source only for a smart crop, which cover + position reproduces exactly", () => {
+    expect(fitFor(smartCrop(), false)).toBe("cover")
+  })
+
+  it("keeps the whole frame for a padded or blurred delivery, and for an undecided vertical moment", () => {
+    expect(fitFor(smartCrop({ mode: "blurred_background", crop: null, focusPct: 50 }), false)).toBe("contain")
+    expect(fitFor(smartCrop({ mode: "padded", crop: null, focusPct: 50 }), false)).toBe("contain")
+    expect(fitFor(centredComposition("9:16"), false)).toBe("contain")
+  })
+
+  it("covers a non-vertical moment either way — its box is the source's own shape", () => {
+    expect(fitFor(centredComposition("16:9"), false)).toBe("cover")
   })
 })

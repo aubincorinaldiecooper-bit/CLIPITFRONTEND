@@ -41,6 +41,8 @@ interface PreviewSource {
   /** The same framing the card used and the export will use. */
   composition: Composition
   sourceAspectRatio: string | null
+  /** True for the rendered file; false when the source stands in for it. */
+  finished: boolean
 }
 
 /**
@@ -69,10 +71,10 @@ function previewFor(
   // place. Otherwise the source — the watchable proxy when there is one —
   // seeked to the moment and shown THROUGH the same framing.
   const finished = clip?.media ? clip.media.url : (clip?.url ?? null)
-  if (finished) return { url: finished, start: 0, end: null, composition, sourceAspectRatio }
+  if (finished) return { url: finished, start: 0, end: null, composition, sourceAspectRatio, finished: true }
   const source = video?.playback?.proxyUrl ?? video?.playback?.url
   if (!source) return null
-  return { url: source, start: match.startSeconds, end: match.endSeconds, composition, sourceAspectRatio }
+  return { url: source, start: match.startSeconds, end: match.endSeconds, composition, sourceAspectRatio, finished: false }
 }
 
 /** Plays a moment and stops at its out-point rather than running on. */
@@ -231,7 +233,7 @@ export function ReviewStep({ request, clips, video, busy, onKeep, onSkip, onUplo
           content={
             <LayoutContent padding={0} isScrollable={false}>
               {preview && (
-                <ClipComposition composition={preview.composition} sourceAspectRatio={preview.sourceAspectRatio}>
+                <ClipComposition composition={preview.composition} sourceAspectRatio={preview.sourceAspectRatio} finished={preview.finished}>
                   {(style) => <PreviewPlayer source={preview} style={style} />}
                 </ClipComposition>
               )}
