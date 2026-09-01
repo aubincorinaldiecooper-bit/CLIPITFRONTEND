@@ -15,6 +15,7 @@ import { Logout01Icon } from "@hugeicons/core-free-icons"
 import { authClient } from "@/lib/auth-client"
 import { forgetApiSession } from "@/lib/api"
 import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
+import { cn } from "@/lib/utils"
 
 /**
  * Who you are, in the workspace header — the pilot's version of
@@ -30,10 +31,11 @@ import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
  * Signed out it offers one button that opens the same sign-in dialog every
  * gated action here uses — one dialog, not two ways to sign in.
  */
-export function WorkspaceAccount() {
+export function WorkspaceAccount({ variant = "default" }: { variant?: "default" | "notch" } = {}) {
   const { data: session, isPending } = authClient.useSession()
   const { askToSignIn } = useWorkspaceSignInGate()
   const [configured, setConfigured] = useState<boolean | null>(null)
+  const isNotch = variant === "notch"
 
   useEffect(() => {
     let cancelled = false
@@ -54,7 +56,12 @@ export function WorkspaceAccount() {
 
   if (!session?.user) {
     return (
-      <Button variant="secondary" size="sm" onClick={askToSignIn}>
+      <Button
+        variant={isNotch ? "ghost" : "secondary"}
+        size="sm"
+        onClick={askToSignIn}
+        className={isNotch ? "text-white/90 hover:bg-white/10 hover:text-white" : undefined}
+      >
         Sign in
       </Button>
     )
@@ -63,7 +70,11 @@ export function WorkspaceAccount() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="max-w-[16rem]">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn("max-w-[16rem]", isNotch && "text-white/80 hover:bg-white/10 hover:text-white")}
+        >
           <span className="truncate">{session.user.email}</span>
         </Button>
       </DropdownMenuTrigger>
