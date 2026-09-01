@@ -116,18 +116,23 @@ function ClipsBody() {
   const [clips, setClips] = useState<LibraryClip[] | null>(null)
   /**
    * Whether older clips exist below what is currently held. The cursor is
-   * deliberately NOT stored: it is read off the last clip on screen at the
-   * moment the button is pressed, so a refresh that adds clips at the top
-   * can never leave it pointing into the middle of the list (which would
-   * re-fetch cards already on screen).
+   * deliberately kept in a ref as well as state, so async handlers read the
+   * latest value without a stale closure.
    */
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   /** Cursor for the next older page, so an emptied list can still load more. */
   const [nextBefore, setNextBefore] = useState<string | null>(null)
+  const pagingRef = useRef({ hasMore, nextBefore })
   /** True once someone has paged past the newest page. */
   const pagedOlderRef = useRef(false)
+  /** Set while a delete is in progress, so the empty-state effect can load older. */
+  const loadOlderAfterDeleteRef = useRef<string | null>(null)
   const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    pagingRef.current = { hasMore, nextBefore }
+  }, [hasMore, nextBefore])
   const [playingId, setPlayingId] = useState<string | null>(null)
 
   /** Which clip's caption editor is open — a modal visit, not a page. */
@@ -232,15 +237,14 @@ function ClipsBody() {
     setDeleteBusy(true)
     try {
       await api.deleteClip(clipId)
-      const next = clips?.filter((clip) => clip.id !== clipId) ?? []
-      setClips(next)
+      // Use a functional update so any loadOlder/refresh that completed while
+      // the delete was in flight is not overwritten by a stale closure.
+      setClips((current) => current?.filter((clip) => clip.id !== clipId) ?? [])
       setPlayingId((current) => (current === clipId ? null : current))
       setDeleteTargetId((current) => (current === clipId ? null : current))
-      // If deleting the last clip on this page left older pages behind,
-      // automatically load them instead of hiding pagination behind a refresh.
-      if (next.length === 0 && hasMore && nextBefore) {
-        window.setTimeout(() => void loadOlder(), 0)
-      }
+      // Let the empty-state effect decide whether to page in older clips,
+      // using the latest pagination values from a ref.
+      loadOlderAfterDeleteRef.current = clipId
     } catch (cause) {
       toast.error(cause instanceof ApiError ? cause.message : "Couldn't delete that clip. Try again.")
     } finally {
@@ -293,11 +297,12 @@ function ClipsBody() {
   }
 
   const loadOlder = async () => {
-    if (!hasMore || loadingMore || !nextBefore) return
+    const { hasMore: more, nextBefore: cursor } = pagingRef.current
+    if (!more || loadingMore || !cursor) return
     setLoadingMore(true)
     pagedOlderRef.current = true
     try {
-      const page = await api.listClips(nextBefore)
+      const page = await api.listClips(cursor)
       setClips((current) => {
         const held = new Set((current ?? []).map((clip) => clip.id))
         return [...(current ?? []), ...page.clips.filter((clip) => !held.has(clip.id))]
@@ -311,6 +316,25 @@ function ClipsBody() {
       setLoadingMore(false)
     }
   }
+
+  /**
+   * If the list ever becomes empty while the backend says there are older
+   * clips waiting, load them automatically. This covers deleting the last
+   * clip on a page without re-introducing stale closures into handleDelete.
+   */
+  useEffect(() => {
+    if (
+      loadOlderAfterDeleteRef.current &&
+      clips !== null &&
+      clips.length === 0 &&
+      pagingRef.current.hasMore &&
+      pagingRef.current.nextBefore &&
+      !loadingMore
+    ) {
+      void loadOlder()
+    }
+    loadOlderAfterDeleteRef.current = null
+  }, [clips, loadingMore])
 
   return (
     <>

@@ -125,8 +125,8 @@ function discardBody(response: Response): void {
   })
 }
 
-async function createSession(signal?: AbortSignal): Promise<string> {
-  const response = await fetch(`${API_BASE}/api/sessions`, { method: "POST", signal })
+async function createSession(): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/sessions`, { method: "POST" })
   if (!response.ok) {
     discardBody(response)
     throw new ApiError(response.status, "session_failed", "Could not start a session with the backend")
@@ -172,7 +172,7 @@ let exchangePromise: Promise<string | null> | null = null
 const SESSION_RECHECK_MS = 60_000
 let exchangeCheckedAt = 0
 
-function exchangeSignedInToken(signal?: AbortSignal): Promise<string | null> {
+function exchangeSignedInToken(): Promise<string | null> {
   if (typeof window === "undefined") return Promise.resolve(null)
   // A settled answer older than the window is stale: drop it so the next
   // caller asks again. An IN-FLIGHT promise is never discarded — concurrent
@@ -186,6 +186,10 @@ function exchangeSignedInToken(signal?: AbortSignal): Promise<string | null> {
   // signed-in person's two dashboard calls ran as two different people, and
   // whichever token landed last became the tab. Sharing the promise means
   // every concurrent caller waits for the same answer.
+  //
+  // The shared promise is intentionally NOT tied to a caller's AbortSignal.
+  // A request-level timeout stops that request waiting, but the identity work
+  // keeps going so the result can be reused by later callers.
   exchangePromise ??= (async () => {
     try {
       // Carry the guest token so the work done signed-out comes along. Read
@@ -195,7 +199,6 @@ function exchangeSignedInToken(signal?: AbortSignal): Promise<string | null> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(guestToken ? { guestToken } : {}),
-        signal,
       })
       if (!response.ok) {
         discardBody(response)
@@ -213,9 +216,7 @@ function exchangeSignedInToken(signal?: AbortSignal): Promise<string | null> {
       const body = (await response.json()) as { token: string }
       writeToken(body.token, "user")
       return body.token
-    } catch (error) {
-      // An explicit abort should not be silently swallowed as "not signed in".
-      if (error instanceof Error && error.name === "AbortError") throw error
+    } catch {
       return null
     } finally {
       // Stamped on settle, not on start, so a slow answer is trusted for a
@@ -231,8 +232,8 @@ function exchangeSignedInToken(signal?: AbortSignal): Promise<string | null> {
  * must become one session, not two sessions racing to own the tab.
  */
 let guestPromise: Promise<string> | null = null
-function mintGuestSession(signal?: AbortSignal): Promise<string> {
-  guestPromise ??= createSession(signal).finally(() => {
+function mintGuestSession(): Promise<string> {
+  guestPromise ??= createSession().finally(() => {
     // The token in sessionStorage is the durable record; the promise exists
     // only to collapse concurrent minting. A failure clears it so the next
     // attempt can try again.
@@ -241,7 +242,7 @@ function mintGuestSession(signal?: AbortSignal): Promise<string> {
   return guestPromise
 }
 
-async function ensureToken(signal?: AbortSignal): Promise<string> {
+async function ensureToken(): Promise<string> {
   const stored = readToken()
   // A stored signed-in token is CHECKED, not assumed. It used to be returned
   // unconditionally — "the strongest identity there is" — which quietly meant
@@ -250,20 +251,20 @@ async function ensureToken(signal?: AbortSignal): Promise<string> {
   // for that load, because a fresh page is exactly when sign-in state can
   // have changed.
   if (stored && readKind() === "user") {
-    const verified = await exchangeSignedInToken(signal)
+    const verified = await exchangeSignedInToken()
     // Verified, or the check itself could not run (offline, sign-in not
     // configured) — in which case the stored token stands rather than
     // signing someone out over a hiccup. A definite 401 already cleared it
     // above, so `readToken()` here reflects that.
-    return verified ?? readToken() ?? (await mintGuestSession(signal))
+    return verified ?? readToken() ?? (await mintGuestSession())
   }
 
   // A guest tab might have signed in since — the magic link lands on a fresh
   // page, and that page's first API call is where the upgrade happens.
-  const upgraded = await exchangeSignedInToken(signal)
+  const upgraded = await exchangeSignedInToken()
   if (upgraded) return upgraded
 
-  return stored ?? (await mintGuestSession(signal))
+  return stored ?? (await mintGuestSession())
 }
 
 /** Forgets the API session. The caller also ends the Better Auth one. */
@@ -288,6 +289,42 @@ async function parseError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, code, message)
 }
 
+/**
+ * Resolves with `promise` unless `signal` aborts first. The promise is NOT
+ * cancelled: this lets a request timeout stop waiting while shared identity
+ * work (the memoized exchange / guest session) keeps running for later callers.
+ */
+function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason)
+      return
+    }
+    let settled = false
+    const onAbort = () => {
+      settled = true
+      reject(signal.reason)
+    }
+    signal.addEventListener("abort", onAbort, { once: true })
+    promise.then(
+      (value) => {
+        if (!settled) {
+          settled = true
+          signal.removeEventListener("abort", onAbort)
+          resolve(value)
+        }
+      },
+      (error) => {
+        if (!settled) {
+          settled = true
+          signal.removeEventListener("abort", onAbort)
+          reject(error)
+        }
+      },
+    )
+  })
+}
+
 async function request<T>(path: string, init: RequestInit = {}, retryOn401 = true, timeoutMs = 0): Promise<T> {
   const controller = new AbortController()
   let timeout: ReturnType<typeof setTimeout> | null = null
@@ -296,7 +333,7 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
   }
 
   try {
-    const token = await ensureToken(controller.signal)
+    const token = await raceWithSignal(ensureToken(), controller.signal)
 
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,
