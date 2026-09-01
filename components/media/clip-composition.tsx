@@ -73,9 +73,13 @@ export function fitFor(
   // own shape nothing is cut either way; any OTHER shape — 9:16, 1:1,
   // whatever the delivery is — keeps the whole frame, because that is what
   // the delivery will do.
+  // Exactly the same shape, not nearly: a whole-frame delivery keeps every
+  // edge, so even a sliver of difference means cover would cut what the
+  // file will not. Identical ratios written differently ("16:9",
+  // "1920:1080") divide to the same number.
   const target = ratioFromLabel(composition.aspectRatio, Number.NaN)
   const source = ratioFromLabel(sourceAspectRatio, Number.NaN)
-  if (Number.isFinite(target) && Number.isFinite(source) && Math.abs(target - source) < 0.01) return "cover"
+  if (Number.isFinite(target) && Number.isFinite(source) && target === source) return "cover"
   return "contain"
 }
 

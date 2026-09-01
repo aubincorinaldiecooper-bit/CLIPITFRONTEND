@@ -102,6 +102,11 @@ describe("fitFor — raw source is never shown through a crop the export will no
 
   it("covers a moment whose box is the source's own shape — nothing is cut either way", () => {
     expect(fitFor(centredComposition("16:9"), false, "16:9")).toBe("cover")
+    expect(fitFor(centredComposition("16:9"), false, "1920:1080")).toBe("cover")
     expect(fitFor(centredComposition("1:1"), false, "1:1")).toBe("cover")
+  })
+
+  it("does not call a near-match the same shape — a sliver is still an edge the delivery keeps", () => {
+    expect(fitFor(smartCrop({ aspectRatio: "16:9", mode: "padded", crop: null, focusPct: 50 }), false, "1920:1081")).toBe("contain")
   })
 })
