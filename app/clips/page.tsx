@@ -25,6 +25,10 @@ import {
 } from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
 import type { LibraryClip } from "@/lib/types"
+import {
+  useAuthConfigured,
+  useWorkspaceSignInGate,
+} from "@/components/workspace/sign-in-gate"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { CaptionEditor } from "@/components/caption-editor"
 import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
@@ -46,7 +50,9 @@ const CARD_REVEAL = {
     y: 0,
     opacity: 1,
     filter: "blur(0px)",
-    transition: { delay: i * 0.1, duration: 0.5 },
+    // Cap the stagger so cards far down the list do not wait seconds
+    // after they scroll into view. A short local stagger still feels stepped.
+    transition: { delay: Math.min(i, 3) * 0.05, duration: 0.5 },
   }),
   hidden: { y: -20, opacity: 0, filter: "blur(10px)" },
 }
@@ -117,6 +123,8 @@ function ClipsBody() {
    */
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  /** Cursor for the next older page, so an emptied list can still load more. */
+  const [nextBefore, setNextBefore] = useState<string | null>(null)
   /** True once someone has paged past the newest page. */
   const pagedOlderRef = useRef(false)
   const [failed, setFailed] = useState(false)
@@ -131,6 +139,10 @@ function ClipsBody() {
    * lets the same render be started twice.
    */
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
+
+  const { askToSignIn, isSignedIn } = useWorkspaceSignInGate()
+  /** Null while unknown, false on a guest-only deployment. See the empty state. */
+  const authConfigured = useAuthConfigured()
 
   /** Rename a clip — its title overrides the moment description in the library. */
   const [renameTarget, setRenameTarget] = useState<{ clipId: string; value: string } | null>(null)
@@ -148,6 +160,7 @@ function ClipsBody() {
         if (cancelled) return
         setClips(page.clips)
         setHasMore(page.nextBefore !== null)
+        setNextBefore(page.nextBefore)
       })
       .catch(() => {
         if (!cancelled) {
@@ -179,7 +192,10 @@ function ClipsBody() {
     // Only the newest page can answer "is there more?" when it is all we
     // hold; once someone has paged deeper, the answer they have is the true
     // one.
-    if (!pagedOlderRef.current) setHasMore(page.nextBefore !== null)
+    if (!pagedOlderRef.current) {
+      setHasMore(page.nextBefore !== null)
+      setNextBefore(page.nextBefore)
+    }
   }
 
   /** Update one clip in place, wherever in the list it happens to be. */
@@ -202,7 +218,9 @@ function ClipsBody() {
         current?.map((clip) => (clip.id === clipId ? { ...clip, description: title || clip.description } : clip)) ??
         current,
       )
-      setRenameTarget(null)
+      // A stale completion should not close a dialog the user already opened
+      // for a different clip.
+      setRenameTarget((current) => (current?.clipId === clipId ? null : current))
     } catch (cause) {
       toast.error(cause instanceof ApiError ? cause.message : "Couldn't rename that clip. Try again.")
     } finally {
@@ -214,9 +232,15 @@ function ClipsBody() {
     setDeleteBusy(true)
     try {
       await api.deleteClip(clipId)
-      setClips((current) => current?.filter((clip) => clip.id !== clipId) ?? current)
-      if (playingId === clipId) setPlayingId(null)
-      setDeleteTargetId(null)
+      const next = clips?.filter((clip) => clip.id !== clipId) ?? []
+      setClips(next)
+      setPlayingId((current) => (current === clipId ? null : current))
+      setDeleteTargetId((current) => (current === clipId ? null : current))
+      // If deleting the last clip on this page left older pages behind,
+      // automatically load them instead of hiding pagination behind a refresh.
+      if (next.length === 0 && hasMore && nextBefore) {
+        window.setTimeout(() => void loadOlder(), 0)
+      }
     } catch (cause) {
       toast.error(cause instanceof ApiError ? cause.message : "Couldn't delete that clip. Try again.")
     } finally {
@@ -269,19 +293,17 @@ function ClipsBody() {
   }
 
   const loadOlder = async () => {
-    const oldest = clips?.[clips.length - 1]
-    if (!hasMore || loadingMore || !oldest) return
+    if (!hasMore || loadingMore || !nextBefore) return
     setLoadingMore(true)
     pagedOlderRef.current = true
     try {
-      // "Older than the oldest card on screen" — the server pages by
-      // creation time, so this is exact even if clips were added since.
-      const page = await api.listClips(oldest.createdAt)
+      const page = await api.listClips(nextBefore)
       setClips((current) => {
         const held = new Set((current ?? []).map((clip) => clip.id))
         return [...(current ?? []), ...page.clips.filter((clip) => !held.has(clip.id))]
       })
       setHasMore(page.nextBefore !== null)
+      setNextBefore(page.nextBefore)
     } catch {
       // The button stays; pressing it again retries. A failed "older clips"
       // fetch is not worth an error banner over a page that already works.
@@ -375,12 +397,38 @@ function ClipsBody() {
               <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
                 <HugeiconsIcon icon={VideoReplayIcon} className="size-6" />
               </span>
-              <h2 className="text-lg font-semibold">{failed ? "Couldn’t load your clips" : "No clips yet"}</h2>
-              <p className="text-sm text-muted-foreground">
-                {failed
-                  ? "The library couldn’t connect. Try again, or upload a video to get started."
-                  : "Cut a moment and it lands here — ready to play, download, edit, rename, or delete."}
-              </p>
+              {failed ? (
+                <>
+                  <h2 className="text-lg font-semibold">Couldn’t load your clips</h2>
+                  <p className="text-sm text-muted-foreground">
+                    The library couldn’t connect. Try again, or upload a video to get started.
+                  </p>
+                </>
+              ) : isSignedIn ? (
+                <>
+                  <h2 className="text-lg font-semibold">No clips yet</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Cut a moment from any video and it lands here — ready to play, download,
+                    edit, rename, or delete.
+                  </p>
+                </>
+              ) : authConfigured === false ? (
+                <>
+                  <h2 className="text-lg font-semibold">No clips in this tab yet</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Clips live with the browser tab that made them on this deployment, and
+                    accounts aren&apos;t switched on. Cut one and it lands here.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold">Sign in to see your clips</h2>
+                  <p className="text-sm text-muted-foreground">
+                    This page is only showing clips made in this browser tab. Anything saved to
+                    your account is waiting behind sign-in.
+                  </p>
+                </>
+              )}
               <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
                 {failed && (
                   <Button
@@ -391,6 +439,7 @@ function ClipsBody() {
                       void api.listClips().then((page) => {
                         setClips(page.clips)
                         setHasMore(page.nextBefore !== null)
+                        setNextBefore(page.nextBefore)
                       }).catch(() => {
                         setClips([])
                         setFailed(true)
@@ -400,13 +449,35 @@ function ClipsBody() {
                     Try again
                   </Button>
                 )}
-                <Button asChild>
+                {!failed && !isSignedIn && authConfigured !== false && (
+                  <Button
+                    disabled={authConfigured === null}
+                    onClick={askToSignIn}
+                    className="whitespace-nowrap"
+                  >
+                    Sign in
+                  </Button>
+                )}
+                <Button asChild className="whitespace-nowrap">
                   <a href="/start">
                     <HugeiconsIcon icon={ScissorsIcon} />
                     Clip a video
                   </a>
                 </Button>
               </div>
+              {!failed && hasMore && nextBefore && (
+                <div className="mt-2 flex justify-center">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={loadingMore}
+                    onClick={() => void loadOlder()}
+                    className="whitespace-nowrap"
+                  >
+                    {loadingMore ? "Loading…" : "Show older clips"}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (

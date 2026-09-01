@@ -125,8 +125,8 @@ function discardBody(response: Response): void {
   })
 }
 
-async function createSession(): Promise<string> {
-  const response = await fetch(`${API_BASE}/api/sessions`, { method: "POST" })
+async function createSession(signal?: AbortSignal): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/sessions`, { method: "POST", signal })
   if (!response.ok) {
     discardBody(response)
     throw new ApiError(response.status, "session_failed", "Could not start a session with the backend")
@@ -172,7 +172,7 @@ let exchangePromise: Promise<string | null> | null = null
 const SESSION_RECHECK_MS = 60_000
 let exchangeCheckedAt = 0
 
-function exchangeSignedInToken(): Promise<string | null> {
+function exchangeSignedInToken(signal?: AbortSignal): Promise<string | null> {
   if (typeof window === "undefined") return Promise.resolve(null)
   // A settled answer older than the window is stale: drop it so the next
   // caller asks again. An IN-FLIGHT promise is never discarded — concurrent
@@ -195,6 +195,7 @@ function exchangeSignedInToken(): Promise<string | null> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(guestToken ? { guestToken } : {}),
+        signal,
       })
       if (!response.ok) {
         discardBody(response)
@@ -212,7 +213,9 @@ function exchangeSignedInToken(): Promise<string | null> {
       const body = (await response.json()) as { token: string }
       writeToken(body.token, "user")
       return body.token
-    } catch {
+    } catch (error) {
+      // An explicit abort should not be silently swallowed as "not signed in".
+      if (error instanceof Error && error.name === "AbortError") throw error
       return null
     } finally {
       // Stamped on settle, not on start, so a slow answer is trusted for a
@@ -228,8 +231,8 @@ function exchangeSignedInToken(): Promise<string | null> {
  * must become one session, not two sessions racing to own the tab.
  */
 let guestPromise: Promise<string> | null = null
-function mintGuestSession(): Promise<string> {
-  guestPromise ??= createSession().finally(() => {
+function mintGuestSession(signal?: AbortSignal): Promise<string> {
+  guestPromise ??= createSession(signal).finally(() => {
     // The token in sessionStorage is the durable record; the promise exists
     // only to collapse concurrent minting. A failure clears it so the next
     // attempt can try again.
@@ -238,7 +241,7 @@ function mintGuestSession(): Promise<string> {
   return guestPromise
 }
 
-async function ensureToken(): Promise<string> {
+async function ensureToken(signal?: AbortSignal): Promise<string> {
   const stored = readToken()
   // A stored signed-in token is CHECKED, not assumed. It used to be returned
   // unconditionally — "the strongest identity there is" — which quietly meant
@@ -247,20 +250,20 @@ async function ensureToken(): Promise<string> {
   // for that load, because a fresh page is exactly when sign-in state can
   // have changed.
   if (stored && readKind() === "user") {
-    const verified = await exchangeSignedInToken()
+    const verified = await exchangeSignedInToken(signal)
     // Verified, or the check itself could not run (offline, sign-in not
     // configured) — in which case the stored token stands rather than
     // signing someone out over a hiccup. A definite 401 already cleared it
     // above, so `readToken()` here reflects that.
-    return verified ?? readToken() ?? (await mintGuestSession())
+    return verified ?? readToken() ?? (await mintGuestSession(signal))
   }
 
   // A guest tab might have signed in since — the magic link lands on a fresh
   // page, and that page's first API call is where the upgrade happens.
-  const upgraded = await exchangeSignedInToken()
+  const upgraded = await exchangeSignedInToken(signal)
   if (upgraded) return upgraded
 
-  return stored ?? (await mintGuestSession())
+  return stored ?? (await mintGuestSession(signal))
 }
 
 /** Forgets the API session. The caller also ends the Better Auth one. */
@@ -293,7 +296,7 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
   }
 
   try {
-    const token = await ensureToken()
+    const token = await ensureToken(controller.signal)
 
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,
