@@ -46,6 +46,12 @@ export function UploadStep({
 }: UploadStepProps) {
   const isSearching = searchInstruction !== undefined
   const ready = (video?.readyForSearch === true && !disabled) || isSearching
+  /** Preparation failed: nothing here will ever become sendable, so no promise is made. */
+  const failed = video?.status === "failed"
+  // A file that has been picked is a video that is coming. The row for it
+  // only exists once the bytes have landed, which for a long film is minutes
+  // — and those minutes are exactly when a person wants to type.
+  const somethingToAskAbout = !failed && (video != null || entries.length > 0)
   const trimmed = promptValue.trim()
   const displayValue = isSearching ? searchInstruction : promptValue
 
@@ -90,8 +96,8 @@ export function UploadStep({
             // still uploading or being read. Only SENDING waits for ready — the
             // line below the box has promised exactly that, and the field used
             // to contradict it.
-            disabled={!video || disabled || isSearching}
-            placeholder={video ? "Tell Clipit what to look for..." : "Upload a video first..."}
+            disabled={!somethingToAskAbout || disabled || isSearching}
+            placeholder={somethingToAskAbout ? "Tell Clipit what to look for..." : "Upload a video first..."}
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed"
           />
           <button
@@ -109,7 +115,7 @@ export function UploadStep({
           </button>
         </form>
 
-        {video && !video.readyForSearch && (
+        {somethingToAskAbout && !video?.readyForSearch && (
           <p className="text-center text-xs text-muted-foreground">
             Your video is still being prepared — you can type now, then send once it&apos;s ready.
           </p>
@@ -121,7 +127,7 @@ export function UploadStep({
               <button
                 key={text}
                 type="button"
-                disabled={!video || disabled}
+                disabled={!somethingToAskAbout || disabled}
                 onClick={() => onPromptChange(text)}
                 className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
               >

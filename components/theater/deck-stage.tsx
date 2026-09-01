@@ -1042,10 +1042,11 @@ export function DeckStage({
 
       {/* The question box, under the panel: the owner's pill — a camera
           mark for what is being asked of, the instruction, and one send.
-          Always reachable while the video can be searched, because asking
-          is the product; hidden only inside the publish steps, where the
-          panel is a form. */}
-      {stage === "flow" && !leader && (
+          Always reachable — while the video is still being read too, so a
+          question can be typed during the wait and sent the moment it can
+          be answered; hidden only inside the publish steps, where the
+          panel is a form, and for a video whose preparation failed. */}
+      {stage === "flow" && video.status !== "failed" && (
         <form
           className="mt-5"
           onSubmit={(event) => {
@@ -1093,7 +1094,7 @@ export function DeckStage({
           </div>
         </form>
       )}
-      {!video.readyForSearch && (
+      {stage === "flow" && !video.readyForSearch && video.status !== "failed" && (
         <p className="pt-2 text-center text-xs text-muted-foreground">
           Your video is still being prepared — you can type now, then send once it&apos;s ready.
         </p>
