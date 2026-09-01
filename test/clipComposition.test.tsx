@@ -88,12 +88,20 @@ describe("fitFor — raw source is never shown through a crop the export will no
   })
 
   it("keeps the whole frame for a padded or blurred delivery, and for an undecided vertical moment", () => {
-    expect(fitFor(smartCrop({ mode: "blurred_background", crop: null, focusPct: 50 }), false)).toBe("contain")
-    expect(fitFor(smartCrop({ mode: "padded", crop: null, focusPct: 50 }), false)).toBe("contain")
-    expect(fitFor(centredComposition("9:16"), false)).toBe("contain")
+    expect(fitFor(smartCrop({ mode: "blurred_background", crop: null, focusPct: 50 }), false, "16:9")).toBe("contain")
+    expect(fitFor(smartCrop({ mode: "padded", crop: null, focusPct: 50 }), false, "16:9")).toBe("contain")
+    expect(fitFor(centredComposition("9:16"), false, "16:9")).toBe("contain")
   })
 
-  it("covers a non-vertical moment either way — its box is the source's own shape", () => {
-    expect(fitFor(centredComposition("16:9"), false)).toBe("cover")
+  it("keeps the whole frame for any delivery shape that is not the source's — square included", () => {
+    expect(fitFor(smartCrop({ aspectRatio: "1:1", mode: "padded", crop: null, focusPct: 50 }), false, "16:9")).toBe("contain")
+    expect(fitFor(smartCrop({ aspectRatio: "1:1", mode: "blurred_background", crop: null, focusPct: 50 }), false, "9:16")).toBe("contain")
+    // Unknown source: nothing can be assumed cut-safe, so the whole frame.
+    expect(fitFor(centredComposition("9:16"), false, null)).toBe("contain")
+  })
+
+  it("covers a moment whose box is the source's own shape — nothing is cut either way", () => {
+    expect(fitFor(centredComposition("16:9"), false, "16:9")).toBe("cover")
+    expect(fitFor(centredComposition("1:1"), false, "1:1")).toBe("cover")
   })
 })

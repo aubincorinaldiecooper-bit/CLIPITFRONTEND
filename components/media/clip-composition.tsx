@@ -61,13 +61,22 @@ export function objectPositionFor(composition: Composition, sourceAspectRatio?: 
  * rather than through a guessed crop, so nobody rejects a moment because a
  * centre crop hid its subject.
  */
-export function fitFor(composition: Composition, finished: boolean): "cover" | "contain" {
+export function fitFor(
+  composition: Composition,
+  finished: boolean,
+  sourceAspectRatio?: string | null,
+): "cover" | "contain" {
   if (finished) return "cover"
   if (composition.mode === "smart_crop") return "cover"
   if (composition.crop) return "cover"
-  // Nothing decided, or a whole-frame mode: the source's own shape is the
-  // box's shape when the moment is not vertical, so nothing is cut either way.
-  return composition.aspectRatio === "9:16" ? "contain" : "cover"
+  // Nothing decided, or a whole-frame mode. When the box is the source's
+  // own shape nothing is cut either way; any OTHER shape — 9:16, 1:1,
+  // whatever the delivery is — keeps the whole frame, because that is what
+  // the delivery will do.
+  const target = ratioFromLabel(composition.aspectRatio, Number.NaN)
+  const source = ratioFromLabel(sourceAspectRatio, Number.NaN)
+  if (Number.isFinite(target) && Number.isFinite(source) && Math.abs(target - source) < 0.01) return "cover"
+  return "contain"
 }
 
 export function ClipComposition({
@@ -98,7 +107,7 @@ export function ClipComposition({
   return (
     <AspectRatio
       ratio={ratioFromLabel(composition.aspectRatio, 9 / 16)}
-      fit={fitFor(composition, finished)}
+      fit={fitFor(composition, finished, sourceAspectRatio)}
       className={className}
       style={frameStyle}
     >
