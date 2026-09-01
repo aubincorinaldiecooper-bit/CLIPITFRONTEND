@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { CreditCard, Library, LogIn, LogOut, Share2, User } from "lucide-react"
+import { Library, LogIn, LogOut, User } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,9 +34,6 @@ interface ProfileLink {
 
 const LINKS: ProfileLink[] = [
   { label: "Library", href: "/clips", icon: <Library className="size-4" /> },
-  { label: "Publishing", href: "/publishing", icon: <Share2 className="size-4" /> },
-  { label: "Shared", href: "/shared", icon: <Share2 className="size-4" /> },
-  { label: "Plan", href: "/clips", icon: <CreditCard className="size-4" />, value: "FREE" },
 ]
 
 function initialsOf(name: string) {

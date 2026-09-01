@@ -285,31 +285,42 @@ async function parseError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, code, message)
 }
 
-async function request<T>(path: string, init: RequestInit = {}, retryOn401 = true): Promise<T> {
-  const token = await ensureToken()
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers ?? {}),
-      Authorization: `Bearer ${token}`,
-    },
-  })
-
-  if (response.status === 401 && retryOn401) {
-    discardBody(response)
-    // The stored token is no longer valid. Forget it AND the settled exchange:
-    // a signed-in person's expired token must be replaced by asking the
-    // sign-in cookie again, not by quietly minting a guest session — that
-    // would leave the header saying who they are while their new uploads
-    // belong to a tab-lifetime nobody.
-    forgetApiSession()
-    return request<T>(path, init, false)
+async function request<T>(path: string, init: RequestInit = {}, retryOn401 = true, timeoutMs = 0): Promise<T> {
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  if (timeoutMs > 0) {
+    timeout = setTimeout(() => controller.abort(), timeoutMs)
   }
 
-  if (!response.ok) throw await parseError(response)
-  return (await response.json()) as T
+  try {
+    const token = await ensureToken()
+
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (response.status === 401 && retryOn401) {
+      discardBody(response)
+      // The stored token is no longer valid. Forget it AND the settled exchange:
+      // a signed-in person's expired token must be replaced by asking the
+      // sign-in cookie again, not by quietly minting a guest session — that
+      // would leave the header saying who they are while their new uploads
+      // belong to a tab-lifetime nobody.
+      forgetApiSession()
+      return request<T>(path, init, false)
+    }
+
+    if (!response.ok) throw await parseError(response)
+    return (await response.json()) as T
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
 }
 
 
@@ -555,8 +566,11 @@ export const api = {
    * A page of the caller's finished clips, newest first. `nextBefore` is the
    * cursor for the page after it, or null when this is everything.
    */
-  async listClips(before?: string): Promise<{ clips: LibraryClip[]; nextBefore: string | null }> {
-    return request(`/api/clips${before ? `?before=${encodeURIComponent(before)}` : ""}`)
+  async listClips(
+    before?: string,
+    { timeoutMs = 10000 }: { timeoutMs?: number } = {},
+  ): Promise<{ clips: LibraryClip[]; nextBefore: string | null }> {
+    return request(`/api/clips${before ? `?before=${encodeURIComponent(before)}` : ""}`, {}, true, timeoutMs)
   },
 
   // --- Social publishing (Zernio) ------------------------------------------

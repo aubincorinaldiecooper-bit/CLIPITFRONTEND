@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -15,14 +16,14 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import {
   ArrowRight01Icon,
-  Folder01Icon,
+  CaptionsIcon,
+  Delete01Icon,
+  PencilEdit01Icon,
   ScissorsIcon,
-  SubtitleIcon,
   Upload01Icon,
-  Upload02Icon,
   VideoReplayIcon,
 } from "@hugeicons/core-free-icons"
 import { api, ApiError } from "@/lib/api"
@@ -89,7 +90,7 @@ function ClipAction({
   onClick,
 }: {
   label: string
-  icon: typeof SubtitleIcon
+  icon: IconSvgElement
   onClick?: () => void
 }) {
   return (
@@ -188,6 +189,14 @@ function ClipsBody() {
   const [pendingRenders, setPendingRenders] = useState<Array<{ source: string; target: string }>>([])
   const { requireSignIn } = useWorkspaceSignInGate()
 
+  /** Rename a clip — its title overrides the moment description in the library. */
+  const [renameTarget, setRenameTarget] = useState<{ clipId: string; value: string } | null>(null)
+  const [renameBusy, setRenameBusy] = useState(false)
+
+  /** Delete a clip after an explicit confirmation. */
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+
   // Signed in from the prompt and come back? Reopen the clip they were about
   // to publish, rather than dropping them on the library with no idea where
   // they were. It opens the dialog — it does NOT publish: that button is
@@ -242,7 +251,10 @@ function ClipsBody() {
         setHasMore(page.nextBefore !== null)
       })
       .catch(() => {
-        if (!cancelled) setFailed(true)
+        if (!cancelled) {
+          setClips([])
+          setFailed(true)
+        }
       })
     return () => {
       cancelled = true
@@ -392,6 +404,36 @@ function ClipsBody() {
         )
       })
       .catch(() => {})
+  }
+
+  const handleRename = async (clipId: string, title: string) => {
+    setRenameBusy(true)
+    try {
+      await api.renameClip(clipId, title)
+      setClips((current) =>
+        current?.map((clip) => (clip.id === clipId ? { ...clip, description: title || clip.description } : clip)) ??
+        current,
+      )
+      setRenameTarget(null)
+    } catch (cause) {
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't rename that clip. Try again.")
+    } finally {
+      setRenameBusy(false)
+    }
+  }
+
+  const handleDelete = async (clipId: string) => {
+    setDeleteBusy(true)
+    try {
+      await api.deleteClip(clipId)
+      setClips((current) => current?.filter((clip) => clip.id !== clipId) ?? current)
+      if (playingId === clipId) setPlayingId(null)
+      setDeleteTargetId(null)
+    } catch (cause) {
+      toast.error(cause instanceof ApiError ? cause.message : "Couldn't delete that clip. Try again.")
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   /**
@@ -545,10 +587,10 @@ function ClipsBody() {
               <span className="flex size-14 items-center justify-center rounded-full bg-shmuted text-muted-foreground">
                 <HugeiconsIcon icon={VideoReplayIcon} className="size-6" />
               </span>
-              <h2 className="text-lg font-semibold">{failed ? "Couldn&apos;t load your clips" : "No clips yet"}</h2>
+              <h2 className="text-lg font-semibold">{failed ? "Couldn’t load your clips" : "No clips yet"}</h2>
               <p className="text-sm text-muted-foreground">
                 {failed
-                  ? "The library couldn&apos;t connect. Try again, or upload a video to get started."
+                  ? "The library couldn’t connect. Try again, or upload a video to get started."
                   : "Cut a moment from any video and it lands here — ready to play, download, caption, and publish."}
               </p>
               <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
@@ -561,7 +603,10 @@ function ClipsBody() {
                       void api.listClips().then((page) => {
                         setClips(page.clips)
                         setHasMore(page.nextBefore !== null)
-                      }).catch(() => setFailed(true))
+                      }).catch(() => {
+                        setClips([])
+                        setFailed(true)
+                      })
                     }}
                   >
                     Try again
@@ -598,95 +643,25 @@ function ClipsBody() {
                         )}
                         {clip.status === "ready" && (
                           <ClipAction
-                            label="Captions"
-                            icon={SubtitleIcon}
+                            label="Edit"
+                            icon={CaptionsIcon}
                             onClick={() => setCaptionClipId(clip.id)}
                           />
                         )}
                         {clip.status === "ready" && (
                           <ClipAction
-                            label="Publish"
-                            icon={Upload02Icon}
+                            label="Rename"
+                            icon={PencilEdit01Icon}
                             onClick={() =>
-                              requireSignIn({ action: "publish", clipId: clip.id }, () =>
-                                setPublishTarget(clip.id),
-                              )
+                              setRenameTarget({ clipId: clip.id, value: clip.description })
                             }
                           />
                         )}
-                        {clip.status === "ready" && (
-                          <Popover
-                            open={sendOpenId === clip.id}
-                            onOpenChange={(open) => {
-                              if (open) {
-                                // Sending a clip into a shared room needs a
-                                // person: rooms outlive a browser tab.
-                                requireSignIn({ action: "send", clipId: clip.id }, () =>
-                                  openSend(clip.id),
-                                )
-                              } else if (sendOpenIdRef.current === clip.id) {
-                                setSendTarget(null)
-                              }
-                            }}
-                          >
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="secondary"
-                                size="icon-sm"
-                                aria-label="Send to a room"
-                                title="Send to a room"
-                                className="rounded-full"
-                              >
-                                <HugeiconsIcon icon={Folder01Icon} />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="shadcn-scope w-[280px]" align="start">
-                              {sendFailed ? (
-                                <div className="flex flex-col gap-2">
-                                  <p className="text-[13px] text-muted-foreground">
-                                    Couldn&apos;t load your rooms just now.
-                                  </p>
-                                  <Button variant="secondary" size="sm" onClick={() => openSend(clip.id)}>
-                                    Try again
-                                  </Button>
-                                </div>
-                              ) : rooms === null ? (
-                                <Skeleton className="h-[60px] w-full rounded-lg" />
-                              ) : sendSignInRequired ? (
-                                <p className="text-[13px] text-muted-foreground">
-                                  Shared rooms belong to you, not to a browser tab — sign in (top
-                                  right) to send clips to one.
-                                </p>
-                              ) : rooms.length === 0 ? (
-                                <p className="text-[13px] text-muted-foreground">
-                                  You&apos;re not in any shared room yet. Make one on the Shared page,
-                                  then send clips there.
-                                </p>
-                              ) : (
-                                <div className="flex flex-col gap-1">
-                                  {rooms.map((room) =>
-                                    sharedWith.includes(room.id) ? (
-                                      <p key={room.id} className="px-1 py-1 text-[13px] text-muted-foreground">
-                                        ✓ Already in {room.name}
-                                      </p>
-                                    ) : (
-                                      <Button
-                                        key={room.id}
-                                        variant="secondary"
-                                        size="sm"
-                                        className="justify-start"
-                                        disabled={sendingTo === room.id}
-                                        onClick={() => void sendTo(clip.id, room.id, room.name)}
-                                      >
-                                        {sendingTo === room.id ? "Sending…" : `Send to ${room.name}`}
-                                      </Button>
-                                    ),
-                                  )}
-                                </div>
-                              )}
-                            </PopoverContent>
-                          </Popover>
-                        )}
+                        <ClipAction
+                          label="Delete"
+                          icon={Delete01Icon}
+                          onClick={() => setDeleteTargetId(clip.id)}
+                        />
                       </>
                     }
                   />
@@ -756,7 +731,7 @@ function ClipsBody() {
                     would turn a familiar action into a puzzle. */}
                 {accountsFailed ? (
                   <p className="text-[13px] text-muted-foreground">
-                    Couldn&apos;t load your accounts just now — posting will still go to all of them.
+                    Couldn’t load your accounts just now — posting will still go to all of them.
                   </p>
                 ) : accounts === null ? (
                   <Skeleton className="h-[72px] w-full rounded-lg" />
@@ -889,6 +864,83 @@ function ClipsBody() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Rename the clip in the library. The API name is videoTitle; the page
+          displays it as the description when one exists. */}
+      <Dialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null)
+        }}
+      >
+        <DialogContent className="shadcn-scope sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Rename clip</DialogTitle>
+            <DialogDescription>This is what you’ll see in your library.</DialogDescription>
+          </DialogHeader>
+          {renameTarget && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void handleRename(renameTarget.clipId, renameTarget.value)
+              }}
+              className="flex flex-col gap-4"
+            >
+              <Input
+                value={renameTarget.value}
+                onChange={(e) => setRenameTarget((current) => (current ? { ...current, value: e.target.value } : null))}
+                placeholder="A moment from your video"
+                autoFocus
+              />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setRenameTarget(null)}
+                  disabled={renameBusy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={renameBusy || !renameTarget.value.trim()}>
+                  {renameBusy ? "Saving…" : "Save"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete a clip permanently. The source upload is untouched. */}
+      <Dialog
+        open={deleteTargetId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetId(null)
+        }}
+      >
+        <DialogContent className="shadcn-scope sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle>Delete this clip?</DialogTitle>
+            <DialogDescription>
+              This can’t be undone. The original video stays in your uploads.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeleteTargetId(null)} disabled={deleteBusy}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteBusy}
+              onClick={() => {
+                if (deleteTargetId) void handleDelete(deleteTargetId)
+              }}
+            >
+              {deleteBusy ? "Deleting…" : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <UpgradeDialog files={overLimit} onClose={clearOverLimit} />
     </>
   )

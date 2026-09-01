@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Library, Share2, Upload } from "lucide-react"
+import { Library, Upload } from "lucide-react"
 import { Toaster } from "@/components/ui/sonner"
 import { Logo } from "@/components/brand/logo"
 import { WorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
@@ -32,7 +32,6 @@ export type AppDestination = "home" | "start" | "clips" | "publishing" | "worksp
 const NOTCH_ITEMS: NotchItemData[] = [
   { id: "upload", label: "Upload", icon: Upload, href: "/start" },
   { id: "library", label: "Library", icon: Library, href: "/clips" },
-  { id: "publish", label: "Publish", icon: Share2, href: "/publishing" },
 ]
 
 const NOTCH_LOGO = (
@@ -57,13 +56,7 @@ export function WorkspaceShell({
   const notchEnabled = process.env.NEXT_PUBLIC_NOTCH_NAV === "1"
 
   const activeId =
-    active === "start" || active === "home"
-      ? "upload"
-      : active === "clips"
-        ? "library"
-        : active === "publishing"
-          ? "publish"
-          : "upload"
+    active === "start" || active === "home" ? "upload" : active === "clips" ? "library" : "upload"
 
   return (
     <div className="shadcn-scope flex min-h-dvh flex-col bg-background font-sans text-foreground">
