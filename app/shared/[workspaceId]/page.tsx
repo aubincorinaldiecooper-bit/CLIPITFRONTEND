@@ -19,7 +19,7 @@ import {
 import { api, ApiError } from "@/lib/api"
 import type { WorkspaceDetail } from "@/lib/types"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
-import { ClipCard, ClipDownloadAction, ClipMenuItem, ClipViewer } from "@/components/clip-card"
+import { ClipCard, ClipViewer, type ClipAction } from "@/components/clip-card"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { useAuthConfigured, useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { StatusButton, type StatusButtonState } from "@/components/workspace/uselayouts/status-button"
@@ -236,21 +236,18 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
 
   const openClip = page?.clips.find((clip) => clip.id === openId) ?? null
 
-  /** The card's menu and the viewer's bottom row: Download, and Take out. */
-  const roomActions = (clip: NonNullable<typeof page>["clips"][number]) => (
-    <>
-      {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
-      {/* "Take out" removes a SHARE — the clip itself is untouched, so a
-          plain row is honest; the two-press confirm is reserved for taking
-          away people. */}
-      <ClipMenuItem
-        label={busyId === clip.id ? "Taking out…" : "Take out"}
-        onClick={() => {
-          if (busyId !== clip.id) void takeOut(clip.id)
-        }}
-      />
-    </>
-  )
+  /** The card's menu and the viewer's row: Download, and Take out. */
+  const roomActions = (clip: NonNullable<typeof page>["clips"][number]): ClipAction[] => [
+    ...(clip.downloadUrl ? [{ label: "Download", href: clip.downloadUrl }] : []),
+    // "Take out" removes a SHARE — the clip itself is untouched, so a plain
+    // action is honest; the two-press confirm is reserved for taking away
+    // people.
+    {
+      label: busyId === clip.id ? "Taking out…" : "Take out",
+      disabled: busyId === clip.id,
+      onClick: () => void takeOut(clip.id),
+    },
+  ]
 
   return (
     <div className="flex flex-col gap-6">

@@ -31,7 +31,7 @@ import {
 } from "@/components/workspace/sign-in-gate"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { CaptionEditor } from "@/components/caption-editor"
-import { ClipCard, ClipDownloadAction, ClipMenuItem, ClipViewer } from "@/components/clip-card"
+import { ClipCard, ClipViewer, type ClipAction } from "@/components/clip-card"
 import { ClipRow } from "@/components/clip-row"
 import { UploadPackage } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
@@ -328,23 +328,21 @@ function ClipsBody() {
 
   const openClip = clips?.find((clip) => clip.id === openId) ?? null
 
-  /** The same rows in the card's menu and along the bottom of the viewer. */
-  const clipActions = (clip: LibraryClip) => (
-    <>
-      {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
-      {clip.status === "ready" && (
-        <ClipMenuItem label="Edit captions" icon={CaptionsIcon} onClick={() => setCaptionClipId(clip.id)} />
-      )}
-      {clip.status === "ready" && (
-        <ClipMenuItem
-          label="Rename"
-          icon={PencilEdit01Icon}
-          onClick={() => setRenameTarget({ clipId: clip.id, value: clip.description, originalValue: clip.description })}
-        />
-      )}
-      <ClipMenuItem label="Delete" icon={Delete01Icon} tone="danger" onClick={() => setDeleteTargetId(clip.id)} />
-    </>
-  )
+  /** What the library offers on a clip: the card's menu and the viewer's row, from one list. */
+  const clipActions = (clip: LibraryClip): ClipAction[] => [
+    ...(clip.downloadUrl ? [{ label: "Download", href: clip.downloadUrl }] : []),
+    ...(clip.status === "ready"
+      ? [
+          { label: "Edit captions", icon: CaptionsIcon, onClick: () => setCaptionClipId(clip.id) },
+          {
+            label: "Rename",
+            icon: PencilEdit01Icon,
+            onClick: () => setRenameTarget({ clipId: clip.id, value: clip.description, originalValue: clip.description }),
+          },
+        ]
+      : []),
+    { label: "Delete", icon: Delete01Icon, tone: "danger" as const, onClick: () => setDeleteTargetId(clip.id) },
+  ]
 
   return (
     <>

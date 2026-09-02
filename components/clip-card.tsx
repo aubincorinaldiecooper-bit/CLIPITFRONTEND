@@ -1,8 +1,14 @@
 "use client"
 
-import { Children, type ReactNode } from "react"
+import { Children, type CSSProperties, type ReactNode } from "react"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -21,11 +27,15 @@ import type { ClipComposition as Composition, LibraryClip } from "@/lib/types"
  * quiet lines underneath. Pressing the picture opens the clip; the control
  * holds the actions.
  *
- * Deliberately hand-built — media surfaces are the owner's carve-out from the
- * Astryx rework (2026-08-22) — and deliberately ONE component: the library
- * and every workspace room show the same card, and a shared definition is
- * what keeps "same" true. The furniture around it (menu, dialog, buttons)
- * stays on the page's own stack, passed in through `actions`.
+ * The picture is hand-built — media surfaces are the owner's carve-out from
+ * the Astryx rework (2026-08-22) — and deliberately ONE component: the
+ * library and every workspace room show the same card, and a shared
+ * definition is what keeps "same" true. The furniture around it (the menu,
+ * the dialog, the buttons) is the page's own stack: these two pages sit on
+ * the shadcn pilot, so the menu is its DropdownMenu and the viewer's row is
+ * its Button. A page describes its actions as data (`ClipAction`) and the
+ * card decides what furniture each one wears — a menu row on the card, a
+ * button in the viewer — so nothing is hand-rolled twice.
  *
  * Every card's picture is the same tall box, because a row of cards only
  * reads as a row when the cards match. A vertical clip fills it exactly — the
@@ -48,14 +58,38 @@ const NAMED_SHAPES: Array<[string, number]> = [
   ["3:4", 3 / 4],
 ]
 
+/** One action a page offers on a clip. A link (`href`) downloads; anything else presses. */
+export interface ClipAction {
+  label: string
+  icon?: IconSvgElement
+  onClick?: () => void
+  /** A signed file to save. Rendered as a real anchor with `download` — no button can stand in for that. */
+  href?: string
+  tone?: "default" | "danger"
+  disabled?: boolean
+}
+
+/**
+ * The file this clip plays. When the server built a media block, ITS url is
+ * the finished file — the 9:16 derivative for a vertical moment — and null
+ * while that file does not exist yet. The canonical `url` is the fallback
+ * only for an older response that carries no media block at all; it is
+ * never a stand-in for a derivative that is missing.
+ */
+export function playableUrl(clip: LibraryClip): string | null {
+  return clip.media ? clip.media.url : clip.url
+}
+
 /**
  * The shape a clip is delivered in, as the pill says it: "9:16", "16:9"…
  * Taken from the media block the server built (the file's real shape), else
- * from the source's size, else assumed wide — the shape every clip had before
- * any vertical delivery existed.
+ * from what the server said it delivers, else from the source's size, else
+ * assumed wide — the shape every clip had before any vertical delivery
+ * existed.
  */
 export function clipShape(clip: LibraryClip): string {
   const fromMedia = clip.media?.outputAspectRatio ?? clip.media?.composition.aspectRatio ?? null
+  if (!fromMedia && clip.presentation === "vertical") return CARD_SHAPE
   const ratio = fromMedia
     ? ratioFromLabel(fromMedia, Number.NaN)
     : clip.sourceWidth && clip.sourceHeight
@@ -122,14 +156,15 @@ export function ClipCard({
    * because a ring drawn for near-black vanishes on paper.
    */
   surface?: "dark" | "light"
-  /** The action rows for the menu: Download, Edit, Rename, Delete, Take out… */
-  actions?: ReactNode
+  /** What the page offers on this clip: Download, Edit, Rename, Delete, Take out… */
+  actions?: ClipAction[]
   /** Anything below the text (nothing today). */
   children?: ReactNode
 }) {
   const poster = clip.media?.posterUrl ?? clip.thumbnailUrl
   const duration = runtime(clip)
   const shape = clipShape(clip)
+  const playable = playableUrl(clip)
   const { composition, source } = cardComposition(clip)
   const title = clip.description || "A moment from your video"
 
@@ -144,7 +179,7 @@ export function ClipCard({
         <button
           type="button"
           onClick={onOpen}
-          disabled={!clip.url}
+          disabled={!playable}
           aria-label={`Open: ${title}`}
           className="block w-full text-left disabled:cursor-default"
         >
@@ -172,7 +207,7 @@ export function ClipCard({
           <span className="absolute left-2 top-2 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-black">
             {shape}
           </span>
-          {clip.url && (
+          {playable && (
             <span className="absolute bottom-2 left-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/30">
               <PlayGlyph />
             </span>
@@ -184,9 +219,9 @@ export function ClipCard({
           )}
         </button>
 
-        {actions && (
-          <Popover>
-            <PopoverTrigger asChild>
+        {actions && actions.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 aria-label={`Actions for ${title}`}
@@ -198,11 +233,30 @@ export function ClipCard({
                   <circle cx="19" cy="12" r="2" />
                 </svg>
               </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="shadcn-scope w-48 p-1">
-              <div className="flex flex-col *:w-full">{actions}</div>
-            </PopoverContent>
-          </Popover>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="shadcn-scope w-48">
+              {actions.map((action) =>
+                action.href ? (
+                  <DropdownMenuItem key={action.label} asChild disabled={action.disabled}>
+                    <a href={action.href} download>
+                      <DownloadGlyph />
+                      {action.label}
+                    </a>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    key={action.label}
+                    variant={action.tone === "danger" ? "destructive" : "default"}
+                    disabled={action.disabled}
+                    onSelect={() => action.onClick?.()}
+                  >
+                    {action.icon && <HugeiconsIcon icon={action.icon} />}
+                    {action.label}
+                  </DropdownMenuItem>
+                ),
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
@@ -217,51 +271,37 @@ export function ClipCard({
 }
 
 /**
- * One row of the actions menu. The same element sits in the card's menu and
- * along the bottom of the viewer, so an action reads the same in both.
+ * The same actions along the bottom of the viewer, as the page's buttons.
+ * Download stays a real anchor with `download` — the browser must save the
+ * signed file directly, and no button can stand in for that — wearing the
+ * button's clothes so the row reads as one set.
  */
-export function ClipMenuItem({
-  label,
-  icon,
-  onClick,
-  tone = "default",
-}: {
-  label: string
-  icon?: IconSvgElement
-  onClick?: () => void
-  tone?: "default" | "danger"
-}) {
+function ViewerActions({ actions }: { actions: ClipAction[] }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        "flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-shaccent " +
-        (tone === "danger" ? "text-destructive" : "text-foreground")
-      }
-    >
-      {icon && <HugeiconsIcon icon={icon} className="size-4" />}
-      <span className="whitespace-nowrap">{label}</span>
-    </button>
-  )
-}
-
-/**
- * The Download action both pages use: a plain anchor with `download`, not a
- * routed link — the browser must save the signed file directly, and no button
- * component can stand in for that. Dressed as a menu row so it reads as one
- * of the set.
- */
-export function ClipDownloadAction({ href }: { href: string }) {
-  return (
-    <a
-      href={href}
-      download
-      className="flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-foreground hover:bg-shaccent"
-    >
-      <DownloadGlyph />
-      <span className="whitespace-nowrap">Download</span>
-    </a>
+    <div className="flex flex-wrap items-center gap-2">
+      {actions.map((action) =>
+        action.href ? (
+          <Button key={action.label} asChild variant="secondary" size="sm" className="whitespace-nowrap">
+            <a href={action.href} download>
+              <DownloadGlyph />
+              {action.label}
+            </a>
+          </Button>
+        ) : (
+          <Button
+            key={action.label}
+            variant={action.tone === "danger" ? "destructive" : "secondary"}
+            size="sm"
+            className="whitespace-nowrap"
+            disabled={action.disabled}
+            onClick={action.onClick}
+          >
+            {action.icon && <HugeiconsIcon icon={action.icon} />}
+            {action.label}
+          </Button>
+        ),
+      )}
+    </div>
   )
 }
 
@@ -279,12 +319,18 @@ export function ClipViewer({
   clip: LibraryClip | null
   onClose: () => void
   showDate?: boolean
-  /** The same action rows the card's menu holds, laid along the bottom. */
-  actions?: ReactNode
+  /** The same actions the card's menu holds, laid along the bottom. */
+  actions?: ClipAction[]
 }) {
   const shape = clip ? clipShape(clip) : CARD_SHAPE
-  const tall = ratioFromLabel(shape, 1) < 1
+  const ratio = ratioFromLabel(shape, 9 / 16)
+  const tall = ratio < 1
   const title = clip?.description || "A moment from your video"
+  // The dialog must fit the screen with the video, the words and the buttons
+  // all visible, so its WIDTH is derived from the height that is available:
+  // a tall clip on a short screen gets narrower rather than taller. The
+  // ratio is data, not a design value, so it reaches CSS as a variable.
+  const sizing = { "--clip-ratio": String(ratio) } as CSSProperties
 
   return (
     <Dialog
@@ -293,7 +339,15 @@ export function ClipViewer({
         if (!open) onClose()
       }}
     >
-      <DialogContent className={"shadcn-scope gap-0 overflow-hidden p-0 " + (tall ? "sm:max-w-[440px]" : "sm:max-w-[960px]")}>
+      <DialogContent
+        style={sizing}
+        className={
+          "shadcn-scope max-h-[92vh] gap-0 overflow-y-auto p-0 max-w-[min(calc(100%_-_2rem),calc((92vh_-_8rem)*var(--clip-ratio)))] " +
+          (tall
+            ? "sm:max-w-[min(440px,calc((92vh_-_8rem)*var(--clip-ratio)))]"
+            : "sm:max-w-[min(960px,calc((92vh_-_8rem)*var(--clip-ratio)))]")
+        }
+      >
         {clip && (
           <>
             <DialogHeader className="sr-only">
@@ -309,7 +363,7 @@ export function ClipViewer({
               {(style) => (
                 <video
                   key={clip.id}
-                  src={clip.url ?? undefined}
+                  src={playableUrl(clip) ?? undefined}
                   poster={clip.media?.posterUrl ?? clip.thumbnailUrl ?? undefined}
                   controls
                   autoPlay
@@ -327,7 +381,7 @@ export function ClipViewer({
                   {showDate ? ` · Cut ${cutOn(clip)}` : ""}
                 </p>
               </div>
-              {actions && <div className="flex flex-wrap items-center gap-1">{actions}</div>}
+              {actions && actions.length > 0 && <ViewerActions actions={actions} />}
             </div>
           </>
         )}

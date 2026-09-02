@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { ClipCard, ClipMenuItem, ClipViewer, clipShape } from '../components/clip-card'
+import userEvent from '@testing-library/user-event'
+import { ClipCard, ClipViewer, clipShape, playableUrl } from '../components/clip-card'
 import type { LibraryClip } from '../lib/types'
 
 /**
@@ -80,15 +81,28 @@ describe('the clip card', () => {
     expect(document.querySelector('img')!.style.objectPosition).toBe('50% 50%')
   })
 
-  it('opens from the picture and not from the menu, which holds the actions', async () => {
+  it('opens from the picture and not from the menu, which holds the actions as a real menu', async () => {
     const onOpen = vi.fn()
-    render(<ClipCard clip={vertical()} onOpen={onOpen} actions={<ClipMenuItem label="Rename" />} />)
+    const rename = vi.fn()
+    render(
+      <ClipCard
+        clip={vertical()}
+        onOpen={onOpen}
+        actions={[{ label: 'Download', href: 'https://cdn/clip.mp4?download' }, { label: 'Rename', onClick: rename }]}
+      />,
+    )
     fireEvent.click(screen.getByRole('button', { name: /^Open: The goal/ }))
     expect(onOpen).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('button', { name: /^Actions for/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Actions for/ }))
     expect(onOpen).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('Rename')).toBeTruthy()
+    const item = await screen.findByRole('menuitem', { name: 'Rename' })
+    // Download is a real link that saves the file; nothing routed, nothing scripted.
+    const download = screen.getByRole('menuitem', { name: 'Download' })
+    expect(download.tagName).toBe('A')
+    expect(download.getAttribute('download')).not.toBeNull()
+    await userEvent.click(item)
+    expect(rename).toHaveBeenCalledTimes(1)
   })
 
   it('has no menu control when the page gives it no actions', () => {
@@ -98,6 +112,18 @@ describe('the clip card', () => {
 
   it('cannot open a clip that has no file yet', () => {
     render(<ClipCard clip={clip({ url: null, status: 'generating' })} onOpen={() => {}} />)
+    expect((screen.getByRole('button', { name: /^Open:/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  /**
+   * The substitution the product rule forbids: a vertical moment whose 9:16
+   * file is not finished must not open the wide original in its place. The
+   * media block says null, and null means closed.
+   */
+  it('cannot open a vertical moment whose delivered file is not there, even though the wide cut is', () => {
+    const pending = vertical()
+    pending.media = { ...pending.media!, url: null, derivativeStatus: 'pending' }
+    render(<ClipCard clip={pending} onOpen={() => {}} />)
     expect((screen.getByRole('button', { name: /^Open:/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -111,6 +137,12 @@ describe('the shape a card names', () => {
   it('is the delivered shape from the media block', () => {
     expect(clipShape(vertical())).toBe('9:16')
     expect(clipShape(wide())).toBe('16:9')
+  })
+
+  it('trusts what the server says it delivers before the source size', () => {
+    // A vertical delivery whose response carries no media block is still vertical.
+    expect(clipShape(clip({ presentation: 'vertical', sourceWidth: 1920, sourceHeight: 1080 }))).toBe('9:16')
+    expect(clipShape(clip({ presentation: 'original', sourceWidth: 1920, sourceHeight: 1080 }))).toBe('16:9')
   })
 
   it('falls back to the source size, then to wide', () => {
@@ -132,9 +164,30 @@ describe('the viewer', () => {
     expect(screen.getAllByText(/Sunday five-a-side/).length).toBeGreaterThan(0)
   })
 
-  it('plays the vertical file for a vertical moment, never the wide original', () => {
+  it('plays the delivered vertical file for a vertical moment, never the wide original', () => {
     render(<ClipViewer clip={vertical()} onClose={() => {}} />)
-    expect(document.querySelector('video')!.getAttribute('src')).toBe('https://cdn/clip.mp4')
+    expect(document.querySelector('video')!.getAttribute('src')).toBe('https://cdn/vertical.mp4')
+  })
+
+  it('plays the canonical file only for an older response with no media block', () => {
+    expect(playableUrl(clip())).toBe('https://cdn/clip.mp4')
+    expect(playableUrl(vertical())).toBe('https://cdn/vertical.mp4')
+    const pending = vertical()
+    pending.media = { ...pending.media!, url: null, derivativeStatus: 'pending' }
+    expect(playableUrl(pending)).toBeNull()
+  })
+
+  it('lays the actions along the bottom as buttons, with Download still a real link', () => {
+    render(
+      <ClipViewer
+        clip={wide()}
+        onClose={() => {}}
+        actions={[{ label: 'Download', href: 'https://cdn/clip.mp4?download' }, { label: 'Delete', tone: 'danger', onClick: () => {} }]}
+      />,
+    )
+    const download = screen.getByRole('link', { name: 'Download' })
+    expect(download.getAttribute('download')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy()
   })
 
   it('shows nothing when no clip is open', () => {
