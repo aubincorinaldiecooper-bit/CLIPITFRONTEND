@@ -30,6 +30,16 @@ describe('the notch nav', () => {
     render(<NotchNav items={[]} activeId={null} rightContent={<button type="button">Act</button>}><div /></NotchNav>)
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Act' })).toBeTruthy()
+    // And nothing marks a section that is not there: no empty tab list, no
+    // divider before the actions (Codex's finding on #80).
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.getByTestId('notch-actions').className).not.toContain('border-l')
+  })
+
+  it('divides the actions from the destinations when there are both', () => {
+    render(<NotchNav items={items} activeId="upload" rightContent={<button type="button">Act</button>}><div /></NotchNav>)
+    expect(screen.getByRole('tablist')).toBeTruthy()
+    expect(screen.getByTestId('notch-actions').className).toContain('border-l')
   })
 
   it('marks only the page being shown as current', () => {
