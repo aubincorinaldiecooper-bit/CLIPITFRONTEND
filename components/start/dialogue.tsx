@@ -110,20 +110,23 @@ const isSearching = (exchange: Exchange) => exchange.request.status === "pending
  * What the system says about one question once it has answered.
  *
  * The FIRST question was asked on the upload step, not here, so it is not
- * conversation: for it, only what must be admitted is said — the whole
- * video was not read, a stretch could not be looked at, moments were seen
- * but not trusted, nothing was found. When that first answer is clean and
- * complete and has moments, nothing is said at all: the cards speak (the
- * owner's rule from the theater), and the dialogue opens on its empty
- * state. A follow-up question, asked here, gets its full answer.
+ * conversation: for it, only what must be admitted is said — a stretch that
+ * could not be looked at, moments seen but not trusted, nothing found. When
+ * that first answer has moments and nothing to admit, nothing is said at
+ * all: the cards speak (the owner's rule from the theater), and the
+ * dialogue opens on its empty state. That the video is still being read is
+ * NOT an admission about the answer and is not said here — the owner's
+ * call of 2026-09-02, after a first answer opened with "4 so far — I'm
+ * only 11 minutes in. Still watching the rest": the chat is a
+ * conversation, not a report of what the reading is doing. A follow-up
+ * question, asked here, gets its full answer.
  */
 export function exchangeLines(exchange: Exchange, readThroughSeconds: number | null | undefined, first: boolean): string[] {
   const { request } = exchange
   if (isSearching(exchange)) return []
   const count = request.matches?.length ?? 0
-  const partial = request.coverage?.gaps?.some((gap) => gap.reason === "not_read_yet") ?? false
-  const speakUp = !first || request.status === "failed" || count === 0 || partial
-  return [speakUp ? answerLine(request, readThroughSeconds) : null, coverageLine(request), uncertainLine(request)].filter(
+  const answered = !first || request.status === "failed" || count === 0
+  return [answered ? answerLine(request, readThroughSeconds) : null, coverageLine(request), uncertainLine(request)].filter(
     (line): line is string => typeof line === "string" && line.length > 0,
   )
 }

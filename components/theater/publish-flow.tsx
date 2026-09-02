@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { Spinner } from "@astryxdesign/core/Spinner"
+import { Button } from "@astryxdesign/core/Button"
+import { Stack } from "@astryxdesign/core/Stack"
 import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { ChannelToggle, ReclipIcon } from "./review-deck"
 import { PlatformLogo } from "@/components/platform-logos"
 import { useConnectPlatform } from "./connect-platform"
+import { useAuthConfigured, useOptionalWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { mergeOutcome, retryPlans, usePublishProgress, type PostProgress, type PublishOutcome, type PublishPhase } from "./publish-progress"
 
 export type { MadePost, PublishOutcome } from "./publish-progress"
@@ -129,7 +132,9 @@ function BackDisc({ onBack, label }: { onBack: () => void; label: string }) {
       type="button"
       aria-label={label}
       onClick={onBack}
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full ring-1 ring-shborder transition-colors hover:bg-shaccent"
+      // The dialog puts focus here on open; the browser's outline is not the
+      // design's ring (2026-09-02).
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full outline-none ring-1 ring-shborder transition-colors hover:bg-shaccent focus-visible:ring-2 focus-visible:ring-ring"
     >
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M19 12H5M11 18l-6-6 6-6" />
@@ -295,6 +300,9 @@ export function WhereTo({
   const [outcomes, setOutcomes] = useState<PublishOutcome[] | null>(null)
   /** The platform whose row is wearing its "connected" mark. */
   const [marked, setMarked] = useState<string | null>(null)
+  const gate = useOptionalWorkspaceSignInGate()
+  /** Whether this deployment can sign anyone in; the button waits on it, the words do not. */
+  const authConfigured = useAuthConfigured()
 
   useEffect(() => {
     let cancelled = false
@@ -411,9 +419,31 @@ export function WhereTo({
       ) : !page.configured ? (
         <p className="py-6 text-sm text-muted-foreground">Publishing isn&apos;t configured on this deployment.</p>
       ) : page.signInRequired ? (
-        <p className="py-6 text-sm text-muted-foreground">
-          Sign in to publish — your connected accounts live with your account, not this tab.
-        </p>
+        // A sentence with no way in was a dead end (2026-09-02): the gate's
+        // own dialog is the way — opened AFTER this dialog has closed. A
+        // native modal owns the browser's top layer, and a dialog opened
+        // beside it sits behind it, inert (Devin's and Codex's finding on
+        // #79). Where sign-in is not set up there is no way in, and the
+        // words say so rather than offer a button that can only fail. This
+        // block is not one of the owner's drawn screens, so it is Astryx's.
+        <Stack direction="vertical" gap={4} paddingBlock={4}>
+          <p className="text-sm text-muted-foreground">
+            {authConfigured === false
+              ? "Publishing needs an account, and sign-in isn't set up on this deployment."
+              : "Sign in to publish — your connected accounts live with your account, not this tab."}
+          </p>
+          {gate && authConfigured === true && (
+            <Button
+              label="Sign in"
+              variant="primary"
+              width="100%"
+              onClick={() => {
+                onBack()
+                gate.askToSignIn()
+              }}
+            />
+          )}
+        </Stack>
       ) : (
         <>
           {/* The channels, as the owner draws them: each platform's own

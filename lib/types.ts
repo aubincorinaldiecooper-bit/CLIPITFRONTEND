@@ -54,11 +54,13 @@ export interface Video {
     status: TranscriptStatus
     sceneCount: number
     /**
-     * How far into the video the notes reach, in seconds. Measured and moving
-     * — notes are written chunk by chunk as they are read — so it is the one
-     * honest thing to show while a read is running.
+     * How much of the video the notes describe, in seconds — what their
+     * scenes cover, overlaps merged. Not how far in: parts are read out of
+     * order, so the furthest second reached would call a video with a hole
+     * in the middle fully read. It moves while a read is running, so it is
+     * the one honest thing to show then.
      */
-    readThroughSeconds?: number
+        readThroughSeconds?: number
     readThroughTimecode?: string | null
     error: string | null
   }

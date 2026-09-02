@@ -101,7 +101,7 @@ export function WorkspaceShell({
           logo={NOTCH_LOGO}
           rightCorner={<ProfileDropdown />}
         >
-          <div id="workspace-content" tabIndex={-1} className="flex flex-1 flex-col gap-6 p-6">
+          <div id="workspace-content" tabIndex={-1} className="flex flex-1 flex-col gap-6 p-6 outline-none">
             {children}
           </div>
           <Toaster />

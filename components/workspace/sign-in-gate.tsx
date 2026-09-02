@@ -54,6 +54,18 @@ export function useWorkspaceSignInGate(): GateValue {
   return value
 }
 
+/**
+ * The gate when a provider is above, null when not — for a screen that is
+ * also rendered where there is none (a test, a page outside the shell) and
+ * must not throw for want of one.
+ */
+export function useOptionalWorkspaceSignInGate(): GateValue | null {
+  return useContext(WorkspaceGateContext)
+}
+
+/** For tests: a gate of one's own around a screen. */
+export const WorkspaceGateProvider = WorkspaceGateContext.Provider
+
 export function WorkspaceSignInGate({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = authClient.useSession()
   const [asking, setAsking] = useState<SignInIntent | "plain" | null>(null)
