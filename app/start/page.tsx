@@ -13,6 +13,8 @@ import { Wizard } from "@/components/start/wizard"
 import { UploadStep } from "@/components/start/upload-step"
 import { WatchStep } from "@/components/start/watch-step"
 import { ReviewStep } from "@/components/start/review-step"
+import { PublishDialog } from "@/components/start/publish-dialog"
+import type { PublishableClip } from "@/components/theater/publish-flow"
 import type { Exchange, StartStep } from "@/components/start/types"
 
 const POLL_MS = 2000
@@ -25,6 +27,11 @@ export default function StartPage() {
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<StartStep>("upload")
   const [promptDraft, setPromptDraft] = useState("")
+  /** The kept clip the publish screens are open for, if any. */
+  const [publishing, setPublishing] = useState<PublishableClip | null>(null)
+  /** A Publish press whose keep is still being written: the feed waits, and a second press is refused. */
+  const [publishPending, setPublishPending] = useState(false)
+  const publishInFlight = useRef(false)
 
   /** Verdicts the server has not confirmed yet. See `reconcileVerdicts`. */
   const pendingVerdicts = useRef(
@@ -412,8 +419,9 @@ export default function StartPage() {
     [exchanges, fail, showVerdict],
   )
 
+  /** Resolves true once the moment is approved and its clip recorded; false when the server refused, with the reason shown. */
   const keepMatch = useCallback(
-    async (exchangeRequestId: string, matchId: string) => {
+    async (exchangeRequestId: string, matchId: string): Promise<boolean> => {
       setError(null)
       const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
       verdictAttempts.current.set(matchId, attempt)
@@ -425,11 +433,11 @@ export default function StartPage() {
       try {
         await api.rateMatch(exchangeRequestId, matchId, "approved", null)
       } catch (cause) {
-        if (!isCurrent()) return
+        if (!isCurrent()) return false
         pendingVerdicts.current.delete(matchId)
         showVerdict(exchangeRequestId, matchId, null, null)
         fail(cause)
-        return
+        return false
       }
 
       try {
@@ -442,15 +450,48 @@ export default function StartPage() {
             return { ...exchange, clips: Array.from(merged.values()) }
           }),
         )
+        return true
       } catch (cause) {
-        if (!isCurrent()) return
+        if (!isCurrent()) return false
         pendingVerdicts.current.set(matchId, { verdict: null, reason: null })
         showVerdict(exchangeRequestId, matchId, null, null)
         void api.rateMatch(exchangeRequestId, matchId, null, null).catch(() => undefined)
         fail(cause)
+        return false
       }
     },
     [fail, showVerdict],
+  )
+
+  /**
+   * Publish from the feed: the moment is kept (a clip sent out is a clip in
+   * the library), then the publish screens open for its clip. A keep the
+   * server refused opens nothing — the banner says why.
+   */
+  const publishMoment = useCallback(
+    async (exchangeRequestId: string, matchId: string) => {
+      // One publish at a time. The keep advances the feed at once, so a
+      // second press could otherwise land while the first keep is still
+      // being written and swap the clip under an open dialog.
+      if (publishInFlight.current || publishing !== null) return
+      const match = exchanges
+        .find((exchange) => exchange.request.id === exchangeRequestId)
+        ?.request.matches?.find((candidate) => candidate.id === matchId)
+      const clipId = match?.clip?.id
+      if (!match || !clipId) return
+      publishInFlight.current = true
+      setPublishPending(true)
+      try {
+        const kept = match.feedback === "approved" ? true : await keepMatch(exchangeRequestId, matchId)
+        if (!kept) return
+        // Never replace a clip already in the dialog: the first press owns it.
+        setPublishing((current) => current ?? { id: clipId, title: match.description || "A moment from your video", ready: true })
+      } finally {
+        publishInFlight.current = false
+        setPublishPending(false)
+      }
+    },
+    [exchanges, keepMatch, publishing],
   )
 
   const reset = useCallback(() => {
@@ -529,14 +570,18 @@ export default function StartPage() {
             video={video}
             busy={busy}
             searching={searchRunning}
+            publishing={publishing !== null || publishPending}
             onKeep={keepMatch}
             onSkip={(requestId, matchId) => rateMatch(requestId, matchId, "rejected")}
             onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}
             onReclip={reclipMatch}
             onAsk={(instruction) => (searchRunning ? false : startSearch(instruction, { stay: true }))}
+            onPublish={publishMoment}
             onUploadMore={reset}
           />
         )}
+
+        <PublishDialog clip={publishing} onClose={() => setPublishing(null)} />
 
         {error && (
           <motion.p

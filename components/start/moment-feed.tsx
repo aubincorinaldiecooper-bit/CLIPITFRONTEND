@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from "react"
 import { motion, type PanInfo } from "motion/react"
-import { Check, RotateCw, Volume2, VolumeX, X } from "lucide-react"
+import { Check, Volume2, VolumeX, X } from "lucide-react"
+import { PublishGlyph } from "@/components/clip-action-icons"
 import { ClipComposition, centredComposition } from "@/components/media/clip-composition"
 import { VerticalFrame } from "@/components/media/vertical-frame"
 import type { Clip, ClipComposition as Composition, ClipMatch, ClipRequest, Video } from "@/lib/types"
@@ -17,8 +18,11 @@ import type { Exchange } from "./types"
  * person scrolls, drags the front card, or presses a key to move through
  * them. Moving DOWN past a moment skips it; moving back UP onto a skipped
  * moment un-skips it. ✓ keeps the moment — it goes to the library, and
- * that is final here, so a kept moment cannot be scrolled back onto. ↻ on
- * the card's corner reworks the SAME moment.
+ * that is final here, so a kept moment cannot be scrolled back onto. The
+ * button on the card's corner PUBLISHES the moment: it is kept, and the
+ * owner's "Where do they go?" screens open for it (the owner's call,
+ * 2026-09-02, replacing the re-cut control that sat there; a re-cut is
+ * asked for in the dialogue — "re-cut this one").
  *
  * Every moment in the feed is one the server already cut; the front card
  * plays the finished file, or the source seeked to the moment while a cut
@@ -345,11 +349,14 @@ export interface MomentFeedProps {
   onSkip: (moment: FeedMoment) => void
   /** Scrolling back onto a skipped moment, or pressing its dot, brings it back. */
   onUndoSkip: (moment: FeedMoment) => void
-  onReclip: (moment: FeedMoment) => void
+  /** Keep the moment and send it to socials. Only a moment whose cut is finished can go. */
+  onPublish: (moment: FeedMoment) => void
   onUploadMore: () => void
+  /** Something else has the screen — the publish dialog — and no key, wheel or drag decides a moment behind it. */
+  paused?: boolean
 }
 
-export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, onReclip, onUploadMore }: MomentFeedProps) {
+export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSkip, onUndoSkip, onPublish, onUploadMore }: MomentFeedProps) {
   const cursor = feedCursor(moments)
   const total = moments.length
   const top = moments[cursor]
@@ -357,8 +364,8 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
   const reworking = top?.reworking ?? false
   // A kept moment is in the library; the feed cannot take it back. Only a
   // skip is undone by scrolling up onto it.
-  const canGoBack = prev?.decision === "skipped" && !busy
-  const canDecide = top !== undefined && !reworking && !busy
+  const canGoBack = prev?.decision === "skipped" && !busy && !paused
+  const canDecide = top !== undefined && !reworking && !busy && !paused
 
   const lastNavigation = useRef(0)
   const [muted, setMuted] = useState(true)
@@ -409,11 +416,15 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
   const keepOnce = useCallback(() => oncePerBeat(keep), [oncePerBeat, keep])
 
   // The keyboard: → keep, ← or ↓ skip, ↑ (or Backspace, or u) back — unless
-  // the person is typing somewhere. A held key is one press.
+  // the person is typing somewhere, or a dialog has the screen: a key
+  // pressed on a dialog's button is that dialog's, never a decision about
+  // the moment hidden behind it. A held key is one press.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (paused) return
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return
+      if (target?.closest?.('[role="dialog"]')) return
       if (event.repeat) return
       if (event.key === "ArrowRight") keepOnce()
       else if (event.key === "ArrowLeft" || event.key === "ArrowDown") navigate(1)
@@ -423,7 +434,7 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [keepOnce, navigate])
+  }, [keepOnce, navigate, paused])
 
   const onDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.y < -DRAG_THRESHOLD_PX) navigate(1)
@@ -435,12 +446,19 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
     if (Math.abs(event.deltaY) > WHEEL_THRESHOLD_PX) navigate(event.deltaY > 0 ? 1 : -1)
   }
 
-  const remaining = top?.match.reclipsRemaining ?? 0
-  const reclipTitle = reworking
+  // Publishing sends the FINISHED file — for a vertical moment the 9:16
+  // derivative, never the landscape cut in its place — so a moment whose
+  // card is still playing the source in that file's stead cannot go yet.
+  const finished = top?.preview?.finished === true
+  const derivativeFailed = top?.clip?.media?.derivativeStatus === "failed"
+  const canPublish = top !== undefined && finished && !paused && !reworking && !busy
+  const publishTitle = reworking
     ? "Reworking this edit…"
-    : remaining <= 0
-      ? "Re-clip limit reached for this moment"
-      : "Same moment, new edit"
+    : derivativeFailed
+      ? "The vertical cut failed — ask for a re-cut, or skip it"
+      : !finished
+        ? "Still cutting — publish once it's ready"
+        : "Publish — send this moment to your socials"
 
   if (total === 0) {
     return (
@@ -531,13 +549,13 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
                     <>
                       <button
                         type="button"
-                        onClick={() => onReclip(moment)}
-                        disabled={reworking || remaining <= 0 || busy}
-                        aria-label="Re-clip — same moment, new edit"
-                        title={reclipTitle}
+                        onClick={() => onPublish(moment)}
+                        disabled={!canPublish}
+                        aria-label="Publish — send this moment to your socials"
+                        title={publishTitle}
                         className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70 disabled:cursor-default disabled:opacity-60"
                       >
-                        <RotateCw aria-hidden size={16} className={reworking ? "animate-spin" : undefined} />
+                        <PublishGlyph />
                       </button>
                       {moment.preview && (
                         <button

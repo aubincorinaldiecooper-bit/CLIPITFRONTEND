@@ -59,8 +59,27 @@ const handlers = () => ({
   onKeep: vi.fn(),
   onSkip: vi.fn(),
   onUndoSkip: vi.fn(),
-  onReclip: vi.fn(),
+  onPublish: vi.fn(),
   onUploadMore: vi.fn(),
+})
+
+/** An exchange whose one moment has a finished cut to play and to send. */
+const cutExchange = (id: string, overrides: Partial<ClipMatch> = {}, media: unknown = null): Exchange => ({
+  request: request(id, [match({ id: 'a', clip: { id: 'c-a', status: 'ready' }, ...overrides })]),
+  clips: [{ id: 'c-a', clipMatchId: 'a', status: 'ready', url: 'https://cdn.test/clips/v/c-a.mp4?sig=1', media } as never],
+})
+
+/** A vertical moment's media: the 9:16 derivative in the state given, the landscape cut beside it. */
+const verticalMedia = (derivativeStatus: 'pending' | 'ready' | 'failed') => ({
+  composition: { aspectRatio: '9:16', mode: 'smart_crop', focalX: 0.5, focalY: 0.5, focusPct: 50, crop: null },
+  url: derivativeStatus === 'ready' ? 'https://cdn.test/clips/v/c-a-vertical.mp4?sig=1' : null,
+  canonicalUrl: 'https://cdn.test/clips/v/c-a.mp4?sig=1',
+  posterUrl: 'https://cdn.test/posters/c-a.jpg',
+  posterTimestampSeconds: 1,
+  sourceAspectRatio: '16:9',
+  outputAspectRatio: '9:16',
+  compositionMode: 'smart_crop',
+  derivativeStatus,
 })
 
 // jsdom has no matchMedia; motion asks for it when it checks reduced-motion.
@@ -249,30 +268,72 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).not.toHaveBeenCalled()
   })
 
-  it('↻ reworks the same moment; while it does, the card is held and says so', async () => {
-    const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
+  it('the corner control publishes the moment on screen — the owner\'s call, in place of the re-cut', async () => {
+    const moments = feedMoments([cutExchange('r1')], video)
     const h = handlers()
     render(<MomentFeed moments={moments} {...h} />)
-    await userEvent.click(screen.getByRole('button', { name: /Re-clip/ }))
-    expect(h.onReclip).toHaveBeenCalledTimes(1)
-    expect(h.onReclip.mock.calls[0]![0].match.id).toBe('a')
-
-    cleanup()
-    const reworking = feedMoments([exchange('r1', [match({ id: 'a', reclipStatus: 'pending' })])], video)
-    const r = handlers()
-    render(<MomentFeed moments={reworking} {...r} />)
-    expect(screen.getByTestId('reworking-overlay').textContent).toContain('Reworking this edit')
-    expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /^Skip/ }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /Re-clip/ }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: /Re-clip/ })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /^Publish/ }))
+    expect(h.onPublish).toHaveBeenCalledTimes(1)
+    expect(h.onPublish.mock.calls[0]![0].match.id).toBe('a')
   })
 
-  it('refuses ↻ once the allowance is spent, and says why', () => {
-    const moments = feedMoments([exchange('r1', [match({ id: 'a', reclipsRemaining: 0 })])], video)
+  it('a moment still being cut cannot be published yet, and says so', () => {
+    const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
     render(<MomentFeed moments={moments} {...handlers()} />)
-    const button = screen.getByRole('button', { name: /Re-clip/ })
-    expect((button as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
-    expect(button.getAttribute('title')).toBe('Re-clip limit reached for this moment')
+    const button = screen.getByRole('button', { name: /^Publish/ })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(button.getAttribute('title')).toContain('Still cutting')
+  })
+
+  it('a vertical moment goes out only once its 9:16 file exists — never the landscape cut in its place', () => {
+    // Devin's finding on #76: the landscape cut is ready long before the
+    // vertical one, and it is not what the person is sending.
+    const pending = feedMoments([cutExchange('r1', {}, verticalMedia('pending'))], { ...video, playback: { url: 'https://cdn.test/source.mp4', expiresAt: '' } } as unknown as Video)
+    const { rerender } = render(<MomentFeed moments={pending} {...handlers()} />)
+    let button = screen.getByRole('button', { name: /^Publish/ })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(button.getAttribute('title')).toContain('Still cutting')
+
+    rerender(<MomentFeed moments={feedMoments([cutExchange('r1', {}, verticalMedia('failed'))], video)} {...handlers()} />)
+    button = screen.getByRole('button', { name: /^Publish/ })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(button.getAttribute('title')).toContain('cut failed')
+
+    rerender(<MomentFeed moments={feedMoments([cutExchange('r1', {}, verticalMedia('ready'))], video)} {...handlers()} />)
+    button = screen.getByRole('button', { name: /^Publish/ })
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('decides nothing while the publish dialog has the screen, and ignores keys pressed inside a dialog', async () => {
+    // Devin's finding on #76: the feed's shortcuts kept working behind the dialog.
+    const moments = feedMoments([cutExchange('r1')], video)
+    const h = handlers()
+    const { rerender } = render(<MomentFeed moments={moments} {...h} paused />)
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(h.onKeep).not.toHaveBeenCalled()
+    expect(h.onSkip).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /^Publish/ }) as HTMLButtonElement).disabled).toBe(true)
+
+    rerender(
+      <>
+        <div role="dialog"><button type="button">Post now</button></div>
+        <MomentFeed moments={moments} {...h} />
+      </>,
+    )
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Post now' }), { key: 'ArrowRight' })
+    expect(h.onKeep).not.toHaveBeenCalled()
+  })
+
+  it('while the system reworks the moment, the card is held and says so', () => {
+    const reworking = feedMoments([cutExchange('r1', { reclipStatus: 'pending' })], video)
+    render(<MomentFeed moments={reworking} {...handlers()} />)
+    expect(screen.getByTestId('reworking-overlay').textContent).toContain('Reworking this edit')
+    expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /^Skip/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /^Publish/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('ends with the honest fork once every moment is decided', () => {
