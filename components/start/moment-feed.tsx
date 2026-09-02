@@ -352,9 +352,11 @@ export interface MomentFeedProps {
   /** Keep the moment and send it to socials. Only a moment whose cut is finished can go. */
   onPublish: (moment: FeedMoment) => void
   onUploadMore: () => void
+  /** Something else has the screen — the publish dialog — and no key, wheel or drag decides a moment behind it. */
+  paused?: boolean
 }
 
-export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, onPublish, onUploadMore }: MomentFeedProps) {
+export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSkip, onUndoSkip, onPublish, onUploadMore }: MomentFeedProps) {
   const cursor = feedCursor(moments)
   const total = moments.length
   const top = moments[cursor]
@@ -362,8 +364,8 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
   const reworking = top?.reworking ?? false
   // A kept moment is in the library; the feed cannot take it back. Only a
   // skip is undone by scrolling up onto it.
-  const canGoBack = prev?.decision === "skipped" && !busy
-  const canDecide = top !== undefined && !reworking && !busy
+  const canGoBack = prev?.decision === "skipped" && !busy && !paused
+  const canDecide = top !== undefined && !reworking && !busy && !paused
 
   const lastNavigation = useRef(0)
   const [muted, setMuted] = useState(true)
@@ -414,11 +416,15 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
   const keepOnce = useCallback(() => oncePerBeat(keep), [oncePerBeat, keep])
 
   // The keyboard: → keep, ← or ↓ skip, ↑ (or Backspace, or u) back — unless
-  // the person is typing somewhere. A held key is one press.
+  // the person is typing somewhere, or a dialog has the screen: a key
+  // pressed on a dialog's button is that dialog's, never a decision about
+  // the moment hidden behind it. A held key is one press.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (paused) return
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return
+      if (target?.closest?.('[role="dialog"]')) return
       if (event.repeat) return
       if (event.key === "ArrowRight") keepOnce()
       else if (event.key === "ArrowLeft" || event.key === "ArrowDown") navigate(1)
@@ -428,7 +434,7 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [keepOnce, navigate])
+  }, [keepOnce, navigate, paused])
 
   const onDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.y < -DRAG_THRESHOLD_PX) navigate(1)
@@ -440,13 +446,19 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
     if (Math.abs(event.deltaY) > WHEEL_THRESHOLD_PX) navigate(event.deltaY > 0 ? 1 : -1)
   }
 
-  // Publishing sends a file; a moment still being cut has none to send yet.
-  const canPublish = top !== undefined && top.clip !== null && !reworking && !busy
+  // Publishing sends the FINISHED file — for a vertical moment the 9:16
+  // derivative, never the landscape cut in its place — so a moment whose
+  // card is still playing the source in that file's stead cannot go yet.
+  const finished = top?.preview?.finished === true
+  const derivativeFailed = top?.clip?.media?.derivativeStatus === "failed"
+  const canPublish = top !== undefined && finished && !paused && !reworking && !busy
   const publishTitle = reworking
     ? "Reworking this edit…"
-    : top && top.clip === null
-      ? "Still cutting — publish once it's ready"
-      : "Publish — send this moment to your socials"
+    : derivativeFailed
+      ? "The vertical cut failed — ask for a re-cut, or skip it"
+      : !finished
+        ? "Still cutting — publish once it's ready"
+        : "Publish — send this moment to your socials"
 
   if (total === 0) {
     return (

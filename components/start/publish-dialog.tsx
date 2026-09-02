@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Dialog } from "@astryxdesign/core/Dialog"
+import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
 import {
   PublishDone,
   WhenTo,
@@ -20,7 +21,9 @@ import {
  * The moment has already been kept by the time this opens: a clip that is
  * sent out is a clip in the library, and keep is what puts it there. The
  * screens themselves are the theater's — what they say about accounts,
- * readiness and outcomes holds here unchanged.
+ * readiness and outcomes holds here unchanged. The dialog is Astryx's, as
+ * the repository asks and as this step's Preview dialog was; the screens
+ * bring their own heading and way back, so it has no header of its own.
  */
 export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null; onClose: () => void }) {
   const [stage, setStage] = useState<"where" | "when" | "done">("where")
@@ -94,43 +97,62 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
   }, [choice, outcomes, mode, when, clip?.id])
 
   return (
-    <Dialog open={clip !== null} onOpenChange={(open) => !open && !busy && close()}>
-      <DialogContent className="shadcn-scope sm:max-w-lg" data-testid="publish-dialog">
-        <DialogTitle className="sr-only">Publish this moment</DialogTitle>
-        {stage === "where" && (
-          <WhereTo
-            clips={clips}
-            busy={busy}
-            onBack={close}
-            onPostNow={(accountIds, caption) => void postNow(accountIds, caption)}
-            onSchedule={(accountIds, caption) => {
-              setChoice({ accountIds, caption })
-              setScheduleError(null)
-              setStage("when")
-            }}
-          />
-        )}
-        {stage === "when" && (
-          <WhenTo
-            busy={busy}
-            error={scheduleError}
-            clipCount={clips.length}
-            onBack={() => setStage("where")}
-            onCommit={(at) => void commitSchedule(at)}
-          />
-        )}
-        {stage === "done" && (
-          <PublishDone
-            mode={mode}
-            when={when}
-            outcomes={outcomes}
-            busy={busy}
-            onRetryFailed={outcomes.some((outcome) => !outcome.ok) ? () => void retryFailed() : null}
-            onHome={close}
-            homeLabel="Back to your moments"
-          />
-        )}
-      </DialogContent>
+    <Dialog
+      isOpen={clip !== null}
+      // A submission in flight is not interrupted by Escape or a stray click.
+      onOpenChange={(open) => {
+        if (!open && !busy) close()
+      }}
+      variant="standard"
+      width="min(100vw - 32px, 512px)"
+      maxHeight="90vh"
+      padding={0}
+      purpose="info"
+      aria-label="Publish this moment"
+    >
+      {clip && (
+        <Layout
+          content={
+            <LayoutContent padding={6} isScrollable>
+              <div className="shadcn-scope" data-testid="publish-dialog">
+                {stage === "where" && (
+                  <WhereTo
+                    clips={clips}
+                    busy={busy}
+                    onBack={close}
+                    onPostNow={(accountIds, caption) => void postNow(accountIds, caption)}
+                    onSchedule={(accountIds, caption) => {
+                      setChoice({ accountIds, caption })
+                      setScheduleError(null)
+                      setStage("when")
+                    }}
+                  />
+                )}
+                {stage === "when" && (
+                  <WhenTo
+                    busy={busy}
+                    error={scheduleError}
+                    clipCount={clips.length}
+                    onBack={() => setStage("where")}
+                    onCommit={(at) => void commitSchedule(at)}
+                  />
+                )}
+                {stage === "done" && (
+                  <PublishDone
+                    mode={mode}
+                    when={when}
+                    outcomes={outcomes}
+                    busy={busy}
+                    onRetryFailed={outcomes.some((outcome) => !outcome.ok) ? () => void retryFailed() : null}
+                    onHome={close}
+                    homeLabel="Back to your moments"
+                  />
+                )}
+              </div>
+            </LayoutContent>
+          }
+        />
+      )}
     </Dialog>
   )
 }

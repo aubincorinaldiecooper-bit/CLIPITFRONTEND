@@ -29,6 +29,9 @@ export default function StartPage() {
   const [promptDraft, setPromptDraft] = useState("")
   /** The kept clip the publish screens are open for, if any. */
   const [publishing, setPublishing] = useState<PublishableClip | null>(null)
+  /** A Publish press whose keep is still being written: the feed waits, and a second press is refused. */
+  const [publishPending, setPublishPending] = useState(false)
+  const publishInFlight = useRef(false)
 
   /** Verdicts the server has not confirmed yet. See `reconcileVerdicts`. */
   const pendingVerdicts = useRef(
@@ -467,16 +470,28 @@ export default function StartPage() {
    */
   const publishMoment = useCallback(
     async (exchangeRequestId: string, matchId: string) => {
+      // One publish at a time. The keep advances the feed at once, so a
+      // second press could otherwise land while the first keep is still
+      // being written and swap the clip under an open dialog.
+      if (publishInFlight.current || publishing !== null) return
       const match = exchanges
         .find((exchange) => exchange.request.id === exchangeRequestId)
         ?.request.matches?.find((candidate) => candidate.id === matchId)
       const clipId = match?.clip?.id
       if (!match || !clipId) return
-      const kept = match.feedback === "approved" ? true : await keepMatch(exchangeRequestId, matchId)
-      if (!kept) return
-      setPublishing({ id: clipId, title: match.description || "A moment from your video", ready: true })
+      publishInFlight.current = true
+      setPublishPending(true)
+      try {
+        const kept = match.feedback === "approved" ? true : await keepMatch(exchangeRequestId, matchId)
+        if (!kept) return
+        // Never replace a clip already in the dialog: the first press owns it.
+        setPublishing((current) => current ?? { id: clipId, title: match.description || "A moment from your video", ready: true })
+      } finally {
+        publishInFlight.current = false
+        setPublishPending(false)
+      }
     },
-    [exchanges, keepMatch],
+    [exchanges, keepMatch, publishing],
   )
 
   const reset = useCallback(() => {
@@ -555,6 +570,7 @@ export default function StartPage() {
             video={video}
             busy={busy}
             searching={searchRunning}
+            publishing={publishing !== null || publishPending}
             onKeep={keepMatch}
             onSkip={(requestId, matchId) => rateMatch(requestId, matchId, "rejected")}
             onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}

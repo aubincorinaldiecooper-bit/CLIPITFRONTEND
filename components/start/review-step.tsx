@@ -13,6 +13,8 @@ export interface ReviewStepProps {
   busy?: boolean
   /** A search is running; the feed keeps working while the dialogue waits for it. */
   searching: boolean
+  /** The publish dialog is open over the page: the feed decides nothing until it closes. */
+  publishing?: boolean
   /** Resolves true once the moment is kept; false when the server refused (the page has shown why). */
   onKeep: (requestId: string, matchId: string) => boolean | void | Promise<boolean | void>
   onSkip: (requestId: string, matchId: string) => void | Promise<void>
@@ -31,7 +33,7 @@ export interface ReviewStepProps {
  * dialogue beside it — the owner's screen of 2026-09-02. Both halves read
  * the same list: every moment of every question, in order.
  */
-export function ReviewStep({ exchanges, video, busy, searching, onKeep, onSkip, onUndoSkip, onReclip, onAsk, onPublish, onUploadMore }: ReviewStepProps) {
+export function ReviewStep({ exchanges, video, busy, searching, publishing = false, onKeep, onSkip, onUndoSkip, onReclip, onAsk, onPublish, onUploadMore }: ReviewStepProps) {
   const moments = useMemo(() => feedMoments(exchanges, video), [exchanges, video])
   const active: FeedMoment | undefined = moments[feedCursor(moments)]
 
@@ -42,6 +44,7 @@ export function ReviewStep({ exchanges, video, busy, searching, onKeep, onSkip, 
       <MomentFeed
         moments={moments}
         busy={busy}
+        paused={publishing}
         onKeep={(moment) => void onKeep(moment.requestId, moment.match.id)}
         onSkip={(moment) => void onSkip(moment.requestId, moment.match.id)}
         onUndoSkip={(moment) => void onUndoSkip(moment.requestId, moment.match.id)}

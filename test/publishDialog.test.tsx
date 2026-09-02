@@ -17,7 +17,10 @@ const api = {
 }
 vi.mock('@/lib/api', () => ({ api, ApiError: class ApiError extends Error {} }))
 
-// jsdom has no matchMedia or ResizeObserver; the dialog and its buttons ask for them.
+// jsdom has no matchMedia or ResizeObserver, and only half a <dialog>: Astryx's
+// own tests stub showModal and close the same way.
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute('open', '') }
+HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) { this.removeAttribute('open') }
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => ({ matches: false, media: query, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false }),
