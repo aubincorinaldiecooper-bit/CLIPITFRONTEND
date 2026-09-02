@@ -24,6 +24,14 @@ describe('the notch nav', () => {
     expect(screen.getByText('page')).toBeTruthy()
   })
 
+  it('still draws the bar for actions it was given, even with no destinations', () => {
+    // Devin's finding on #78: the guard for an empty bar also hid the
+    // rightContent a caller supplied.
+    render(<NotchNav items={[]} activeId={null} rightContent={<button type="button">Act</button>}><div /></NotchNav>)
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Act' })).toBeTruthy()
+  })
+
   it('marks only the page being shown as current', () => {
     render(<NotchNav items={items} activeId="library"><div /></NotchNav>)
     expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBe('page')

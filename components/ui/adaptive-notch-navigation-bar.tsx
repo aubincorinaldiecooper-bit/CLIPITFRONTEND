@@ -50,8 +50,12 @@ export function NotchNav({
   return (
     <div className={cn("relative min-h-dvh", className)}>
       <div
+        // The bar's own height is reserved even when no bar is drawn: the logo
+        // and the corner control centre on this box, and with the bar gone it
+        // collapsed to nothing and pulled them up past the top of the page
+        // (Codex's finding on #78).
         className={cn(
-          "fixed inset-x-0 z-(--z-header) flex items-start justify-center px-4",
+          "fixed inset-x-0 z-(--z-header) flex min-h-14 items-start justify-center px-4",
           position === "top" ? "top-4" : "bottom-4",
         )}
       >
@@ -61,8 +65,9 @@ export function NotchNav({
           </div>
         ) : null}
 
-        {/* A bar with no destinations is nothing: not drawn. */}
-        {items.length > 0 && (
+        {/* A bar with no destinations and nothing else in it is nothing: not
+            drawn. One holding actions is still a bar (Devin's finding on #78). */}
+        {(items.length > 0 || Boolean(rightContent)) && (
         <nav
           aria-label="Main"
           className="pointer-events-auto flex max-w-[calc(100%-2rem)] items-center gap-1 rounded-full border border-white/10 bg-zinc-950 px-2 py-2 shadow-2xl"
