@@ -72,6 +72,10 @@ export function NotchNav({
           aria-label="Main"
           className="pointer-events-auto flex max-w-[calc(100%-2rem)] items-center gap-1 rounded-full border border-white/10 bg-zinc-950 px-2 py-2 shadow-2xl"
         >
+          {/* No destinations, no tab list — and no divider before the actions,
+              which would mark a section that is not there (Codex's finding
+              on #80). */}
+          {items.length > 0 && (
           <div className="flex items-center gap-1" role="tablist">
             {items.map((item) => {
               const Icon = item.icon
@@ -146,9 +150,16 @@ export function NotchNav({
               )
             })}
           </div>
+          )}
 
           {rightContent ? (
-            <div className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-2 pr-1">
+            <div
+              className={cn(
+                "flex shrink-0 items-center gap-1 pr-1",
+                items.length > 0 ? "border-l border-white/10 pl-2" : "pl-1",
+              )}
+              data-testid="notch-actions"
+            >
               {rightContent}
             </div>
           ) : null}
