@@ -2,6 +2,20 @@ import type { ClipRequest, Clip } from "@/lib/types"
 import type { Exchange } from "./types"
 
 /**
+ * Take named parameters out of the address, once what they asked for has
+ * been done — and not before: a return that fails to load must keep them,
+ * so a reload can try the whole return again (Devin's finding on #82).
+ * replaceState, so Back still goes where it should.
+ */
+export function consumeSearchParams(names: string[]): void {
+  if (typeof window === "undefined") return
+  const url = new URL(window.location.href)
+  if (!names.some((name) => url.searchParams.has(name))) return
+  for (const name of names) url.searchParams.delete(name)
+  window.history.replaceState(window.history.state, "", url.toString())
+}
+
+/**
  * Reopening a video: its conversation comes back from the server, so the
  * review is where the person left it — after a sign-in that returned them
  * here, after a reload, after opening a video from their history.

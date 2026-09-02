@@ -16,24 +16,31 @@ import { ReviewStep } from "@/components/start/review-step"
 import { PublishDialog } from "@/components/start/publish-dialog"
 import type { PublishableClip } from "@/components/theater/publish-flow"
 import type { Exchange, StartStep } from "@/components/start/types"
-import { hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
-import { useWorkspaceResumeIntent } from "@/components/workspace/sign-in-gate"
+import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
+import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
+import { readIntent } from "@/components/sign-in-gate"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
 
 /**
- * The errand a sign-in was asked for, resumed on return. Rendered inside the
- * shell, where the gate lives; the page itself renders the shell and so
- * cannot use the gate's hooks.
+ * The errand a sign-in was asked for, read on return once the person is
+ * signed in. Rendered inside the shell, where the gate lives; the page
+ * itself renders the shell and so cannot use the gate's hooks. The errand
+ * is only READ here: it leaves the address when the page carries it out,
+ * so a return whose loading failed keeps it for a reload to try again
+ * (Devin's finding on #82).
  */
 function ResumeAfterSignIn({ onPublish }: { onPublish: (clipId: string) => void }) {
-  useWorkspaceResumeIntent(
-    (intent) => intent.action === "publish",
-    (intent) => {
-      if (intent.action === "publish") onPublish(intent.clipId)
-    },
-  )
+  const { isSignedIn } = useWorkspaceSignInGate()
+  const handed = useRef(false)
+  useEffect(() => {
+    if (!isSignedIn || handed.current) return
+    const intent = readIntent(window.location.search)
+    if (intent?.action !== "publish") return
+    handed.current = true
+    onPublish(intent.clipId)
+  }, [isSignedIn, onPublish])
   return null
 }
 
@@ -104,10 +111,9 @@ export default function StartPage() {
     if (!handed) return
     const ids = handed.split(",").filter(Boolean)
     if (ids.length === 0) return
-    // The address is consumed: reloading must not re-open a stale batch.
-    const url = new URL(window.location.href)
-    url.searchParams.delete("videos")
-    window.history.replaceState(window.history.state, "", url.toString())
+    // The address is consumed once the video has opened, in openFromLibrary
+    // — not here: a return whose loading fails must keep it, so a reload can
+    // try again (Devin's finding on #82).
     setUploads(
       ids.map((videoId, index) => ({
         id: `handed-${index}-${videoId}`,
@@ -535,6 +541,9 @@ export default function StartPage() {
         setPromptDraft("")
         setVideo(opened)
         setStep(hasReviewable(restored) ? "review" : "upload")
+        // Opened, with its conversation: the address no longer needs to say
+        // so. A reload from here must not re-open a stale batch.
+        consumeSearchParams(["videos"])
       } catch (cause) {
         fail(cause)
       } finally {
@@ -558,12 +567,15 @@ export default function StartPage() {
     window.history.replaceState(window.history.state, "", url.toString())
   }, [video])
 
-  // The parked publish, carried out once its moment is back on screen.
+  // The parked publish, carried out once its moment is back on screen — and
+  // only then taken out of the address, so a reload before this point tries
+  // the return again, and one after it does not publish twice.
   useEffect(() => {
     if (!resumePublish || busy) return
     const found = matchForClip(exchanges, resumePublish)
     if (!found) return
     setResumePublish(null)
+    consumeSearchParams(["then"])
     void publishMoment(found.requestId, found.matchId)
   }, [resumePublish, busy, exchanges, publishMoment])
 

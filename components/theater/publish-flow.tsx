@@ -445,8 +445,11 @@ export function WhereTo({
                 onSignIn?.()
                 // The errand rides on the address with the video: the magic
                 // link brings the person back to this clip's publish screen.
+                // Asked for outright — the server has already said this is a
+                // guest — never through requireSignIn, which runs its action
+                // instead while the session is still loading.
                 const clipId = ready[0]?.id
-                if (clipId) gate.requireSignIn({ action: "publish", clipId }, () => undefined)
+                if (clipId) gate.askToSignInFor({ action: "publish", clipId })
                 else gate.askToSignIn()
               }}
             />

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { hasReviewable, matchForClip, restoreConversation } from "../components/start/restore"
+import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "../components/start/restore"
 import type { Exchange } from "../components/start/types"
 import type { ClipRequest } from "../lib/types"
 
@@ -21,6 +21,19 @@ describe("restoreConversation", () => {
     expect(exchanges.map((e) => e.request.id)).toEqual(["r1", "r2"])
     expect(exchanges[0]!.clips).toEqual([{ id: "clip-r1" }])
     expect((exchanges[0]!.request as unknown as { reconciled: boolean }).reconciled).toBe(true)
+  })
+})
+
+describe("consumeSearchParams", () => {
+  it("takes only the named parameters out of the address, and leaves the rest", () => {
+    window.history.replaceState(null, "", "/start?videos=vid-1&then=publish:c-1&other=1")
+    consumeSearchParams(["videos"])
+    expect(window.location.search).toBe("?then=publish%3Ac-1&other=1")
+    consumeSearchParams(["then"])
+    expect(window.location.search).toBe("?other=1")
+    // Nothing named: the address is left alone.
+    consumeSearchParams(["videos"])
+    expect(window.location.search).toBe("?other=1")
   })
 })
 

@@ -203,21 +203,23 @@ describe('PublishDialog', () => {
     // open after this one has closed, or it sits behind it, inert.
     deploymentSignsIn(true)
     api.listSocialAccounts.mockResolvedValue({ configured: true, signInRequired: true, accounts: [] })
-    const requireSignIn = vi.fn(() => false)
+    const askToSignInFor = vi.fn()
     const onClose = vi.fn()
     const onSignIn = vi.fn()
     render(
-      <WorkspaceGateProvider value={{ requireSignIn, askToSignIn: vi.fn(), isSignedIn: false }}>
+      <WorkspaceGateProvider value={{ requireSignIn: vi.fn(() => false), askToSignIn: vi.fn(), askToSignInFor, isSignedIn: false }}>
         <PublishDialog clip={clip} onClose={onClose} onSignIn={onSignIn} />
       </WorkspaceGateProvider>,
     )
     await screen.findByText(/sign in to publish/i)
     await userEvent.click(await screen.findByRole('button', { name: /^sign in$/i }))
     expect(onClose).toHaveBeenCalled()
-    // The page parks the video, then the gate parks the errand: publish this clip.
+    // The page parks the video, then the gate is asked outright with the
+    // errand — never through requireSignIn, which runs its action instead
+    // while the session is still loading (Devin's finding on #82).
     expect(onSignIn).toHaveBeenCalled()
-    expect(requireSignIn).toHaveBeenCalledWith({ action: 'publish', clipId: 'c-a' }, expect.any(Function))
-    expect(onClose.mock.invocationCallOrder[0]!).toBeLessThan(requireSignIn.mock.invocationCallOrder[0]!)
+    expect(askToSignInFor).toHaveBeenCalledWith({ action: 'publish', clipId: 'c-a' })
+    expect(onClose.mock.invocationCallOrder[0]!).toBeLessThan(askToSignInFor.mock.invocationCallOrder[0]!)
   })
 
   it('offers no Sign in where this deployment cannot sign anyone in, and says so', async () => {
@@ -226,7 +228,7 @@ describe('PublishDialog', () => {
     deploymentSignsIn(false)
     api.listSocialAccounts.mockResolvedValue({ configured: true, signInRequired: true, accounts: [] })
     render(
-      <WorkspaceGateProvider value={{ requireSignIn: vi.fn(() => false), askToSignIn: vi.fn(), isSignedIn: false }}>
+      <WorkspaceGateProvider value={{ requireSignIn: vi.fn(() => false), askToSignIn: vi.fn(), askToSignInFor: vi.fn(), isSignedIn: false }}>
         <PublishDialog clip={clip} onClose={vi.fn()} />
       </WorkspaceGateProvider>,
     )
