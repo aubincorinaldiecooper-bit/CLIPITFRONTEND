@@ -51,7 +51,7 @@ export function NotchNav({
     <div className={cn("relative min-h-dvh", className)}>
       <div
         className={cn(
-          "fixed inset-x-0 z-50 flex items-start justify-center px-4",
+          "fixed inset-x-0 z-(--z-header) flex items-start justify-center px-4",
           position === "top" ? "top-4" : "bottom-4",
         )}
       >

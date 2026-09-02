@@ -74,8 +74,11 @@ export function WorkspaceShell({
           control before reaching the page. */}
       <a
         href="#workspace-content"
-        // Above the notch header (z-50, later in the document), whose logo sits exactly where this appears.
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+        // Above the notch header, later in the document, whose logo sits exactly
+        // where this appears. Both stacking values come from the one scale in
+        // app/globals.css, so the order is a fact stated once, not two numbers
+        // that happen to agree.
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-(--z-skip-link) focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
       >
         Skip to content
       </a>

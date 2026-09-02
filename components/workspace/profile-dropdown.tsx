@@ -73,7 +73,7 @@ export function ProfileDropdown() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-3 rounded-2xl border bg-card p-2 pr-2.5 text-left transition-colors hover:bg-shmuted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:max-w-[13rem] lg:max-w-[15rem]"
+          className="flex items-center gap-3 rounded-2xl border bg-card p-2 pr-2.5 text-left transition-colors hover:bg-shmuted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:max-w-52 lg:max-w-60"
         >
           <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-semibold text-primary-foreground">
             {avatar ? (
