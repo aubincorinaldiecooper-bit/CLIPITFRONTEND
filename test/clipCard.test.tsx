@@ -82,6 +82,18 @@ describe('the clip card', () => {
     expect(document.querySelector('img')!.style.objectPosition).toBe('50% 50%')
   })
 
+  it('positions the search still by the shape it actually has when no poster was rendered', () => {
+    // A vertical delivery whose poster is missing: the card shows the search
+    // still, a wide frame of the source, so the box cuts its sides — at the
+    // subject's own horizontal coordinate, not the poster's vertical one.
+    const noPoster = vertical()
+    noPoster.media = { ...noPoster.media!, posterUrl: null }
+    render(<ClipCard clip={noPoster} onOpen={() => {}} />)
+    const img = document.querySelector('img')!
+    expect(img.getAttribute('src')).toBe('https://cdn/thumb.jpg')
+    expect(img.style.objectPosition).toBe('75% 50%')
+  })
+
   it("keeps a vertical clip's subject in view: the box cuts top and bottom around the focal point", () => {
     const talkingHead = vertical()
     talkingHead.media = { ...talkingHead.media!, composition: { ...talkingHead.media!.composition, focalY: 0.3 } }

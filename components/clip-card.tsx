@@ -131,22 +131,36 @@ function viewerComposition(clip: LibraryClip, shape: string): Composition {
   return centredComposition(shape)
 }
 
+/** The shape of the video the clip was cut from, when the server named it or measured it. */
+function sourceShape(clip: LibraryClip): string {
+  const named = clip.media?.sourceAspectRatio ?? null
+  if (namedRatio(named) !== null) return named as string
+  if (clip.sourceWidth && clip.sourceHeight) {
+    return shapeLabel(clip.sourceWidth / clip.sourceHeight, `${clip.sourceWidth}:${clip.sourceHeight}`)
+  }
+  return clipShape(clip)
+}
+
 /**
  * The composition the thumbnail's box uses. The box is 4:3 for every clip,
- * so the poster is cut on one axis: top and bottom off a tall poster, the
- * sides off a wide one. The subject's own coordinate on that axis — the
- * focal point the render stored, which for a tall poster cut from a wide
- * source is the same vertical coordinate — keeps the subject in view;
- * without one, the middle.
+ * so the picture is cut on one axis: top and bottom off a tall picture, the
+ * sides off a wide one. The subject's own coordinate on that axis keeps the
+ * subject in view; without one, the middle.
+ *
+ * Which picture matters. The render's poster is the delivered file's shape,
+ * and its vertical coordinate is the source's (a tall poster is cut from the
+ * full height). The search still — shown only when no poster was rendered —
+ * is a frame of the SOURCE video, in the source's shape, so both of the
+ * stored coordinates apply to it directly.
  */
-function cardComposition(clip: LibraryClip): { composition: Composition; source: string } {
-  const source = clipShape(clip)
+function cardComposition(clip: LibraryClip, picture: "poster" | "still"): { composition: Composition; source: string } {
+  const source = picture === "poster" ? clipShape(clip) : sourceShape(clip)
   const tall = ratioFromLabel(source, 16 / 9) < ratioFromLabel(CARD_BOX, 4 / 3)
   const focal = clip.media?.composition ?? null
-  // A wide poster with a crop recorded cannot happen (a crop makes a tall
-  // poster), but a focal x from a crop would be in source coordinates, not
-  // the poster's, so it is not used for one.
-  const along = tall ? focal?.focalY : focal?.crop ? null : focal?.focalX
+  // A poster cut from a wider source keeps only a window of it, so its
+  // horizontal coordinate is not the source's; the still keeps the whole.
+  const horizontal = picture === "still" || !focal?.crop ? focal?.focalX : null
+  const along = tall ? focal?.focalY : horizontal
   const focusPct = typeof along === "number" ? Math.round(along * 100) : 50
   return {
     composition: { aspectRatio: CARD_BOX, mode: "original", focalX: null, focalY: null, focusPct, crop: null },
@@ -204,7 +218,7 @@ export function ClipCard({
   const duration = runtime(clip)
   const shape = clipShape(clip)
   const playable = playableUrl(clip)
-  const { composition, source } = cardComposition(clip)
+  const { composition, source } = cardComposition(clip, clip.media?.posterUrl ? "poster" : "still")
   const title = clip.description || "A moment from your video"
 
   return (
