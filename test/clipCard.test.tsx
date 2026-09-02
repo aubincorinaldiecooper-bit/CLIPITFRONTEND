@@ -177,7 +177,7 @@ describe('the viewer', () => {
     expect(playableUrl(pending)).toBeNull()
   })
 
-  it('lays the actions along the bottom as buttons, with Download still a real link', () => {
+  it('is a vertical popup whatever the clip\'s shape, with the actions in a rail beside it', () => {
     render(
       <ClipViewer
         clip={wide()}
@@ -185,9 +185,15 @@ describe('the viewer', () => {
         actions={[{ label: 'Download', href: 'https://cdn/clip.mp4?download' }, { label: 'Delete', tone: 'danger', onClick: () => {} }]}
       />,
     )
+    // The popup is the shape of a phone; the wide clip sits inside it at its own shape.
+    const popup = document.querySelector('[data-slot="clip-popup"]')!
+    expect(popup.className).toContain('aspect-[9/16]')
+    expect(popup.querySelector('video')).toBeTruthy()
+    // Download is a real link that saves; Delete is a button; both named for a screen reader.
     const download = screen.getByRole('link', { name: 'Download' })
     expect(download.getAttribute('download')).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
   })
 
   it('shows nothing when no clip is open', () => {

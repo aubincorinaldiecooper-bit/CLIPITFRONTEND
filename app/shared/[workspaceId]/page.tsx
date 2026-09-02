@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   FolderOpenIcon,
+  FolderRemoveIcon,
   SquareLock01Icon,
   UserAdd01Icon,
   UserGroupIcon,
@@ -244,6 +245,7 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
     // people.
     {
       label: busyId === clip.id ? "Taking out…" : "Take out",
+      icon: FolderRemoveIcon,
       disabled: busyId === clip.id,
       onClick: () => void takeOut(clip.id),
     },

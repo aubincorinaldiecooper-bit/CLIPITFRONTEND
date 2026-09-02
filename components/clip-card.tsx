@@ -2,6 +2,7 @@
 
 import { Children, type CSSProperties, type ReactNode } from "react"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
+import { Cancel01Icon, Download04Icon, MoreHorizontalIcon } from "@hugeicons/core-free-icons"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -47,6 +49,15 @@ import type { ClipComposition as Composition, LibraryClip } from "@/lib/types"
  */
 
 const CARD_SHAPE = "9:16"
+
+/**
+ * The one decision worth a switch. A wide (16:9) clip's card is the same tall
+ * box as every other card. `false`: the picture fills the box, centred, cut
+ * at the sides — the way a social grid treats a wide picture. `true`: the
+ * whole frame is shown inside the box with dark space above and below.
+ * Opening the clip plays it wide either way; the pill says 16:9 either way.
+ */
+const WIDE_CARD_SHOWS_WHOLE_FRAME = false
 
 const NAMED_SHAPES: Array<[string, number]> = [
   ["9:16", 9 / 16],
@@ -183,7 +194,15 @@ export function ClipCard({
           aria-label={`Open: ${title}`}
           className="block w-full text-left disabled:cursor-default"
         >
-          <ClipComposition composition={composition} sourceAspectRatio={source} finished className="w-full overflow-hidden bg-black">
+          <ClipComposition
+            composition={composition}
+            sourceAspectRatio={source}
+            // A finished file fills its own shape. A wide picture in the tall
+            // box is "raw source" to the framing rule, which then keeps the
+            // whole frame — the switch above decides.
+            finished={!(WIDE_CARD_SHOWS_WHOLE_FRAME && shape !== CARD_SHAPE)}
+            className="w-full overflow-hidden bg-black"
+          >
             {(style) =>
               poster ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
@@ -271,44 +290,61 @@ export function ClipCard({
 }
 
 /**
- * The same actions along the bottom of the viewer, as the page's buttons.
+ * The rail beside the popup: one round button per action with its name
+ * under it, the way a vertical player keeps its controls off the picture.
  * Download stays a real anchor with `download` — the browser must save the
  * signed file directly, and no button can stand in for that — wearing the
- * button's clothes so the row reads as one set.
+ * button's clothes so the rail reads as one set. Standing on the dialog's
+ * own dark ground, so the label is white and the buttons are the page's.
  */
-function ViewerActions({ actions }: { actions: ClipAction[] }) {
+function ViewerRail({ actions }: { actions: ClipAction[] }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {actions.map((action) =>
-        action.href ? (
-          <Button key={action.label} asChild variant="secondary" size="sm" className="whitespace-nowrap">
-            <a href={action.href} download>
-              <DownloadGlyph />
+    <div className="flex flex-row flex-wrap items-start justify-center gap-4 sm:flex-col sm:justify-end sm:pb-3">
+      {actions.map((action) => {
+        const icon = action.icon ?? (action.href ? Download04Icon : MoreHorizontalIcon)
+        return (
+          <div key={action.label} className="flex w-18 flex-col items-center gap-1.5 text-center text-[11px] leading-tight">
+            {action.href ? (
+              <Button asChild variant="secondary" size="icon" className="size-11 rounded-full">
+                <a href={action.href} download aria-label={action.label}>
+                  <HugeiconsIcon icon={icon} className="size-5" />
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant={action.tone === "danger" ? "destructive" : "secondary"}
+                size="icon"
+                className="size-11 rounded-full"
+                aria-label={action.label}
+                disabled={action.disabled}
+                onClick={action.onClick}
+              >
+                <HugeiconsIcon icon={icon} className="size-5" />
+              </Button>
+            )}
+            {/* On its own dark pill: the rail stands over whatever page is behind the popup. */}
+            <span aria-hidden className="rounded-full bg-black/60 px-2 py-0.5 text-white">
               {action.label}
-            </a>
-          </Button>
-        ) : (
-          <Button
-            key={action.label}
-            variant={action.tone === "danger" ? "destructive" : "secondary"}
-            size="sm"
-            className="whitespace-nowrap"
-            disabled={action.disabled}
-            onClick={action.onClick}
-          >
-            {action.icon && <HugeiconsIcon icon={action.icon} />}
-            {action.label}
-          </Button>
-        ),
-      )}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
 /**
- * Opening a clip: the file plays in its TRUE shape — a wide clip wide, a
- * vertical one tall — with the same framing component every other surface
- * uses, so what opens is the file the card stood for and nothing else.
+ * Opening a clip: a vertical popup, the shape of the phone the clip is for,
+ * the way a Shorts player opens over the page (owner, 2026-09-02). A
+ * vertical clip fills it. A wide clip sits inside it at its TRUE shape, on
+ * black, never stretched or cut — through the same framing component every
+ * other surface uses, so what opens is the file the card stood for. The
+ * words sit over the bottom; the actions stand in a rail beside it, or
+ * under it on a phone.
+ *
+ * Sized from the width, so the panel is never taller than the screen: the
+ * width is the smallest of the screen less a margin, the height the popup
+ * may take turned into a 9:16 width, and a cap; the height follows.
  */
 export function ClipViewer({
   clip,
@@ -319,18 +355,11 @@ export function ClipViewer({
   clip: LibraryClip | null
   onClose: () => void
   showDate?: boolean
-  /** The same actions the card's menu holds, laid along the bottom. */
+  /** The same actions the card's menu holds, as the rail beside the popup. */
   actions?: ClipAction[]
 }) {
   const shape = clip ? clipShape(clip) : CARD_SHAPE
-  const ratio = ratioFromLabel(shape, 9 / 16)
-  const tall = ratio < 1
   const title = clip?.description || "A moment from your video"
-  // The dialog must fit the screen with the video, the words and the buttons
-  // all visible, so its WIDTH is derived from the height that is available:
-  // a tall clip on a short screen gets narrower rather than taller. The
-  // ratio is data, not a design value, so it reaches CSS as a variable.
-  const sizing = { "--clip-ratio": String(ratio) } as CSSProperties
 
   return (
     <Dialog
@@ -340,13 +369,8 @@ export function ClipViewer({
       }}
     >
       <DialogContent
-        style={sizing}
-        className={
-          "shadcn-scope max-h-[92vh] gap-0 overflow-y-auto p-0 max-w-[min(calc(100%_-_2rem),calc((92vh_-_8rem)*var(--clip-ratio)))] " +
-          (tall
-            ? "sm:max-w-[min(440px,calc((92vh_-_8rem)*var(--clip-ratio)))]"
-            : "sm:max-w-[min(960px,calc((92vh_-_8rem)*var(--clip-ratio)))]")
-        }
+        showCloseButton={false}
+        className="shadcn-scope w-auto max-w-none border-0 bg-transparent p-0 shadow-none sm:max-w-none"
       >
         {clip && (
           <>
@@ -354,34 +378,50 @@ export function ClipViewer({
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription>{clip.videoTitle ?? "Your video"}</DialogDescription>
             </DialogHeader>
-            <ClipComposition
-              composition={clip.media?.composition ?? centredComposition(shape)}
-              sourceAspectRatio={clip.media?.sourceAspectRatio ?? shape}
-              finished
-              className="w-full bg-black"
-            >
-              {(style) => (
-                <video
-                  key={clip.id}
-                  src={playableUrl(clip) ?? undefined}
-                  poster={clip.media?.posterUrl ?? clip.thumbnailUrl ?? undefined}
-                  controls
-                  autoPlay
-                  playsInline
-                  style={style}
-                  className="h-full w-full"
-                />
-              )}
-            </ClipComposition>
-            <div className="flex flex-col gap-3 p-4">
-              <div className="flex flex-col gap-0.5">
-                <p className="text-sm font-medium leading-snug">{title}</p>
-                <p className="text-xs text-foreground/60">
-                  {clip.videoTitle ?? "Your video"}
-                  {showDate ? ` · Cut ${cutOn(clip)}` : ""}
-                </p>
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
+              <div
+                data-slot="clip-popup"
+                className="relative flex aspect-[9/16] w-[min(calc(100vw_-_2rem),calc(88vh_*_9_/_16),470px)] flex-col justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
+              >
+                <ClipComposition
+                  composition={clip.media?.composition ?? centredComposition(shape)}
+                  sourceAspectRatio={clip.media?.sourceAspectRatio ?? shape}
+                  finished
+                  className="w-full"
+                >
+                  {(style) => (
+                    <video
+                      key={clip.id}
+                      src={playableUrl(clip) ?? undefined}
+                      poster={clip.media?.posterUrl ?? clip.thumbnailUrl ?? undefined}
+                      controls
+                      autoPlay
+                      playsInline
+                      style={style}
+                      className="h-full w-full"
+                    />
+                  )}
+                </ClipComposition>
+                <DialogClose asChild>
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/25 backdrop-blur-sm hover:bg-black/75"
+                  >
+                    <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
+                  </button>
+                </DialogClose>
+                {/* Over the bottom of the picture, the way a vertical player
+                    says its words. Above the browser's own controls. */}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-14 pt-16 text-white">
+                  <p className="line-clamp-2 text-sm font-medium leading-snug">{title}</p>
+                  <p className="text-xs text-white/75">
+                    {clip.videoTitle ?? "Your video"}
+                    {showDate ? ` · Cut ${cutOn(clip)}` : ""}
+                  </p>
+                </div>
               </div>
-              {actions && actions.length > 0 && <ViewerActions actions={actions} />}
+              {actions && actions.length > 0 && <ViewerRail actions={actions} />}
             </div>
           </>
         )}

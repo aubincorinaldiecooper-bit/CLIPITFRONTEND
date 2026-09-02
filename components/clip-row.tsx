@@ -66,7 +66,7 @@ export function ClipRow({
               <Button
                 variant="outline"
                 size="icon-sm"
-                className="rounded-full"
+                className="hidden rounded-full sm:inline-flex"
                 aria-label={`Scroll ${title} back`}
                 disabled={atStart}
                 onClick={() => page(-1)}
@@ -78,7 +78,7 @@ export function ClipRow({
               <Button
                 variant="outline"
                 size="icon-sm"
-                className="rounded-full"
+                className="hidden rounded-full sm:inline-flex"
                 aria-label={`Scroll ${title} forward`}
                 disabled={atEnd}
                 onClick={() => page(1)}
