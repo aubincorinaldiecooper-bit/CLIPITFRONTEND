@@ -17,7 +17,7 @@ vi.mock("../lib/api", () => ({
 const { monthGrid, speakTime, scheduleDate, localIso, publishEach, speakList } = await import(
   "../components/theater/publish-flow"
 )
-const { phaseOf, progressOf, retryPlans } = await import("../components/theater/publish-progress")
+const { phaseOf, progressOf, retryPlans, mergeOutcome, countsOf } = await import("../components/theater/publish-progress")
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -110,6 +110,15 @@ describe("publishEach — the truth per clip", () => {
     expect(outcomes[0]).toMatchObject({ ok: true, detail: "scheduled", posts: [] })
   })
 
+  it("a server that names only the singular post has still made one, and it is recorded", async () => {
+    // Devin's and Codex's finding on #77: the older shape left the outcome
+    // with no posts, the control read the accepted clip as never sent, and
+    // Publish came back for a second press.
+    publishClip.mockResolvedValueOnce({ post: { id: "p9", clipId: "clip-1", status: "submitted" } })
+    const outcomes = await publishEach([clips[0]!], { caption: "", accountIds: ["acct-1"] })
+    expect(outcomes[0]).toMatchObject({ ok: true, detail: "submitted", posts: [{ id: "p9", status: "submitted", platforms: [] }] })
+  })
+
   it("one clip's refusal is reported on that clip; the other still goes out", async () => {
     const { ApiError } = await import("../lib/api")
     publishClip
@@ -145,13 +154,18 @@ describe("the Publish control's truth — read from the posts, never from the 20
     const up = { postId: "p1", clipId: "c", platforms: ["tiktok"], accountIds: ["a"], status: "published", outcome: "posted" as const }
     const going = { ...up, postId: "p2", status: "submitted", outcome: "posting" as const }
     const down = { ...up, postId: "p3", status: "failed", outcome: "failed" as const }
-    expect(phaseOf([up, going], 0, false)).toBe("publishing")
-    expect(phaseOf([up], 0, false)).toBe("published")
-    expect(phaseOf([up, down], 0, false)).toBe("failed")
-    expect(phaseOf([up], 1, false)).toBe("failed")
-    expect(phaseOf([going], 0, true)).toBe("sent")
-    expect(phaseOf([going, down], 0, true)).toBe("failed")
-    expect(phaseOf([], 0, false)).toBe("idle")
+    const none = { refused: 0, blind: 0 }
+    expect(phaseOf([up, going], none, false)).toBe("publishing")
+    expect(phaseOf([up], none, false)).toBe("published")
+    expect(phaseOf([up, down], none, false)).toBe("failed")
+    expect(phaseOf([up], { refused: 1, blind: 0 }, false)).toBe("failed")
+    expect(phaseOf([going], none, true)).toBe("sent")
+    expect(phaseOf([going, down], none, true)).toBe("failed")
+    expect(phaseOf([], none, false)).toBe("idle")
+    // A clip accepted with nothing to ask about went; that is all that is known — never Published.
+    expect(phaseOf([], { refused: 0, blind: 1 }, false)).toBe("sent")
+    expect(phaseOf([up], { refused: 0, blind: 1 }, false)).toBe("sent")
+    expect(countsOf([ok("c1", []), ok("c2", [made("p")]), refused("c3"), { ...ok("c4", []), detail: "scheduled" }])).toEqual({ refused: 1, blind: 1 })
   })
 
   it("Try again sends only what did not go: every chosen account for a refused clip, a refused post's accounts, never one whose post is up", () => {
@@ -160,12 +174,35 @@ describe("the Publish control's truth — read from the posts, never from the 20
       { postId: "p1", clipId: "clip-1", platforms: ["tiktok"], accountIds: ["acc-1"], status: "published", outcome: "posted" as const },
       { postId: "p2", clipId: "clip-1", platforms: ["youtube"], accountIds: ["acc-2"], status: "failed", outcome: "failed" as const },
       { postId: "p3", clipId: "clip-3", platforms: ["youtube"], accountIds: [], status: "failed", outcome: "failed" as const },
+      // clip-4: a retry was refused after TikTok had gone up — TikTok is not sent again.
+      { postId: "p4", clipId: "clip-4", platforms: ["tiktok"], accountIds: [], status: "published", outcome: "posted" as const },
     ]
-    expect(retryPlans([ok("clip-1", [made("p1"), made("p2")]), refused("clip-2"), ok("clip-3", [made("p3")])], posts, chosen)).toEqual([
+    expect(
+      retryPlans([ok("clip-1", [made("p1"), made("p2")]), refused("clip-2"), ok("clip-3", [made("p3")]), { ...refused("clip-4"), posts: [made("p4")] }], posts, chosen),
+    ).toEqual([
       { clipId: "clip-1", accountIds: ["acc-2"] },
       { clipId: "clip-2", accountIds: ["acc-1", "acc-2"] },
       { clipId: "clip-3", accountIds: ["acc-2"] },
+      { clipId: "clip-4", accountIds: ["acc-2"] },
     ])
+  })
+
+  it("a retry's answer folds into what came before: the channel that is up stays, the refused post goes, the retry's posts join", () => {
+    // Devin's and Codex's finding on #77: the retry replaced the whole
+    // outcome, and the channel that had gone up read "Not sent".
+    const prior = ok("clip-1", [made("p1", "published", ["tiktok"]), made("p2", "failed", ["youtube"])])
+    const posts = [
+      { postId: "p1", clipId: "clip-1", platforms: ["tiktok"], accountIds: ["acc-1"], status: "published", outcome: "posted" as const },
+      { postId: "p2", clipId: "clip-1", platforms: ["youtube"], accountIds: ["acc-2"], status: "failed", outcome: "failed" as const },
+    ]
+    expect(mergeOutcome(prior, ok("clip-1", [made("p3", "submitted", ["youtube"])]), posts)).toEqual({
+      ...ok("clip-1", []),
+      posts: [made("p1", "published", ["tiktok"]), made("p3", "submitted", ["youtube"])],
+    })
+    // A refused retry keeps the posts that are up beside its refusal.
+    expect(mergeOutcome(prior, refused("clip-1"), posts)).toEqual({ ...refused("clip-1"), posts: [made("p1", "published", ["tiktok"])] })
+    // Progress reads those posts whatever the latest word was.
+    expect(progressOf([{ ...refused("clip-1"), posts: [made("p1", "published", ["tiktok"])] }], new Map()).map((post) => post.postId)).toEqual(["p1"])
   })
 
   it("speaks a list the way a person does", () => {

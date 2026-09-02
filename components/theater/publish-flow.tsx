@@ -8,7 +8,7 @@ import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { ChannelToggle, ReclipIcon } from "./review-deck"
 import { PlatformLogo } from "@/components/platform-logos"
 import { useConnectPlatform } from "./connect-platform"
-import { retryPlans, usePublishProgress, type PostProgress, type PublishOutcome, type PublishPhase } from "./publish-progress"
+import { mergeOutcome, retryPlans, usePublishProgress, type PostProgress, type PublishOutcome, type PublishPhase } from "./publish-progress"
 
 export type { MadePost, PublishOutcome } from "./publish-progress"
 
@@ -208,8 +208,10 @@ function PostMark({ outcome, settled }: { outcome: "posting" | "posted" | "faile
  * holding the loading ring while the platforms have the clip, opens back
  * out saying Published (and stays, inactive) on their word, or Sent
  * (inactive) when that word is slow in coming, or Try again when something
- * was refused. The height never changes; only the width, and only for the
- * ring.
+ * was refused. The owner's call (2026-09-02): the button itself becomes
+ * the ring. Its footprint — the full-width, 52px box around it — is
+ * reserved and never changes, so nothing around it moves; only the pill
+ * inside draws in and out, and not at all under reduced motion.
  */
 function PublishButton({ phase, disabled, onClick }: { phase: PublishPhase; disabled: boolean; onClick: () => void }) {
   const ring = phase === "publishing"
@@ -223,6 +225,7 @@ function PublishButton({ phase, disabled, onClick }: { phase: PublishPhase; disa
         ? "bg-shprimary/80 text-primary-foreground"
         : "bg-shprimary text-primary-foreground"
   return (
+    <span className="flex h-[52px] w-full items-center justify-center" data-testid="publish-control">
     <motion.button
       layout
       type="button"
@@ -250,6 +253,7 @@ function PublishButton({ phase, disabled, onClick }: { phase: PublishPhase; disa
         </motion.span>
       </AnimatePresence>
     </motion.button>
+    </span>
   )
 }
 
@@ -354,8 +358,15 @@ export function WhereTo({
     if (plans.length === 0) return
     const again: PublishOutcome[] = []
     for (const plan of plans) again.push(...(await onPublish(plan.accountIds, caption.trim(), [plan.clipId])))
+    // Folded into what came before: a channel that is up stays up beside
+    // the retry's word (Devin's and Codex's finding on #77).
     const byClip = new Map(again.map((outcome) => [outcome.clipId, outcome]))
-    setOutcomes(outcomes.map((outcome) => byClip.get(outcome.clipId) ?? outcome))
+    setOutcomes(
+      outcomes.map((outcome) => {
+        const fresh = byClip.get(outcome.clipId)
+        return fresh ? mergeOutcome(outcome, fresh, progress.posts) : outcome
+      }),
+    )
   }
 
   /** The post that carries this account's channel, once a publish is running. */
@@ -866,10 +877,16 @@ export async function publishEach(
           ? "rendering"
           : "submitted"
       // The posts the server named: what the Publish control reads its
-      // truth from afterwards. A schedule makes none yet.
+      // truth from afterwards. A schedule makes none yet. A server that
+      // names only the singular `post` (the shape kept for older clients)
+      // has still made one — recorded, or the control would read the
+      // accepted clip as never sent and let it go twice (Devin's and
+      // Codex's finding on #77).
+      const named: Array<{ id: string; status: string; targets?: Array<{ platform: string }> }> =
+        result.posts ?? (result.post ? [{ ...result.post, targets: [] }] : [])
       const posts = result.scheduled
         ? []
-        : (result.posts ?? []).map((post) => ({ id: post.id, status: post.status, platforms: (post.targets ?? []).map((target) => target.platform) }))
+        : named.map((post) => ({ id: post.id, status: post.status, platforms: (post.targets ?? []).map((target) => target.platform) }))
       outcomes.push({ clipId: clip.id, title: clip.title, ok: true, detail, posts })
     } catch (cause) {
       outcomes.push({

@@ -657,8 +657,9 @@ export const api = {
 
   // --- Social publishing (Zernio) ------------------------------------------
 
-  async listSocialAccounts(): Promise<SocialAccountsPage> {
-    return request("/api/social-accounts")
+  /** `timeoutMs` gives up a slow ask (the publish screens ask on a clock); 0 waits. */
+  async listSocialAccounts(timeoutMs = 0): Promise<SocialAccountsPage> {
+    return request("/api/social-accounts", {}, true, timeoutMs)
   },
 
   /** Returns the hosted-OAuth URL for the platform; the caller redirects to it. */
@@ -699,8 +700,8 @@ export const api = {
    * control once it is pressed. Ask until every post the publish made is
    * 'posted' or 'failed'; 'posting' is still on its way.
    */
-  async listClipPosts(clipId: string): Promise<{ posts: ClipPost[] }> {
-    return request(`/api/clips/${encodeURIComponent(clipId)}/posts`)
+  async listClipPosts(clipId: string, timeoutMs = 0): Promise<{ posts: ClipPost[] }> {
+    return request(`/api/clips/${encodeURIComponent(clipId)}/posts`, {}, true, timeoutMs)
   },
 
   /**

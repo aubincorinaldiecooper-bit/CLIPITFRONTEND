@@ -114,6 +114,33 @@ describe('PublishDialog', () => {
     expect(screen.getByTestId('publish-words').textContent).toMatch(/sent to tiktok — waiting for tiktok to confirm/i)
   })
 
+  it('settles for Sent on the clock even while the server holds a request open, and never asks twice at once', async () => {
+    // Devin's and Codex's finding on #77: the deadline sat behind the
+    // request, and the interval started another ask every two seconds.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    api.listClipPosts.mockReturnValue(new Promise(() => undefined))
+    render(<PublishDialog clip={clip} onClose={vi.fn()} />)
+    await screen.findByText(/@clipit/)
+    await userEvent.click(publishButton())
+    await waitFor(() => expect(publishButton().getAttribute('data-phase')).toBe('publishing'))
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000) })
+    expect(api.listClipPosts).toHaveBeenCalledTimes(1)
+
+    vi.setSystemTime(Date.now() + 91_000)
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
+    await waitFor(() => expect(publishButton().getAttribute('data-phase')).toBe('sent'))
+  })
+
+  it('a server that names only the singular post still holds the control: the post is asked about, and Published on its word', async () => {
+    api.publishClip.mockResolvedValueOnce({ post: { id: 'p1', clipId: 'c-a', status: 'submitted' } })
+    render(<PublishDialog clip={clip} onClose={vi.fn()} />)
+    await screen.findByText(/@clipit/)
+    await userEvent.click(publishButton())
+    await waitFor(() => expect(publishButton().getAttribute('data-phase')).toBe('published'))
+    expect(api.listClipPosts).toHaveBeenCalledWith('c-a', expect.any(Number))
+  })
+
   it('a refusal is said in place and Publish becomes Try again', async () => {
     api.publishClip.mockRejectedValueOnce(new ApiError(409, 'in_flight', 'This clip is already on its way'))
     render(<PublishDialog clip={clip} onClose={vi.fn()} />)

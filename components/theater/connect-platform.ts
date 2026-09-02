@@ -19,6 +19,8 @@ import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 
 export const CONNECT_MESSAGE = "clipit:connect"
 export const CONNECT_POLL_MS = 2500
+/** How long one ask of the account list may take before it is given up and asked again. */
+export const CONNECT_ASK_TIMEOUT_MS = 8_000
 export const CONNECT_WINDOW_NAME = "clipit-connect"
 export const CONNECT_WINDOW_FEATURES = "popup=yes,width=560,height=760"
 
@@ -68,6 +70,8 @@ export function useConnectPlatform(input: {
   const before = useRef<Set<string>>(new Set())
   const onConnected = useRef(input.onConnected)
   onConnected.current = input.onConnected
+  /** An ask of the list in flight; the next tick does not join it. */
+  const looking = useRef(false)
 
   const stopAsking = useCallback(() => {
     if (timer.current) clearInterval(timer.current)
@@ -98,9 +102,10 @@ export function useConnectPlatform(input: {
   /** Ask the list; finish when it has a new account for the platform, or when the window is gone. */
   const look = useCallback(async () => {
     const platform = attempt.current
-    if (!platform) return
+    if (!platform || looking.current) return
+    looking.current = true
     try {
-      const page = await api.listSocialAccounts()
+      const page = await api.listSocialAccounts(CONNECT_ASK_TIMEOUT_MS)
       if (attempt.current !== platform) return
       const fresh = page.accounts.find(
         (account) => account.platform === platform && account.status === "connected" && !before.current.has(account.id),
@@ -108,7 +113,9 @@ export function useConnectPlatform(input: {
       if (fresh) finish({ account: fresh, page }, null)
       else if (popup.current?.closed) finish(null, connectErrorWords("closed"))
     } catch {
-      // The list did not answer; the next tick asks again.
+      // The list did not answer in time; the next tick asks again.
+    } finally {
+      looking.current = false
     }
   }, [finish])
 
@@ -125,6 +132,16 @@ export function useConnectPlatform(input: {
     return () => {
       window.removeEventListener("message", onMessage)
       stopAsking()
+      // Leaving the screen ends the attempt (Codex's finding on #77): a
+      // sign-in still being addressed must not open once the person has
+      // backed out, and a refused window must not take the tab instead.
+      attempt.current = null
+      try {
+        popup.current?.close()
+      } catch {
+        // A window already gone.
+      }
+      popup.current = null
     }
   }, [finish, look, stopAsking])
 
@@ -144,11 +161,15 @@ export function useConnectPlatform(input: {
       } catch {
         win = null
       }
+      // Held from the first moment, so a screen left before the address
+      // arrives can close it.
+      popup.current = win
 
       let url: string
       try {
         ;({ url } = await api.getConnectUrl(platform))
       } catch (cause) {
+        if (attempt.current !== platform) return
         try {
           win?.close()
         } catch {
@@ -157,7 +178,15 @@ export function useConnectPlatform(input: {
         finish(null, cause instanceof Error ? cause.message : null)
         return
       }
-      if (attempt.current !== platform) return
+      if (attempt.current !== platform) {
+        // The screen was left while the address was on its way.
+        try {
+          win?.close()
+        } catch {
+          // Nothing to close.
+        }
+        return
+      }
 
       if (win) {
         try {
