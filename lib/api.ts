@@ -734,15 +734,21 @@ export const api = {
 
   /**
    * A guest's single-use claim on its work, to ride in a sign-in link's
-   * return address (lib/sign-in-return.ts). Null when there is nothing to
+   * return address (lib/sign-in-return.ts). Bound to the address the link
+   * goes to: only that sign-in can spend it. Null when there is nothing to
    * claim — no guest session in this tab, or signed in already — and null
    * when the API cannot be reached: a sign-in without it still works in
    * the tab that asked, which still holds the token itself.
    */
-  async requestHandoff(): Promise<string | null> {
+  async requestHandoff(email: string): Promise<string | null> {
     if (readKind() !== "guest" || !readToken()) return null
     try {
-      const body = await request<{ handoff: string | null }>("/api/sessions/handoff", { method: "POST", body: "{}" }, true, 8_000)
+      const body = await request<{ handoff: string | null }>(
+        "/api/sessions/handoff",
+        { method: "POST", body: JSON.stringify({ email }) },
+        true,
+        8_000,
+      )
       return typeof body.handoff === "string" && body.handoff !== "" ? body.handoff : null
     } catch {
       return null

@@ -8,15 +8,17 @@ import { api, HANDOFF_PARAM } from "./api"
  * tab that made it, on purpose (see lib/api.ts). So before the link is
  * sent, a guest asks the API for a hand-over — a single-use claim on that
  * work — and it rides in the return address. Whichever tab the link opens
- * in redeems it as part of signing in, and the video is theirs there.
+ * in redeems it as part of signing in, and the video is theirs there. The
+ * claim answers only the address the link goes to, so a forwarded link
+ * signs its reader in as themselves and carries nothing.
  *
  * Best-effort by design: no hand-over (signed in already, or the API could
  * not be reached) means the plain address, and the sign-in still works —
  * the same-tab path still carries the token itself.
  */
-export async function returnAddress(base?: string): Promise<string> {
+export async function returnAddress(email: string, base?: string): Promise<string> {
   const address = base ?? `${window.location.pathname}${window.location.search}`
-  const handoff = await api.requestHandoff()
+  const handoff = await api.requestHandoff(email)
   if (!handoff) return address
   const url = new URL(address, window.location.origin)
   url.searchParams.set(HANDOFF_PARAM, handoff)

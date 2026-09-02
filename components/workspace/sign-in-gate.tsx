@@ -148,7 +148,7 @@ function GateDialog({
     // link brings it along wherever it is opened (lib/sign-in-return.ts).
     const { error } = await authClient.signIn.magicLink({
       email: address,
-      callbackURL: await returnAddress(),
+      callbackURL: await returnAddress(address),
     })
     setState(error ? "failed" : "sent")
   }
