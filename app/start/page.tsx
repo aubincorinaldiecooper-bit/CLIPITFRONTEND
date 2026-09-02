@@ -16,9 +16,33 @@ import { ReviewStep } from "@/components/start/review-step"
 import { PublishDialog } from "@/components/start/publish-dialog"
 import type { PublishableClip } from "@/components/theater/publish-flow"
 import type { Exchange, StartStep } from "@/components/start/types"
+import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
+import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
+import { readIntent } from "@/components/sign-in-gate"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
+
+/**
+ * The errand a sign-in was asked for, read on return once the person is
+ * signed in. Rendered inside the shell, where the gate lives; the page
+ * itself renders the shell and so cannot use the gate's hooks. The errand
+ * is only READ here: it leaves the address when the page carries it out,
+ * so a return whose loading failed keeps it for a reload to try again
+ * (Devin's finding on #82).
+ */
+function ResumeAfterSignIn({ onPublish }: { onPublish: (clipId: string) => void }) {
+  const { isSignedIn } = useWorkspaceSignInGate()
+  const handed = useRef(false)
+  useEffect(() => {
+    if (!isSignedIn || handed.current) return
+    const intent = readIntent(window.location.search)
+    if (intent?.action !== "publish") return
+    handed.current = true
+    onPublish(intent.clipId)
+  }, [isSignedIn, onPublish])
+  return null
+}
 
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
@@ -32,6 +56,8 @@ export default function StartPage() {
   /** A Publish press whose keep is still being written: the feed waits, and a second press is refused. */
   const [publishPending, setPublishPending] = useState(false)
   const publishInFlight = useRef(false)
+  /** A clip a sign-in was asked for; published once the conversation it belongs to is back. */
+  const [resumePublish, setResumePublish] = useState<string | null>(null)
 
   /** Verdicts the server has not confirmed yet. See `reconcileVerdicts`. */
   const pendingVerdicts = useRef(
@@ -85,10 +111,9 @@ export default function StartPage() {
     if (!handed) return
     const ids = handed.split(",").filter(Boolean)
     if (ids.length === 0) return
-    // The address is consumed: reloading must not re-open a stale batch.
-    const url = new URL(window.location.href)
-    url.searchParams.delete("videos")
-    window.history.replaceState(window.history.state, "", url.toString())
+    // The address is consumed once the video has opened, in openFromLibrary
+    // — not here: a return whose loading fails must keep it, so a reload can
+    // try again (Devin's finding on #82).
     setUploads(
       ids.map((videoId, index) => ({
         id: `handed-${index}-${videoId}`,
@@ -508,18 +533,51 @@ export default function StartPage() {
       setBusy(true)
       try {
         const { video: opened } = await api.getVideo(videoIdToOpen)
-        setExchanges([])
+        // The conversation comes back with the video (the owner's call,
+        // 2026-09-02): a sign-in that returned here, a reload, a video
+        // opened from history — the review is where it was left.
+        const restored = await restoreConversation(videoIdToOpen, api, reconcileVerdicts)
+        setExchanges(restored)
         setPromptDraft("")
         setVideo(opened)
-        setStep("upload")
+        setStep(hasReviewable(restored) ? "review" : "upload")
+        // Opened, with its conversation: the address no longer needs to say
+        // so. A reload from here must not re-open a stale batch.
+        consumeSearchParams(["videos"])
       } catch (cause) {
         fail(cause)
       } finally {
         setBusy(false)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [fail],
   )
+
+  /**
+   * Before a sign-in asked for from the publish screens: the video rides on
+   * the address, so the magic link brings the person back to it — with its
+   * conversation — rather than to a fresh start page. The errand itself
+   * (publish this clip) is parked by the gate.
+   */
+  const parkVideoForSignIn = useCallback(() => {
+    if (!video) return
+    const url = new URL(window.location.href)
+    url.searchParams.set("videos", video.id)
+    window.history.replaceState(window.history.state, "", url.toString())
+  }, [video])
+
+  // The parked publish, carried out once its moment is back on screen — and
+  // only then taken out of the address, so a reload before this point tries
+  // the return again, and one after it does not publish twice.
+  useEffect(() => {
+    if (!resumePublish || busy) return
+    const found = matchForClip(exchanges, resumePublish)
+    if (!found) return
+    setResumePublish(null)
+    consumeSearchParams(["then"])
+    void publishMoment(found.requestId, found.matchId)
+  }, [resumePublish, busy, exchanges, publishMoment])
 
   useEffect(() => {
     if (step !== "watch") return
@@ -581,7 +639,8 @@ export default function StartPage() {
           />
         )}
 
-        <PublishDialog clip={publishing} onClose={() => setPublishing(null)} />
+        <PublishDialog clip={publishing} onClose={() => setPublishing(null)} onSignIn={parkVideoForSignIn} />
+        <ResumeAfterSignIn onPublish={setResumePublish} />
 
         {error && (
           <motion.p

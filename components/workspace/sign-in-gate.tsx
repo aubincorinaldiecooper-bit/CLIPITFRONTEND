@@ -41,6 +41,13 @@ type GateValue = {
   requireSignIn: (intent: SignInIntent, action: () => void) => boolean
   /** Open the dialog with no errand — "this page, signed in" is the errand. */
   askToSignIn: () => void
+  /**
+   * Open the dialog with an errand, whatever the session is doing. For a
+   * screen the server has already told is a guest's: requireSignIn runs
+   * its action instead while the session is still loading, which here
+   * would close the screen and open nothing (Devin's finding on #82).
+   */
+  askToSignInFor: (intent: SignInIntent) => void
   isSignedIn: boolean
 }
 
@@ -87,9 +94,10 @@ export function WorkspaceSignInGate({ children }: { children: React.ReactNode })
   )
 
   const askToSignIn = useCallback(() => setAsking("plain"), [])
+  const askToSignInFor = useCallback((intent: SignInIntent) => setAsking(intent), [])
 
   return (
-    <WorkspaceGateContext.Provider value={{ requireSignIn, askToSignIn, isSignedIn }}>
+    <WorkspaceGateContext.Provider value={{ requireSignIn, askToSignIn, askToSignInFor, isSignedIn }}>
       {children}
       <GateDialog intent={asking} onClose={() => setAsking(null)} />
     </WorkspaceGateContext.Provider>

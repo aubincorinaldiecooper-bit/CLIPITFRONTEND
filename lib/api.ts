@@ -560,6 +560,15 @@ export const api = {
     return request("/api/videos")
   },
 
+  /**
+   * Every question asked of a video and what came of it, oldest first — the
+   * conversation, restored from the server rather than remembered by the
+   * browser. Each request's clips come from getClipRequest.
+   */
+  async listClipRequests(videoId: string): Promise<{ clipRequests: ClipRequest[] }> {
+    return request(`/api/videos/${encodeURIComponent(videoId)}/clip-requests`)
+  },
+
   async createClipRequest(videoId: string, instruction: string): Promise<{ clipRequest: ClipRequest }> {
     return request(`/api/videos/${videoId}/clip-requests`, {
       method: "POST",
