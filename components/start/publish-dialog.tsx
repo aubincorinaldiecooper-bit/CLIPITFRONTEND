@@ -24,7 +24,16 @@ import {
  * dialog is Astryx's, as the repository asks; the screens bring their own
  * heading and way back, so it has no header of its own.
  */
-export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null; onClose: () => void }) {
+export function PublishDialog({
+  clip,
+  onClose,
+  onSignIn,
+}: {
+  clip: PublishableClip | null
+  onClose: () => void
+  /** Before a sign-in is asked for: the page parks what the return should reopen. */
+  onSignIn?: () => void
+}) {
   const [stage, setStage] = useState<"where" | "when" | "done">("where")
   const [busy, setBusy] = useState(false)
   const [choice, setChoice] = useState<{ accountIds: string[]; caption: string } | null>(null)
@@ -113,6 +122,7 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
                     clips={clips}
                     busy={busy}
                     onBack={close}
+                    onSignIn={onSignIn}
                     onPublish={publish}
                     onSchedule={(accountIds, caption) => {
                       setChoice({ accountIds, caption })

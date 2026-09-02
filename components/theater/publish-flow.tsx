@@ -282,12 +282,15 @@ function rowWords(post: PostProgress | undefined, label: string, phase: PublishP
 export function WhereTo({
   clips,
   onBack,
+  onSignIn,
   onPublish,
   onSchedule,
   busy,
 }: {
   clips: PublishableClip[]
   onBack: () => void
+  /** Before a sign-in is asked for, so the page can park what the return should reopen. */
+  onSignIn?: () => void
   /** Post now: publish the ready clips (or the named ones) to these accounts, and answer the truth per clip. */
   onPublish: (accountIds: string[], caption: string, clipIds?: string[]) => Promise<PublishOutcome[]>
   onSchedule: (accountIds: string[], caption: string) => void
@@ -439,7 +442,12 @@ export function WhereTo({
               width="100%"
               onClick={() => {
                 onBack()
-                gate.askToSignIn()
+                onSignIn?.()
+                // The errand rides on the address with the video: the magic
+                // link brings the person back to this clip's publish screen.
+                const clipId = ready[0]?.id
+                if (clipId) gate.requireSignIn({ action: "publish", clipId }, () => undefined)
+                else gate.askToSignIn()
               }}
             />
           )}

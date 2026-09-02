@@ -16,9 +16,26 @@ import { ReviewStep } from "@/components/start/review-step"
 import { PublishDialog } from "@/components/start/publish-dialog"
 import type { PublishableClip } from "@/components/theater/publish-flow"
 import type { Exchange, StartStep } from "@/components/start/types"
+import { hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
+import { useWorkspaceResumeIntent } from "@/components/workspace/sign-in-gate"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
+
+/**
+ * The errand a sign-in was asked for, resumed on return. Rendered inside the
+ * shell, where the gate lives; the page itself renders the shell and so
+ * cannot use the gate's hooks.
+ */
+function ResumeAfterSignIn({ onPublish }: { onPublish: (clipId: string) => void }) {
+  useWorkspaceResumeIntent(
+    (intent) => intent.action === "publish",
+    (intent) => {
+      if (intent.action === "publish") onPublish(intent.clipId)
+    },
+  )
+  return null
+}
 
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
@@ -32,6 +49,8 @@ export default function StartPage() {
   /** A Publish press whose keep is still being written: the feed waits, and a second press is refused. */
   const [publishPending, setPublishPending] = useState(false)
   const publishInFlight = useRef(false)
+  /** A clip a sign-in was asked for; published once the conversation it belongs to is back. */
+  const [resumePublish, setResumePublish] = useState<string | null>(null)
 
   /** Verdicts the server has not confirmed yet. See `reconcileVerdicts`. */
   const pendingVerdicts = useRef(
@@ -508,18 +527,45 @@ export default function StartPage() {
       setBusy(true)
       try {
         const { video: opened } = await api.getVideo(videoIdToOpen)
-        setExchanges([])
+        // The conversation comes back with the video (the owner's call,
+        // 2026-09-02): a sign-in that returned here, a reload, a video
+        // opened from history — the review is where it was left.
+        const restored = await restoreConversation(videoIdToOpen, api, reconcileVerdicts)
+        setExchanges(restored)
         setPromptDraft("")
         setVideo(opened)
-        setStep("upload")
+        setStep(hasReviewable(restored) ? "review" : "upload")
       } catch (cause) {
         fail(cause)
       } finally {
         setBusy(false)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [fail],
   )
+
+  /**
+   * Before a sign-in asked for from the publish screens: the video rides on
+   * the address, so the magic link brings the person back to it — with its
+   * conversation — rather than to a fresh start page. The errand itself
+   * (publish this clip) is parked by the gate.
+   */
+  const parkVideoForSignIn = useCallback(() => {
+    if (!video) return
+    const url = new URL(window.location.href)
+    url.searchParams.set("videos", video.id)
+    window.history.replaceState(window.history.state, "", url.toString())
+  }, [video])
+
+  // The parked publish, carried out once its moment is back on screen.
+  useEffect(() => {
+    if (!resumePublish || busy) return
+    const found = matchForClip(exchanges, resumePublish)
+    if (!found) return
+    setResumePublish(null)
+    void publishMoment(found.requestId, found.matchId)
+  }, [resumePublish, busy, exchanges, publishMoment])
 
   useEffect(() => {
     if (step !== "watch") return
@@ -581,7 +627,8 @@ export default function StartPage() {
           />
         )}
 
-        <PublishDialog clip={publishing} onClose={() => setPublishing(null)} />
+        <PublishDialog clip={publishing} onClose={() => setPublishing(null)} onSignIn={parkVideoForSignIn} />
+        <ResumeAfterSignIn onPublish={setResumePublish} />
 
         {error && (
           <motion.p
