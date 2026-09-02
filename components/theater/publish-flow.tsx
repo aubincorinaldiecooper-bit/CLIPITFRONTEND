@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { Spinner } from "@astryxdesign/core/Spinner"
+import { Button } from "@astryxdesign/core/Button"
+import { Stack } from "@astryxdesign/core/Stack"
 import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { ChannelToggle, ReclipIcon } from "./review-deck"
 import { PlatformLogo } from "@/components/platform-logos"
 import { useConnectPlatform } from "./connect-platform"
-import { useOptionalWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
+import { useAuthConfigured, useOptionalWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { mergeOutcome, retryPlans, usePublishProgress, type PostProgress, type PublishOutcome, type PublishPhase } from "./publish-progress"
 
 export type { MadePost, PublishOutcome } from "./publish-progress"
@@ -299,6 +301,8 @@ export function WhereTo({
   /** The platform whose row is wearing its "connected" mark. */
   const [marked, setMarked] = useState<string | null>(null)
   const gate = useOptionalWorkspaceSignInGate()
+  /** Whether this deployment can sign anyone in; the button waits on it, the words do not. */
+  const authConfigured = useAuthConfigured()
 
   useEffect(() => {
     let cancelled = false
@@ -416,22 +420,30 @@ export function WhereTo({
         <p className="py-6 text-sm text-muted-foreground">Publishing isn&apos;t configured on this deployment.</p>
       ) : page.signInRequired ? (
         // A sentence with no way in was a dead end (2026-09-02): the gate's
-        // own dialog is the way. Sign-in returns to a fresh start page,
-        // which the words say plainly.
-        <div className="py-4">
+        // own dialog is the way — opened AFTER this dialog has closed. A
+        // native modal owns the browser's top layer, and a dialog opened
+        // beside it sits behind it, inert (Devin's and Codex's finding on
+        // #79). Where sign-in is not set up there is no way in, and the
+        // words say so rather than offer a button that can only fail. This
+        // block is not one of the owner's drawn screens, so it is Astryx's.
+        <Stack direction="vertical" gap={4} paddingBlock={4}>
           <p className="text-sm text-muted-foreground">
-            Sign in to publish — your connected accounts live with your account, not this tab.
+            {authConfigured === false
+              ? "Publishing needs an account, and sign-in isn't set up on this deployment."
+              : "Sign in to publish — your connected accounts live with your account, not this tab."}
           </p>
-          {gate && (
-            <button
-              type="button"
-              onClick={gate.askToSignIn}
-              className="mt-5 w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3.5 text-[15px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
-            >
-              Sign in
-            </button>
+          {gate && authConfigured === true && (
+            <Button
+              label="Sign in"
+              variant="primary"
+              width="100%"
+              onClick={() => {
+                onBack()
+                gate.askToSignIn()
+              }}
+            />
           )}
-        </div>
+        </Stack>
       ) : (
         <>
           {/* The channels, as the owner draws them: each platform's own

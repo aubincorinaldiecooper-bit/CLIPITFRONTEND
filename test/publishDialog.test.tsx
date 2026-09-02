@@ -50,10 +50,21 @@ beforeEach(() => {
   api.publishClip.mockResolvedValue({ posts: [{ id: 'p1', status: 'submitted', aspect: '9:16', targets: [{ platform: 'tiktok' }] }] })
   api.listClipPosts.mockResolvedValue({ posts: [post('posted')] })
 })
+/** What /api/auth-configured answers — the hook fetches it itself. */
+const deploymentSignsIn = (configured: boolean) => {
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(async () => ({ json: async () => ({ configured }) })),
+  })
+}
+const realFetch = globalThis.fetch
+
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.clearAllMocks()
+  Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: realFetch })
 })
 
 describe('PublishDialog', () => {
@@ -185,22 +196,43 @@ describe('PublishDialog', () => {
     expect(popup.close).toHaveBeenCalled()
   })
 
-  it('a guest is offered the way in — Sign in, through the gate — instead of a sentence with no way out', async () => {
+  it('a guest is offered the way in — Sign in, through the gate, after this dialog has closed', async () => {
     // 2026-09-02: the owner, signed out, pressed Publish and met "Sign in
-    // to publish" with nothing to press.
+    // to publish" with nothing to press. And Devin's and Codex's finding
+    // on #79: a native modal owns the top layer, so the gate's dialog must
+    // open after this one has closed, or it sits behind it, inert.
+    deploymentSignsIn(true)
     api.listSocialAccounts.mockResolvedValue({ configured: true, signInRequired: true, accounts: [] })
     const askToSignIn = vi.fn()
+    const onClose = vi.fn()
     render(
       <WorkspaceGateProvider value={{ requireSignIn: vi.fn(() => false), askToSignIn, isSignedIn: false }}>
-        <PublishDialog clip={clip} onClose={vi.fn()} />
+        <PublishDialog clip={clip} onClose={onClose} />
       </WorkspaceGateProvider>,
     )
     await screen.findByText(/sign in to publish/i)
-    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /^sign in$/i }))
+    expect(onClose).toHaveBeenCalled()
     expect(askToSignIn).toHaveBeenCalled()
+    expect(onClose.mock.invocationCallOrder[0]!).toBeLessThan(askToSignIn.mock.invocationCallOrder[0]!)
+  })
+
+  it('offers no Sign in where this deployment cannot sign anyone in, and says so', async () => {
+    // Codex's finding on #79: a guest-only deployment still has a gate,
+    // and the button would open a form whose send can only fail.
+    deploymentSignsIn(false)
+    api.listSocialAccounts.mockResolvedValue({ configured: true, signInRequired: true, accounts: [] })
+    render(
+      <WorkspaceGateProvider value={{ requireSignIn: vi.fn(() => false), askToSignIn: vi.fn(), isSignedIn: false }}>
+        <PublishDialog clip={clip} onClose={vi.fn()} />
+      </WorkspaceGateProvider>,
+    )
+    await screen.findByText(/sign-in isn't set up on this deployment/i)
+    expect(screen.queryByRole('button', { name: /^sign in$/i })).toBeNull()
   })
 
   it('says why a guest cannot publish even where there is no gate to open', async () => {
+    deploymentSignsIn(true)
     api.listSocialAccounts.mockResolvedValue({ configured: true, signInRequired: true, accounts: [] })
     render(<PublishDialog clip={clip} onClose={vi.fn()} />)
     await screen.findByText(/sign in to publish/i)
