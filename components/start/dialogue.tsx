@@ -24,26 +24,41 @@ import type { Exchange } from "./types"
  * than letting "trim the slow intro" look obeyed.
  */
 
-/** A word the dialogue adds itself — a Re-clip taken, or refused. Placed after the question it followed. */
+/**
+ * A word the dialogue adds itself — a Re-clip taken, or refused. Placed
+ * after the question it followed. A note about a re-cut that started
+ * carries the moment's id instead of fixed words: what it says follows the
+ * moment — underway, failed with the reason, or done — so the thread never
+ * claims work is happening after it has finished.
+ */
 interface Note {
   id: string
   afterRequestId: string | null
   role: "user" | "model"
   text: string
+  /** Set on a note whose words follow a moment's re-cut. */
+  reclipOf?: string
 }
 
-const REWORK_WORDS = /\b(re-?clip|re-?cut|recut|redo|rework|try (that|it|this) again)\b/i
+/** The product's own verbs for this: on their own they mean the moment on screen. */
+const RECLIP_VERBS = /\b(re-?clip|re-?cut|recut)\b/i
+const REWORK_WORDS = /\b(redo|rework|try (that|it|this) again)\b/i
 const EDIT_WORDS = /\b(trim|shorten|tighten|tighter|punchier|edit|zoom|crop|slower|faster|change|cut|caption|captions|remove)\b/i
 const THIS_ONE = /\b(this|it|that|this one|the clip|the moment|the cut)\b/i
+/** A message that opens like a question about the footage is one, whatever verbs follow. */
+const SEARCH_OPENERS = /^\s*(find|show|search|look for|clip every|every time|where|when)\b/i
 
 /**
  * Whether a message is about the moment on screen rather than a search.
- * "cut every time the crowd cheers" is a search; "tighten this one" and
- * "re-cut it" are edits. An edit word alone is not enough — it must point
- * at the clip — so a search that happens to say "cut" still searches.
+ * "cut every time the crowd cheers" and "find when they redo the kitchen"
+ * are searches; "tighten this one", "redo it" and "re-cut" are edits. An
+ * edit word alone is not enough — it must point at the clip, or be the
+ * product's own word for a re-cut — because an edit spends one of the
+ * moment's few re-cuts, and a search sent there never happens.
  */
 export function isEditRequest(text: string): boolean {
-  return REWORK_WORDS.test(text) || (EDIT_WORDS.test(text) && THIS_ONE.test(text))
+  if (SEARCH_OPENERS.test(text) && !RECLIP_VERBS.test(text)) return false
+  return RECLIP_VERBS.test(text) || ((REWORK_WORDS.test(text) || EDIT_WORDS.test(text)) && THIS_ONE.test(text))
 }
 
 function DialogueIllustration() {
@@ -202,6 +217,8 @@ export function AskBar({
 export interface DialogueProps {
   exchanges: Exchange[]
   video: Video | null
+  /** Every moment in the feed, so a note about a re-cut can say where it got to. */
+  moments: FeedMoment[]
   /** The moment on screen — what an edit refers to. */
   active: FeedMoment | undefined
   /** A search is still running; another cannot start until it finishes. */
@@ -212,16 +229,31 @@ export interface DialogueProps {
   onReclip: (moment: FeedMoment) => boolean | void | Promise<boolean | void>
 }
 
-export function Dialogue({ exchanges, video, active, searching, onAsk, onReclip }: DialogueProps) {
+/** What a re-cut note says right now, from the moment itself. */
+function reclipNoteText(moments: FeedMoment[], matchId: string, fallback: string): string {
+  const moment = moments.find((candidate) => candidate.match.id === matchId)
+  if (!moment) return fallback
+  const title = moment.match.description || "this moment"
+  if (moment.reworking) {
+    return `Re-cutting "${title}". I can't follow written edit instructions yet, so this is the same moment cut again from the footage around it — not the change you described.`
+  }
+  if (moment.match.reclipStatus === "failed") {
+    return `The re-cut of "${title}" didn't work: ${moment.match.reclipError ?? "nothing changed."}`
+  }
+  return `Re-cut "${title}" — same moment, new cut. It's on the card now.`
+}
+
+export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip }: DialogueProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const threadRef = useRef<HTMLDivElement>(null)
   const readThroughSeconds = video?.index?.readThroughSeconds
 
-  const addNote = (role: Note["role"], text: string) =>
+  const addNote = (role: Note["role"], text: string, reclipOf?: string) =>
     setNotes((previous) => [
       ...previous,
-      { id: `note-${previous.length}-${Date.now()}`, afterRequestId: exchanges.at(-1)?.request.id ?? null, role, text },
+      { id: `note-${previous.length}-${Date.now()}`, afterRequestId: exchanges.at(-1)?.request.id ?? null, role, text, ...(reclipOf ? { reclipOf } : {}) },
     ])
+  const noteText = (note: Note) => (note.reclipOf ? reclipNoteText(moments, note.reclipOf, note.text) : note.text)
 
   // Nothing said yet: no follow-up question, no note, and a first answer
   // with nothing to admit. That is the empty state — the cards speak.
@@ -250,14 +282,14 @@ export function Dialogue({ exchanges, video, active, searching, onAsk, onReclip 
         return true
       }
       // The note follows the result: a re-cut the server refused must not
-      // sit in the thread as one that is underway.
+      // sit in the thread as one that is underway — and one that started
+      // keeps following the moment, to "done" or to "didn't work".
       const started = await onReclip(active)
-      addNote(
-        "model",
-        started === false
-          ? `"${title}" could not be re-cut just now — nothing changed. The message above says why.`
-          : `Re-cutting "${title}". I can't follow written edit instructions yet, so this is the same moment cut again from the footage around it — not the change you described.`,
-      )
+      if (started === false) {
+        addNote("model", `"${title}" could not be re-cut just now — nothing changed. The message above says why.`)
+      } else {
+        addNote("model", `Re-cut requested for "${title}".`, active.match.id)
+      }
       return true
     }
     return onAsk(text)
@@ -271,14 +303,14 @@ export function Dialogue({ exchanges, video, active, searching, onAsk, onReclip 
     <div className="flex min-h-80 min-w-64 flex-1 flex-col" data-testid="dialogue">
       <div ref={threadRef} className="flex flex-1 flex-col gap-4 overflow-y-auto">
         {entryCount === 0 && <DialogueEmpty />}
-        {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={note.text} />))}
+        {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
         {exchanges.map((exchange, index) => (
           <div key={exchange.request.id} className="flex flex-col gap-4">
             {/* The first question was asked on the upload step; only its caveats belong here. */}
             {index > 0 && <UserLine text={exchange.request.instruction} />}
             <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} first={index === 0} />
             {notesAfter(exchange.request.id).map((note) =>
-              note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={note.text} />,
+              note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
             )}
           </div>
         ))}

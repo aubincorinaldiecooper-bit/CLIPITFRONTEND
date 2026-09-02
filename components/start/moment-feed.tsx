@@ -371,25 +371,33 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
     if (canGoBack && prev) onUndoSkip(prev)
   }, [canGoBack, prev, onUndoSkip])
 
+  /**
+   * One decision per beat. A flick of the wheel is many events and a held
+   * key repeats; either could keep or skip several moments before the
+   * person let go — and a keep is final. Every decision passes through here.
+   */
+  const oncePerBeat = useCallback((action: () => void) => {
+    const now = Date.now()
+    if (now - lastNavigation.current < NAVIGATION_COOLDOWN_MS) return
+    lastNavigation.current = now
+    action()
+  }, [])
+
   /** Down is the next moment (skipping this one); up is the last skip, taken back. */
   const navigate = useCallback(
-    (direction: 1 | -1) => {
-      const now = Date.now()
-      if (now - lastNavigation.current < NAVIGATION_COOLDOWN_MS) return
-      lastNavigation.current = now
-      if (direction > 0) skip()
-      else back()
-    },
-    [skip, back],
+    (direction: 1 | -1) => oncePerBeat(direction > 0 ? skip : back),
+    [oncePerBeat, skip, back],
   )
+  const keepOnce = useCallback(() => oncePerBeat(keep), [oncePerBeat, keep])
 
   // The keyboard: → keep, ← or ↓ skip, ↑ (or Backspace, or u) back — unless
-  // the person is typing somewhere.
+  // the person is typing somewhere. A held key is one press.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return
-      if (event.key === "ArrowRight") keep()
+      if (event.repeat) return
+      if (event.key === "ArrowRight") keepOnce()
       else if (event.key === "ArrowLeft" || event.key === "ArrowDown") navigate(1)
       else if (event.key === "ArrowUp" || event.key === "Backspace" || event.key === "u") navigate(-1)
       else return
@@ -397,7 +405,7 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [keep, navigate])
+  }, [keepOnce, navigate])
 
   const onDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.y < -DRAG_THRESHOLD_PX) navigate(1)
@@ -564,7 +572,7 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
           </button>
           <button
             type="button"
-            onClick={keep}
+            onClick={keepOnce}
             disabled={!canDecide}
             aria-label="Keep — save this clip to your library"
             title="Keep"

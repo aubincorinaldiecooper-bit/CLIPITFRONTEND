@@ -48,6 +48,7 @@ export function ReviewStep({ exchanges, video, busy, searching, onKeep, onSkip, 
       <Dialogue
         exchanges={exchanges}
         video={video}
+        moments={moments}
         active={active}
         searching={searching}
         onAsk={onAsk}

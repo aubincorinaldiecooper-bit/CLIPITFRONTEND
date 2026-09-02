@@ -58,13 +58,22 @@ describe('isEditRequest — words about the moment on screen', () => {
     expect(isEditRequest('trim the slow intro off this one')).toBe(true)
     expect(isEditRequest('re-cut it')).toBe(true)
     expect(isEditRequest('reclip')).toBe(true)
+    expect(isEditRequest('redo this one')).toBe(true)
+  })
+  it('does not spend a re-cut on a search that happens to say "redo"', () => {
+    // Codex's finding on #75: "redo" alone routed a search to Re-clip.
+    expect(isEditRequest('find when they redo the kitchen')).toBe(false)
+    expect(isEditRequest('redo')).toBe(false)
+    expect(isEditRequest('show me where they rework the plan')).toBe(false)
+    expect(isEditRequest('find where they rework the dough')).toBe(false)
+    expect(isEditRequest('find this scene where they cut the cake')).toBe(false)
   })
 })
 
 describe('Dialogue', () => {
   it('opens on the empty state after a clean, complete first search: the first question was asked elsewhere, and the cards speak', () => {
     const exchanges: Exchange[] = [{ request: request({ matches: [match(), match({ id: 'm2' })] }), clips: [] }]
-    render(<Dialogue exchanges={exchanges} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.getByTestId('dialogue-empty')).toBeTruthy()
     expect(screen.queryByTestId('dialogue-user')).toBeNull()
     expect(screen.queryByTestId('dialogue-model')).toBeNull()
@@ -72,7 +81,7 @@ describe('Dialogue', () => {
 
   it('still admits what the first search could not do: nothing found', () => {
     const exchanges: Exchange[] = [{ request: request({ matches: [] }), clips: [] }]
-    render(<Dialogue exchanges={exchanges} video={video} active={undefined} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    render(<Dialogue exchanges={exchanges} video={video} moments={[]} active={undefined} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.queryByTestId('dialogue-empty')).toBeNull()
     expect(screen.getByTestId('dialogue-model').textContent).toContain("I couldn't find that")
   })
@@ -82,7 +91,7 @@ describe('Dialogue', () => {
       { request: request({ id: 'r0', instruction: 'the first ask', matches: [match({ id: 'm0' })] }), clips: [] },
       { request: request({ id: 'r1', matches: [match(), match({ id: 'm2' })] }), clips: [] },
     ]
-    render(<Dialogue exchanges={exchanges} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.getAllByTestId('dialogue-user')).toHaveLength(1)
     expect(screen.getByTestId('dialogue-user').textContent).toContain('find the harbour')
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Found 2 moments.')
@@ -90,7 +99,7 @@ describe('Dialogue', () => {
 
   it('keeps a question the server refused in the box, to edit and send again', async () => {
     const onAsk = vi.fn(async () => false)
-    render(<Dialogue exchanges={[]} video={video} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
+    render(<Dialogue exchanges={[]} video={video} moments={[]} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
     const box = screen.getByRole('textbox', { name: 'Ask for a moment' }) as HTMLInputElement
     await userEvent.type(box, 'find the goal{enter}')
     expect(onAsk).toHaveBeenCalledWith('find the goal')
@@ -103,7 +112,7 @@ describe('Dialogue', () => {
 
   it('says a re-cut did not start when the server refused it, instead of claiming it is underway', async () => {
     const onReclip = vi.fn(async () => false)
-    render(<Dialogue exchanges={[]} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={onReclip} />)
+    render(<Dialogue exchanges={[]} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={onReclip} />)
     await userEvent.type(screen.getByRole('textbox', { name: 'Ask for a moment' }), 're-cut it{enter}')
     expect(onReclip).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('dialogue-model').textContent).toContain('could not be re-cut just now')
@@ -112,7 +121,7 @@ describe('Dialogue', () => {
 
   it('says it is still looking while a search runs, and takes no second question', () => {
     const exchanges: Exchange[] = [{ request: request({ status: 'searching', progress: { stage: 'search', percent: 20, chunksTotal: 5, chunksCompleted: 1, chunksFailed: 0, message: 'Reading 1 of 5' } }), clips: [] }]
-    render(<Dialogue exchanges={exchanges} video={video} active={undefined} searching onAsk={vi.fn()} onReclip={vi.fn()} />)
+    render(<Dialogue exchanges={exchanges} video={video} moments={[]} active={undefined} searching onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Looking through your video')
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Reading 1 of 5')
     expect((screen.getByRole('textbox', { name: 'Ask for a moment' }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
@@ -128,7 +137,7 @@ describe('Dialogue', () => {
         clips: [],
       },
     ]
-    render(<Dialogue exchanges={exchanges} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
     // The first search's one caveat, without its question and without the answer line the cards already give.
     expect(screen.getAllByTestId('dialogue-model')).toHaveLength(1)
     expect(screen.getByTestId('dialogue-model').textContent).toContain("I couldn't look at 1m 30s of this video (1:00–2:30)")
@@ -136,7 +145,7 @@ describe('Dialogue', () => {
 
   it('a new question is a search', async () => {
     const onAsk = vi.fn()
-    render(<Dialogue exchanges={[]} video={video} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
+    render(<Dialogue exchanges={[]} video={video} moments={[]} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
     expect(screen.getByTestId('dialogue-empty')).toBeTruthy()
     await userEvent.type(screen.getByRole('textbox', { name: 'Ask for a moment' }), 'find the part where the car pulls out{enter}')
     expect(onAsk).toHaveBeenCalledWith('find the part where the car pulls out')
@@ -146,17 +155,24 @@ describe('Dialogue', () => {
     const onAsk = vi.fn()
     const onReclip = vi.fn()
     const active = moment()
-    render(<Dialogue exchanges={[]} video={video} active={active} searching={false} onAsk={onAsk} onReclip={onReclip} />)
+    const reworking = moment({ match: match({ reclipStatus: 'pending' }), reworking: true })
+    const { rerender } = render(<Dialogue exchanges={[]} video={video} moments={[reworking]} active={active} searching={false} onAsk={onAsk} onReclip={onReclip} />)
     await userEvent.type(screen.getByRole('textbox', { name: 'Ask for a moment' }), 'trim the slow intro off this one{enter}')
     expect(onReclip).toHaveBeenCalledWith(active)
     expect(onAsk).not.toHaveBeenCalled()
     expect(screen.getByTestId('dialogue-user').textContent).toContain('trim the slow intro off this one')
     expect(screen.getByTestId('dialogue-model').textContent).toContain("can't follow written edit instructions yet")
+
+    // The note follows the moment: done, then (in another life) failed.
+    rerender(<Dialogue exchanges={[]} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={onAsk} onReclip={onReclip} />)
+    expect(screen.getByTestId('dialogue-model').textContent).toContain("It's on the card now")
+    rerender(<Dialogue exchanges={[]} video={video} moments={[moment({ match: match({ reclipStatus: 'failed', reclipError: 'The footage is gone.' }) })]} active={moment()} searching={false} onAsk={onAsk} onReclip={onReclip} />)
+    expect(screen.getByTestId('dialogue-model').textContent).toContain("didn't work: The footage is gone.")
   })
 
   it('refuses a re-cut it cannot give, in words', async () => {
     const onReclip = vi.fn()
-    render(<Dialogue exchanges={[]} video={video} active={moment({ match: match({ reclipsRemaining: 0 }) })} searching={false} onAsk={vi.fn()} onReclip={onReclip} />)
+    render(<Dialogue exchanges={[]} video={video} moments={[]} active={moment({ match: match({ reclipsRemaining: 0 }) })} searching={false} onAsk={vi.fn()} onReclip={onReclip} />)
     await userEvent.type(screen.getByRole('textbox', { name: 'Ask for a moment' }), 're-cut it{enter}')
     expect(onReclip).not.toHaveBeenCalled()
     expect(screen.getByTestId('dialogue-model').textContent).toContain('has used all its re-cuts')

@@ -187,6 +187,20 @@ describe('MomentFeed — one moment at a time', () => {
     expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('sig=2')
   })
 
+  it('a held key is one press, and two quick presses are one keep', async () => {
+    // Codex's finding on #75: key repeat could keep several moments before
+    // the person let go, and a keep is final.
+    const moments = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
+    const h = handlers()
+    render(<MomentFeed moments={moments} {...h} />)
+    fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true })
+    fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true })
+    expect(h.onKeep).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(h.onKeep).toHaveBeenCalledTimes(1)
+  })
+
   it('does not steal keys from someone typing', async () => {
     const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
     const h = handlers()
