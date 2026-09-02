@@ -13,13 +13,16 @@ export interface ReviewStepProps {
   busy?: boolean
   /** A search is running; the feed keeps working while the dialogue waits for it. */
   searching: boolean
-  onKeep: (requestId: string, matchId: string) => void | Promise<void>
+  /** Resolves true once the moment is kept; false when the server refused (the page has shown why). */
+  onKeep: (requestId: string, matchId: string) => boolean | void | Promise<boolean | void>
   onSkip: (requestId: string, matchId: string) => void | Promise<void>
   onUndoSkip: (requestId: string, matchId: string) => void | Promise<void>
   /** Resolves false when the re-cut did not start (the page has shown why). */
   onReclip: (requestId: string, matchId: string) => boolean | void | Promise<boolean | void>
   /** Resolves false when the question could not be sent (the page has shown why). */
   onAsk: (instruction: string) => boolean | void | Promise<boolean | void>
+  /** Keep the moment and open publishing for its clip. */
+  onPublish: (requestId: string, matchId: string) => void | Promise<void>
   onUploadMore: () => void
 }
 
@@ -28,7 +31,7 @@ export interface ReviewStepProps {
  * dialogue beside it — the owner's screen of 2026-09-02. Both halves read
  * the same list: every moment of every question, in order.
  */
-export function ReviewStep({ exchanges, video, busy, searching, onKeep, onSkip, onUndoSkip, onReclip, onAsk, onUploadMore }: ReviewStepProps) {
+export function ReviewStep({ exchanges, video, busy, searching, onKeep, onSkip, onUndoSkip, onReclip, onAsk, onPublish, onUploadMore }: ReviewStepProps) {
   const moments = useMemo(() => feedMoments(exchanges, video), [exchanges, video])
   const active: FeedMoment | undefined = moments[feedCursor(moments)]
 
@@ -42,7 +45,7 @@ export function ReviewStep({ exchanges, video, busy, searching, onKeep, onSkip, 
         onKeep={(moment) => void onKeep(moment.requestId, moment.match.id)}
         onSkip={(moment) => void onSkip(moment.requestId, moment.match.id)}
         onUndoSkip={(moment) => void onUndoSkip(moment.requestId, moment.match.id)}
-        onReclip={(moment) => void onReclip(moment.requestId, moment.match.id)}
+        onPublish={(moment) => void onPublish(moment.requestId, moment.match.id)}
         onUploadMore={onUploadMore}
       />
       <Dialogue

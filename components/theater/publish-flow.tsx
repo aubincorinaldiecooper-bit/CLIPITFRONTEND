@@ -542,6 +542,7 @@ export function PublishDone({
   onRetryFailed,
   onHome,
   busy,
+  homeLabel = "Back to home",
 }: {
   mode: "now" | "scheduled"
   /** The promised local time, for mode 'scheduled'. */
@@ -550,6 +551,8 @@ export function PublishDone({
   onRetryFailed: (() => void) | null
   onHome: () => void
   busy: boolean
+  /** What leaving says: "home" from the theater, "your moments" from the feed's dialog. */
+  homeLabel?: string
 }) {
   const failures = outcomes.filter((outcome) => !outcome.ok)
   const successes = outcomes.filter((outcome) => outcome.ok)
@@ -609,7 +612,7 @@ export function PublishDone({
         onClick={onHome}
         className="mt-7 w-full max-w-[19rem] whitespace-nowrap rounded-full px-4 py-3 text-[13.5px] font-medium text-foreground ring-1 ring-shborder transition-colors hover:bg-shaccent"
       >
-        Back to home
+        {homeLabel}
       </button>
     </div>
   )

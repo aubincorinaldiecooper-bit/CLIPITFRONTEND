@@ -59,8 +59,14 @@ const handlers = () => ({
   onKeep: vi.fn(),
   onSkip: vi.fn(),
   onUndoSkip: vi.fn(),
-  onReclip: vi.fn(),
+  onPublish: vi.fn(),
   onUploadMore: vi.fn(),
+})
+
+/** An exchange whose one moment has a finished cut to play and to send. */
+const cutExchange = (id: string, overrides: Partial<ClipMatch> = {}): Exchange => ({
+  request: request(id, [match({ id: 'a', clip: { id: 'c-a', status: 'ready' }, ...overrides })]),
+  clips: [{ id: 'c-a', clipMatchId: 'a', status: 'ready', url: 'https://cdn.test/clips/v/c-a.mp4?sig=1', media: null } as never],
 })
 
 // jsdom has no matchMedia; motion asks for it when it checks reduced-motion.
@@ -249,30 +255,31 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).not.toHaveBeenCalled()
   })
 
-  it('↻ reworks the same moment; while it does, the card is held and says so', async () => {
-    const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
+  it('the corner control publishes the moment on screen — the owner\'s call, in place of the re-cut', async () => {
+    const moments = feedMoments([cutExchange('r1')], video)
     const h = handlers()
     render(<MomentFeed moments={moments} {...h} />)
-    await userEvent.click(screen.getByRole('button', { name: /Re-clip/ }))
-    expect(h.onReclip).toHaveBeenCalledTimes(1)
-    expect(h.onReclip.mock.calls[0]![0].match.id).toBe('a')
-
-    cleanup()
-    const reworking = feedMoments([exchange('r1', [match({ id: 'a', reclipStatus: 'pending' })])], video)
-    const r = handlers()
-    render(<MomentFeed moments={reworking} {...r} />)
-    expect(screen.getByTestId('reworking-overlay').textContent).toContain('Reworking this edit')
-    expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /^Skip/ }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /Re-clip/ }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: /Re-clip/ })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /^Publish/ }))
+    expect(h.onPublish).toHaveBeenCalledTimes(1)
+    expect(h.onPublish.mock.calls[0]![0].match.id).toBe('a')
   })
 
-  it('refuses ↻ once the allowance is spent, and says why', () => {
-    const moments = feedMoments([exchange('r1', [match({ id: 'a', reclipsRemaining: 0 })])], video)
+  it('a moment still being cut cannot be published yet, and says so', () => {
+    const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
     render(<MomentFeed moments={moments} {...handlers()} />)
-    const button = screen.getByRole('button', { name: /Re-clip/ })
-    expect((button as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
-    expect(button.getAttribute('title')).toBe('Re-clip limit reached for this moment')
+    const button = screen.getByRole('button', { name: /^Publish/ })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(button.getAttribute('title')).toContain('Still cutting')
+  })
+
+  it('while the system reworks the moment, the card is held and says so', () => {
+    const reworking = feedMoments([cutExchange('r1', { reclipStatus: 'pending' })], video)
+    render(<MomentFeed moments={reworking} {...handlers()} />)
+    expect(screen.getByTestId('reworking-overlay').textContent).toContain('Reworking this edit')
+    expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /^Skip/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /^Publish/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('ends with the honest fork once every moment is decided', () => {

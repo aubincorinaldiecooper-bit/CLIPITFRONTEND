@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from "react"
 import { motion, type PanInfo } from "motion/react"
-import { Check, RotateCw, Volume2, VolumeX, X } from "lucide-react"
+import { Check, Volume2, VolumeX, X } from "lucide-react"
+import { PublishGlyph } from "@/components/clip-action-icons"
 import { ClipComposition, centredComposition } from "@/components/media/clip-composition"
 import { VerticalFrame } from "@/components/media/vertical-frame"
 import type { Clip, ClipComposition as Composition, ClipMatch, ClipRequest, Video } from "@/lib/types"
@@ -17,8 +18,11 @@ import type { Exchange } from "./types"
  * person scrolls, drags the front card, or presses a key to move through
  * them. Moving DOWN past a moment skips it; moving back UP onto a skipped
  * moment un-skips it. ✓ keeps the moment — it goes to the library, and
- * that is final here, so a kept moment cannot be scrolled back onto. ↻ on
- * the card's corner reworks the SAME moment.
+ * that is final here, so a kept moment cannot be scrolled back onto. The
+ * button on the card's corner PUBLISHES the moment: it is kept, and the
+ * owner's "Where do they go?" screens open for it (the owner's call,
+ * 2026-09-02, replacing the re-cut control that sat there; a re-cut is
+ * asked for in the dialogue — "re-cut this one").
  *
  * Every moment in the feed is one the server already cut; the front card
  * plays the finished file, or the source seeked to the moment while a cut
@@ -345,11 +349,12 @@ export interface MomentFeedProps {
   onSkip: (moment: FeedMoment) => void
   /** Scrolling back onto a skipped moment, or pressing its dot, brings it back. */
   onUndoSkip: (moment: FeedMoment) => void
-  onReclip: (moment: FeedMoment) => void
+  /** Keep the moment and send it to socials. Only a moment whose cut is finished can go. */
+  onPublish: (moment: FeedMoment) => void
   onUploadMore: () => void
 }
 
-export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, onReclip, onUploadMore }: MomentFeedProps) {
+export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, onPublish, onUploadMore }: MomentFeedProps) {
   const cursor = feedCursor(moments)
   const total = moments.length
   const top = moments[cursor]
@@ -435,12 +440,13 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
     if (Math.abs(event.deltaY) > WHEEL_THRESHOLD_PX) navigate(event.deltaY > 0 ? 1 : -1)
   }
 
-  const remaining = top?.match.reclipsRemaining ?? 0
-  const reclipTitle = reworking
+  // Publishing sends a file; a moment still being cut has none to send yet.
+  const canPublish = top !== undefined && top.clip !== null && !reworking && !busy
+  const publishTitle = reworking
     ? "Reworking this edit…"
-    : remaining <= 0
-      ? "Re-clip limit reached for this moment"
-      : "Same moment, new edit"
+    : top && top.clip === null
+      ? "Still cutting — publish once it's ready"
+      : "Publish — send this moment to your socials"
 
   if (total === 0) {
     return (
@@ -531,13 +537,13 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
                     <>
                       <button
                         type="button"
-                        onClick={() => onReclip(moment)}
-                        disabled={reworking || remaining <= 0 || busy}
-                        aria-label="Re-clip — same moment, new edit"
-                        title={reclipTitle}
+                        onClick={() => onPublish(moment)}
+                        disabled={!canPublish}
+                        aria-label="Publish — send this moment to your socials"
+                        title={publishTitle}
                         className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70 disabled:cursor-default disabled:opacity-60"
                       >
-                        <RotateCw aria-hidden size={16} className={reworking ? "animate-spin" : undefined} />
+                        <PublishGlyph />
                       </button>
                       {moment.preview && (
                         <button
