@@ -7,6 +7,7 @@ import { HStack, VStack } from "@astryxdesign/core/Stack"
 import { Text } from "@astryxdesign/core/Text"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { authClient } from "@/lib/auth-client"
+import { returnAddress } from "@/lib/sign-in-return"
 import { ArrowRightGlyph } from "@/components/glyphs"
 import { SplitModal } from "@/components/split-modal"
 
@@ -199,9 +200,11 @@ function SignInDialog({
       window.history.replaceState(window.history.state, "", url.toString())
     }
 
+    // The return address carries the guest's claim on their work, so the
+    // link brings it along wherever it is opened (lib/sign-in-return.ts).
     const { error } = await authClient.signIn.magicLink({
       email: address,
-      callbackURL: `${window.location.pathname}${window.location.search}`,
+      callbackURL: await returnAddress(address),
     })
     setState(error ? "failed" : "sent")
   }

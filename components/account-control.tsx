@@ -7,6 +7,7 @@ import { Text } from "@astryxdesign/core/Text"
 import { TextInput } from "@astryxdesign/core/TextInput"
 import { VStack } from "@astryxdesign/core/Stack"
 import { authClient } from "@/lib/auth-client"
+import { returnAddress } from "@/lib/sign-in-return"
 import { forgetApiSession } from "@/lib/api"
 
 /**
@@ -109,7 +110,7 @@ export function AccountControl({ configured: configuredFromServer }: { configure
     // that exact URL — a sign-in that drops the invitation leaves them with
     // no way to accept it short of digging the email out again. Only
     // same-origin paths are ever used as the destination.
-    const { error } = await authClient.signIn.magicLink({ email: address, callbackURL: returnTo() })
+    const { error } = await authClient.signIn.magicLink({ email: address, callbackURL: await returnAddress(address, returnTo()) })
     setState(error ? "failed" : "sent")
   }
 
