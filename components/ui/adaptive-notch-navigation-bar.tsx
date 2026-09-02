@@ -50,8 +50,12 @@ export function NotchNav({
   return (
     <div className={cn("relative min-h-dvh", className)}>
       <div
+        // The bar's own height is reserved even when no bar is drawn: the logo
+        // and the corner control centre on this box, and with the bar gone it
+        // collapsed to nothing and pulled them up past the top of the page
+        // (Codex's finding on #78).
         className={cn(
-          "fixed inset-x-0 z-(--z-header) flex items-start justify-center px-4",
+          "fixed inset-x-0 z-(--z-header) flex min-h-14 items-start justify-center px-4",
           position === "top" ? "top-4" : "bottom-4",
         )}
       >
