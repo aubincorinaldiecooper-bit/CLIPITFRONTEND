@@ -61,8 +61,9 @@ export function NotchNav({
           </div>
         ) : null}
 
-        {/* A bar with no destinations is nothing: not drawn. */}
-        {items.length > 0 && (
+        {/* A bar with no destinations and nothing else in it is nothing: not
+            drawn. One holding actions is still a bar (Devin's finding on #78). */}
+        {(items.length > 0 || Boolean(rightContent)) && (
         <nav
           aria-label="Main"
           className="pointer-events-auto flex max-w-[calc(100%-2rem)] items-center gap-1 rounded-full border border-white/10 bg-zinc-950 px-2 py-2 shadow-2xl"
