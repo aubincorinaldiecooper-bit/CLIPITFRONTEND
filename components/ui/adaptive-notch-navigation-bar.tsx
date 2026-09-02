@@ -13,11 +13,18 @@ export interface NotchItemData {
   icon: React.ComponentType<{ className?: string }>
   badge?: string
   href?: string
+  /**
+   * A full page load rather than a client-side navigation. For a destination
+   * that must start fresh every time — Upload is one: revisiting /start
+   * through a client-side link keeps the wizard where it was.
+   */
+  fullNavigation?: boolean
 }
 
 export interface NotchNavProps {
   items: NotchItemData[]
-  activeId: string
+  /** The item for the page being shown, or null on a page the nav does not list. */
+  activeId: string | null
   position?: NotchPosition
   logo?: React.ReactNode
   rightContent?: React.ReactNode
@@ -44,7 +51,7 @@ export function NotchNav({
     <div className={cn("relative min-h-dvh", className)}>
       <div
         className={cn(
-          "fixed inset-x-0 z-50 flex items-start justify-center px-4",
+          "fixed inset-x-0 z-(--z-header) flex items-start justify-center px-4",
           position === "top" ? "top-4" : "bottom-4",
         )}
       >
@@ -87,15 +94,29 @@ export function NotchNav({
               )
 
               if (item.href) {
+                const linkClassName = cn(
+                  "relative flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
+                  isActive ? "text-white" : "text-zinc-400 hover:text-white",
+                )
+                if (item.fullNavigation) {
+                  return (
+                    <a
+                      key={item.id}
+                      href={item.href}
+                      data-navigation="full"
+                      aria-current={isActive ? "page" : undefined}
+                      className={linkClassName}
+                    >
+                      {content}
+                    </a>
+                  )
+                }
                 return (
                   <Link
                     key={item.id}
                     href={item.href}
                     aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "relative flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
-                      isActive ? "text-white" : "text-zinc-400 hover:text-white",
-                    )}
+                    className={linkClassName}
                   >
                     {content}
                   </Link>

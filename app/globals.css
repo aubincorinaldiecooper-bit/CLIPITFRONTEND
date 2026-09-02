@@ -38,6 +38,17 @@
    * components/side-nav.tsx applies it only while open.
    */
   --rail-open-width: 244px;
+
+  /*
+   * The app's stacking order, in one place. The notch header floats over the
+   * page; the keyboard "Skip to content" link, which appears exactly where
+   * the header's logo sits, must land above it. Neither Tailwind's default
+   * ladder nor Astryx offers a named stacking token, so — like the rail
+   * width above — the app's own root carries them. Applied with Tailwind's
+   * custom-property form: z-(--z-header), focus:z-(--z-skip-link).
+   */
+  --z-header: 50;
+  --z-skip-link: 60;
 }
 
 @theme inline {

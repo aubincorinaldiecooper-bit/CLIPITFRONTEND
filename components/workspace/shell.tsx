@@ -28,9 +28,23 @@ import { NotchNav, type NotchItemData } from "@/components/ui/adaptive-notch-nav
 export type AppDestination = "home" | "start" | "clips" | "publishing" | "workspaces" | "join"
 
 const NOTCH_ITEMS: NotchItemData[] = [
-  { id: "upload", label: "Upload", icon: Upload, href: "/start" },
+  // A full navigation, as the wordmark's link is: the start screen must be
+  // genuinely fresh, and a client-side hop to the page already showing
+  // would keep the wizard where it was.
+  { id: "upload", label: "Upload", icon: Upload, href: "/start", fullNavigation: true },
   { id: "library", label: "Library", icon: Library, href: "/clips" },
 ]
+
+/**
+ * Which notch item the page being shown belongs to. Pages the nav does not
+ * list — Publishing, Shared, Join — select nothing: saying "you are on
+ * Upload" there would be untrue.
+ */
+export function notchActiveId(active: AppDestination): string | null {
+  if (active === "start" || active === "home") return "upload"
+  if (active === "clips") return "library"
+  return null
+}
 
 const NOTCH_LOGO = (
   <a href="/start" aria-label="Clipit — upload your footage" className="flex items-center gap-[7px] py-1.5 text-foreground hover:opacity-80">
@@ -51,8 +65,7 @@ export function WorkspaceShell({
   activeWorkspaceId?: string
   children: React.ReactNode
 }) {
-  const activeId =
-    active === "start" || active === "home" ? "upload" : active === "clips" ? "library" : "upload"
+  const activeId = notchActiveId(active)
 
   return (
     <div className="shadcn-scope flex min-h-dvh flex-col bg-background font-sans text-foreground">
@@ -61,7 +74,11 @@ export function WorkspaceShell({
           control before reaching the page. */}
       <a
         href="#workspace-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+        // Above the notch header, later in the document, whose logo sits exactly
+        // where this appears. Both stacking values come from the one scale in
+        // app/globals.css, so the order is a fact stated once, not two numbers
+        // that happen to agree.
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-(--z-skip-link) focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
       >
         Skip to content
       </a>

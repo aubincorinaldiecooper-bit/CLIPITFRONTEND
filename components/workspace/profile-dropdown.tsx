@@ -73,7 +73,7 @@ export function ProfileDropdown() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex max-w-[15rem] items-center gap-3 rounded-2xl border bg-card p-2 pr-2.5 text-left transition-colors hover:bg-shmuted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-3 rounded-2xl border bg-card p-2 pr-2.5 text-left transition-colors hover:bg-shmuted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:max-w-52 lg:max-w-60"
         >
           <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-semibold text-primary-foreground">
             {avatar ? (
@@ -83,7 +83,10 @@ export function ProfileDropdown() {
               initialsOf(name)
             )}
           </span>
-          <span className="hidden min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden sm:flex">
+          {/* The name and address only from md: the notch pins this control to the
+              right corner while the Upload/Library pill sits centred, and between
+              the sm and md widths a long name would run into the pill. */}
+          <span className="hidden min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden md:flex">
             <span className="truncate text-sm font-medium">{name}</span>
             <span className="truncate text-xs text-muted-foreground">{email}</span>
           </span>
