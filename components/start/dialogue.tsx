@@ -89,10 +89,33 @@ function ModelLine({ text, children }: { text?: string; children?: React.ReactNo
   )
 }
 
-/** What the system says about one question, at whatever stage it is. */
-function ExchangeLines({ exchange, readThroughSeconds }: { exchange: Exchange; readThroughSeconds: number | null | undefined }) {
+const isSearching = (exchange: Exchange) => exchange.request.status === "pending" || exchange.request.status === "searching"
+
+/**
+ * What the system says about one question once it has answered.
+ *
+ * The FIRST question was asked on the upload step, not here, so it is not
+ * conversation: for it, only what must be admitted is said — the whole
+ * video was not read, a stretch could not be looked at, moments were seen
+ * but not trusted, nothing was found. When that first answer is clean and
+ * complete and has moments, nothing is said at all: the cards speak (the
+ * owner's rule from the theater), and the dialogue opens on its empty
+ * state. A follow-up question, asked here, gets its full answer.
+ */
+export function exchangeLines(exchange: Exchange, readThroughSeconds: number | null | undefined, first: boolean): string[] {
   const { request } = exchange
-  if (request.status === "pending" || request.status === "searching") {
+  if (isSearching(exchange)) return []
+  const count = request.matches?.length ?? 0
+  const partial = request.coverage?.gaps?.some((gap) => gap.reason === "not_read_yet") ?? false
+  const speakUp = !first || request.status === "failed" || count === 0 || partial
+  return [speakUp ? answerLine(request, readThroughSeconds) : null, coverageLine(request), uncertainLine(request)].filter(
+    (line): line is string => typeof line === "string" && line.length > 0,
+  )
+}
+
+function ExchangeLines({ exchange, readThroughSeconds, first }: { exchange: Exchange; readThroughSeconds: number | null | undefined; first: boolean }) {
+  const { request } = exchange
+  if (isSearching(exchange)) {
     return (
       <ModelLine>
         <TextShimmer as="span">Looking through your video…</TextShimmer>
@@ -100,17 +123,21 @@ function ExchangeLines({ exchange, readThroughSeconds }: { exchange: Exchange; r
       </ModelLine>
     )
   }
-  const lines = [answerLine(request, readThroughSeconds), coverageLine(request), uncertainLine(request)].filter(
-    (line): line is string => typeof line === "string" && line.length > 0,
-  )
   return (
     <>
-      {lines.map((line, index) => (
+      {exchangeLines(exchange, readThroughSeconds, first).map((line, index) => (
         <ModelLine key={`${request.id}-${index}`} text={line} />
       ))}
     </>
   )
 }
+
+/**
+ * Whether an ask was taken. `false` means it was not — the page has shown
+ * why — and the words stay in the box to edit and send again. Anything
+ * else counts as taken.
+ */
+export type AskOutcome = boolean | void
 
 /** The question box: one line, sent with Enter or the arrow. */
 export function AskBar({
@@ -118,7 +145,7 @@ export function AskBar({
   disabled,
   placeholder,
 }: {
-  onAsk: (text: string) => void | Promise<void>
+  onAsk: (text: string) => AskOutcome | Promise<AskOutcome>
   disabled: boolean
   placeholder: string
 }) {
@@ -129,10 +156,13 @@ export function AskBar({
 
   const send = async () => {
     if (!canSend) return
-    setDraft("")
     setPending(true)
     try {
-      await onAsk(trimmed)
+      // The words leave the box only once the ask was taken: a question
+      // the server refused is still the person's question, and clearing it
+      // would make them type it again to retry.
+      const outcome = await onAsk(trimmed)
+      if (outcome !== false) setDraft("")
     } finally {
       setPending(false)
     }
@@ -149,7 +179,7 @@ export function AskBar({
       <input
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        disabled={disabled}
+        disabled={disabled || pending}
         placeholder={placeholder}
         aria-label="Ask for a moment"
         className="h-10 min-w-0 flex-1 border-b border-border bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground disabled:cursor-not-allowed"
@@ -176,8 +206,10 @@ export interface DialogueProps {
   active: FeedMoment | undefined
   /** A search is still running; another cannot start until it finishes. */
   searching: boolean
-  onAsk: (instruction: string) => void | Promise<void>
-  onReclip: (moment: FeedMoment) => void
+  /** Returns false when the question could not be sent; it stays in the box. */
+  onAsk: (instruction: string) => AskOutcome | Promise<AskOutcome>
+  /** Returns false when the re-cut did not start; the dialogue says so instead of claiming it did. */
+  onReclip: (moment: FeedMoment) => boolean | void | Promise<boolean | void>
 }
 
 export function Dialogue({ exchanges, video, active, searching, onAsk, onReclip }: DialogueProps) {
@@ -191,36 +223,44 @@ export function Dialogue({ exchanges, video, active, searching, onAsk, onReclip 
       { id: `note-${previous.length}-${Date.now()}`, afterRequestId: exchanges.at(-1)?.request.id ?? null, role, text },
     ])
 
-  const entryCount = exchanges.length + notes.length
+  // Nothing said yet: no follow-up question, no note, and a first answer
+  // with nothing to admit. That is the empty state — the cards speak.
+  const first = exchanges[0]
+  const firstSpeaks = first !== undefined && (isSearching(first) || exchangeLines(first, readThroughSeconds, true).length > 0)
+  const entryCount = (firstSpeaks ? 1 : 0) + Math.max(0, exchanges.length - 1) + notes.length
   useEffect(() => {
     const element = threadRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [entryCount])
 
-  const handleAsk = async (text: string) => {
+  const handleAsk = async (text: string): Promise<AskOutcome> => {
     if (isEditRequest(text)) {
       addNote("user", text)
       const title = active?.match.description || "this moment"
       if (!active) {
         addNote("model", "There's no moment on screen to re-cut. Ask for one first.")
-        return
+        return true
       }
       if (active.reworking) {
         addNote("model", `Already reworking "${title}".`)
-        return
+        return true
       }
       if ((active.match.reclipsRemaining ?? 0) <= 0) {
         addNote("model", `"${title}" has used all its re-cuts.`)
-        return
+        return true
       }
-      onReclip(active)
+      // The note follows the result: a re-cut the server refused must not
+      // sit in the thread as one that is underway.
+      const started = await onReclip(active)
       addNote(
         "model",
-        `Re-cutting "${title}". I can't follow written edit instructions yet, so this is the same moment cut again from the footage around it — not the change you described.`,
+        started === false
+          ? `"${title}" could not be re-cut just now — nothing changed. The message above says why.`
+          : `Re-cutting "${title}". I can't follow written edit instructions yet, so this is the same moment cut again from the footage around it — not the change you described.`,
       )
-      return
+      return true
     }
-    await onAsk(text)
+    return onAsk(text)
   }
 
   const ready = video?.readyForSearch === true
@@ -232,10 +272,11 @@ export function Dialogue({ exchanges, video, active, searching, onAsk, onReclip 
       <div ref={threadRef} className="flex flex-1 flex-col gap-4 overflow-y-auto">
         {entryCount === 0 && <DialogueEmpty />}
         {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={note.text} />))}
-        {exchanges.map((exchange) => (
+        {exchanges.map((exchange, index) => (
           <div key={exchange.request.id} className="flex flex-col gap-4">
-            <UserLine text={exchange.request.instruction} />
-            <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} />
+            {/* The first question was asked on the upload step; only its caveats belong here. */}
+            {index > 0 && <UserLine text={exchange.request.instruction} />}
+            <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} first={index === 0} />
             {notesAfter(exchange.request.id).map((note) =>
               note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={note.text} />,
             )}

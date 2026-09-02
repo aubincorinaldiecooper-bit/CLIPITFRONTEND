@@ -227,16 +227,18 @@ export default function StartPage() {
    * in the feed as they are cut, and the dialogue shows it looking.
    */
   const startSearch = useCallback(
-    async (instruction: string, options: { stay?: boolean } = {}) => {
-      if (!video || busy) return
+    async (instruction: string, options: { stay?: boolean } = {}): Promise<boolean> => {
+      if (!video || busy) return false
       setError(null)
       setBusy(true)
       try {
         const { clipRequest: created } = await api.createClipRequest(video.id, instruction)
         setExchanges((previous) => [...previous, { request: created, clips: [] }])
         if (!options.stay) setStep("watch")
+        return true
       } catch (cause) {
         fail(cause)
+        return false
       } finally {
         setBusy(false)
       }
@@ -290,8 +292,9 @@ export default function StartPage() {
     [uploads, removeUpload, video?.id],
   )
 
+  /** Resolves true once the server has taken the Re-clip; false when it refused, with the reason shown. */
   const reclipMatch = useCallback(
-    async (exchangeRequestId: string, matchId: string) => {
+    async (exchangeRequestId: string, matchId: string): Promise<boolean> => {
       setError(null)
       const paint = (match: ClipMatch): ClipMatch => ({
         ...match,
@@ -326,6 +329,7 @@ export default function StartPage() {
               : exchange,
           ),
         )
+        return true
       } catch (cause) {
         setExchanges((previous) =>
           previous.map((exchange) =>
@@ -343,6 +347,7 @@ export default function StartPage() {
           ),
         )
         fail(cause)
+        return false
       }
     },
     [fail],
@@ -528,7 +533,7 @@ export default function StartPage() {
             onSkip={(requestId, matchId) => rateMatch(requestId, matchId, "rejected")}
             onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}
             onReclip={reclipMatch}
-            onAsk={(instruction) => (searchRunning ? undefined : startSearch(instruction, { stay: true }))}
+            onAsk={(instruction) => (searchRunning ? false : startSearch(instruction, { stay: true }))}
             onUploadMore={reset}
           />
         )}

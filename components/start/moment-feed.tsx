@@ -159,7 +159,18 @@ function fanStyle(diff: number, cardHeight: number) {
   return { y: step * 0.58 * cardHeight, scale: 0.7, opacity: 0.3, rotateX: -step * 15, zIndex: 3 }
 }
 
-/** The front card's picture, playing. */
+/**
+ * The front card's picture, playing.
+ *
+ * The URL is pinned at the value it started with. The page polls while a
+ * video is still being read and while a cut is on its way, and every poll
+ * re-signs the playback URLs — bound straight to the element, the newest
+ * one reloaded the player every two seconds and threw the moment back to
+ * its start. The newest value is taken only when the pinned one fails
+ * (an expired link), which is what the theater's VideoStage did too. The
+ * caller keys this component by moment and by kind of file, so a change
+ * of what is shown still starts afresh.
+ */
 function FeedVideo({
   source,
   still,
@@ -174,16 +185,24 @@ function FeedVideo({
   label: string
 }) {
   const ref = useRef<HTMLVideoElement>(null)
+  const [pinnedUrl, setPinnedUrl] = useState(source.url)
+  const latestUrl = useRef(source.url)
+  latestUrl.current = source.url
 
   useEffect(() => {
     const element = ref.current
     if (element) element.currentTime = source.start
-  }, [source.url, source.start])
+  }, [pinnedUrl, source.start])
 
   return (
     <video
       ref={ref}
-      src={source.finished ? source.url : `${source.url}#t=${source.start}`}
+      src={source.finished ? pinnedUrl : `${pinnedUrl}#t=${source.start}`}
+      data-testid="feed-video"
+      onError={() => {
+        // The pinned link no longer works; the freshest one gets its turn.
+        if (latestUrl.current !== pinnedUrl) setPinnedUrl(latestUrl.current)
+      }}
       poster={still ?? undefined}
       aria-label={label}
       muted={muted}
@@ -230,7 +249,14 @@ function CardFace({
           <ClipComposition composition={composition} sourceAspectRatio={sourceAspectRatio} finished={finished} className="w-full">
             {(mediaStyle) =>
               front && moment.preview ? (
-                <FeedVideo source={moment.preview} still={moment.still} muted={muted} style={mediaStyle} label={label} />
+                <FeedVideo
+                  key={`${moment.match.id}:${moment.preview.finished ? "file" : "source"}`}
+                  source={moment.preview}
+                  still={moment.still}
+                  muted={muted}
+                  style={mediaStyle}
+                  label={label}
+                />
               ) : moment.still ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={moment.still} alt="" draggable={false} className="h-full w-full select-none bg-black" style={mediaStyle} />

@@ -46,8 +46,9 @@ export function answerLine(request: ClipRequest, readThroughSeconds?: number | n
     if (request.coverage?.complete === false) {
       return "I didn't find that in the parts of the video I could look at."
     }
-    return request.uncertain?.length
-      ? "I didn't find a clear match — but there's one I'm unsure about."
+    const unsure = request.uncertain?.length ?? 0
+    return unsure > 0
+      ? `I didn't find a clear match — but there ${unsure === 1 ? "is one" : `are ${unsure}`} I'm unsure about.`
       : "I couldn't find that. Try describing the moment a different way."
   }
 
@@ -66,8 +67,12 @@ export function coverageLine(request: ClipRequest): string | null {
   const parts: string[] = []
   if (gaps.length > 0) {
     const where = gaps.map((gap) => `${gap.startTimecode}–${gap.endTimecode}`).join(", ")
+    // The length of THESE stretches, not `unsearchedSeconds`, which also
+    // counts footage simply not read yet — that is not missing, and the
+    // answer line already says it is still being watched.
+    const unavailableSeconds = gaps.reduce((total, gap) => total + Math.max(0, gap.endSeconds - gap.startSeconds), 0)
     parts.push(
-      `I couldn't look at ${describeDuration(coverage.unsearchedSeconds)} of this video (${where}), so I'd have missed anything there.`,
+      `I couldn't look at ${describeDuration(unavailableSeconds)} of this video (${where}), so I'd have missed anything there.`,
     )
   } else if (coverage.locatable === false) {
     parts.push("There's part of this video I couldn't look at, so I may have missed something.")

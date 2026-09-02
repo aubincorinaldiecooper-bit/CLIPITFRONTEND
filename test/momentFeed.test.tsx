@@ -170,6 +170,23 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onUndoSkip.mock.calls[0]![0].match.id).toBe('gone')
   })
 
+  it('keeps playing the link it started with while the page re-signs it, and takes the new one only when the old fails', () => {
+    // Devin's finding on #75: the page polls while a video is still being
+    // read, every poll re-signs the URLs, and a src bound to the newest
+    // one reloaded the player every two seconds.
+    const withPlayback = { ...video, playback: { url: 'https://cdn.test/source?sig=1', expiresAt: '' } } as unknown as Video
+    const { rerender } = render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' })])], withPlayback)} {...handlers()} />)
+    const before = (screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')
+    expect(before).toContain('sig=1')
+
+    const resigned = { ...withPlayback, playback: { url: 'https://cdn.test/source?sig=2', expiresAt: '' } } as unknown as Video
+    rerender(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' })])], resigned)} {...handlers()} />)
+    expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toBe(before)
+
+    fireEvent.error(screen.getByTestId('feed-video'))
+    expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('sig=2')
+  })
+
   it('does not steal keys from someone typing', async () => {
     const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
     const h = handlers()

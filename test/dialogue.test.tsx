@@ -62,11 +62,52 @@ describe('isEditRequest — words about the moment on screen', () => {
 })
 
 describe('Dialogue', () => {
-  it('shows each question and what the search said', () => {
+  it('opens on the empty state after a clean, complete first search: the first question was asked elsewhere, and the cards speak', () => {
     const exchanges: Exchange[] = [{ request: request({ matches: [match(), match({ id: 'm2' })] }), clips: [] }]
     render(<Dialogue exchanges={exchanges} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    expect(screen.getByTestId('dialogue-empty')).toBeTruthy()
+    expect(screen.queryByTestId('dialogue-user')).toBeNull()
+    expect(screen.queryByTestId('dialogue-model')).toBeNull()
+  })
+
+  it('still admits what the first search could not do: nothing found', () => {
+    const exchanges: Exchange[] = [{ request: request({ matches: [] }), clips: [] }]
+    render(<Dialogue exchanges={exchanges} video={video} active={undefined} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    expect(screen.queryByTestId('dialogue-empty')).toBeNull()
+    expect(screen.getByTestId('dialogue-model').textContent).toContain("I couldn't find that")
+  })
+
+  it('shows a follow-up question and what the search said', () => {
+    const exchanges: Exchange[] = [
+      { request: request({ id: 'r0', instruction: 'the first ask', matches: [match({ id: 'm0' })] }), clips: [] },
+      { request: request({ id: 'r1', matches: [match(), match({ id: 'm2' })] }), clips: [] },
+    ]
+    render(<Dialogue exchanges={exchanges} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    expect(screen.getAllByTestId('dialogue-user')).toHaveLength(1)
     expect(screen.getByTestId('dialogue-user').textContent).toContain('find the harbour')
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Found 2 moments.')
+  })
+
+  it('keeps a question the server refused in the box, to edit and send again', async () => {
+    const onAsk = vi.fn(async () => false)
+    render(<Dialogue exchanges={[]} video={video} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
+    const box = screen.getByRole('textbox', { name: 'Ask for a moment' }) as HTMLInputElement
+    await userEvent.type(box, 'find the goal{enter}')
+    expect(onAsk).toHaveBeenCalledWith('find the goal')
+    expect(box.value).toBe('find the goal')
+
+    onAsk.mockResolvedValueOnce(true as never)
+    await userEvent.type(box, '{enter}')
+    expect(box.value).toBe('')
+  })
+
+  it('says a re-cut did not start when the server refused it, instead of claiming it is underway', async () => {
+    const onReclip = vi.fn(async () => false)
+    render(<Dialogue exchanges={[]} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={onReclip} />)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Ask for a moment' }), 're-cut it{enter}')
+    expect(onReclip).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('dialogue-model').textContent).toContain('could not be re-cut just now')
+    expect(screen.getByTestId('dialogue-model').textContent).not.toContain('Re-cutting')
   })
 
   it('says it is still looking while a search runs, and takes no second question', () => {
@@ -88,7 +129,9 @@ describe('Dialogue', () => {
       },
     ]
     render(<Dialogue exchanges={exchanges} video={video} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
-    expect(screen.getAllByTestId('dialogue-model')[1].textContent).toContain("I couldn't look at 1m 30s of this video (1:00–2:30)")
+    // The first search's one caveat, without its question and without the answer line the cards already give.
+    expect(screen.getAllByTestId('dialogue-model')).toHaveLength(1)
+    expect(screen.getByTestId('dialogue-model').textContent).toContain("I couldn't look at 1m 30s of this video (1:00–2:30)")
   })
 
   it('a new question is a search', async () => {

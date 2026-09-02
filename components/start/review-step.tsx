@@ -16,8 +16,10 @@ export interface ReviewStepProps {
   onKeep: (requestId: string, matchId: string) => void | Promise<void>
   onSkip: (requestId: string, matchId: string) => void | Promise<void>
   onUndoSkip: (requestId: string, matchId: string) => void | Promise<void>
-  onReclip: (requestId: string, matchId: string) => void | Promise<void>
-  onAsk: (instruction: string) => void | Promise<void>
+  /** Resolves false when the re-cut did not start (the page has shown why). */
+  onReclip: (requestId: string, matchId: string) => boolean | void | Promise<boolean | void>
+  /** Resolves false when the question could not be sent (the page has shown why). */
+  onAsk: (instruction: string) => boolean | void | Promise<boolean | void>
   onUploadMore: () => void
 }
 
@@ -49,7 +51,7 @@ export function ReviewStep({ exchanges, video, busy, searching, onKeep, onSkip, 
         active={active}
         searching={searching}
         onAsk={onAsk}
-        onReclip={(moment) => void onReclip(moment.requestId, moment.match.id)}
+        onReclip={(moment) => onReclip(moment.requestId, moment.match.id)}
       />
     </div>
   )
