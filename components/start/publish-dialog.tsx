@@ -13,17 +13,16 @@ import {
 } from "@/components/theater/publish-flow"
 
 /**
- * Publishing one moment from the feed — the owner's screens (Where do they
- * go? → now or later → what happened), in a dialog over the review page,
- * so sending a clip to socials is one press from the card and the feed is
- * still there when the dialog closes.
+ * Publishing one moment from the feed — the owner's screens in a dialog
+ * over the review page, so sending a clip to socials is one press from the
+ * card and the feed is still there when the dialog closes.
  *
  * The moment has already been kept by the time this opens: a clip that is
- * sent out is a clip in the library, and keep is what puts it there. The
- * screens themselves are the theater's — what they say about accounts,
- * readiness and outcomes holds here unchanged. The dialog is Astryx's, as
- * the repository asks and as this step's Preview dialog was; the screens
- * bring their own heading and way back, so it has no header of its own.
+ * sent out is a clip in the library, and keep is what puts it there. "Where
+ * do they go?" does the publishing itself now (2026-09-02): Publish tells
+ * the truth in place, so the only screen after it is Schedule's. The
+ * dialog is Astryx's, as the repository asks; the screens bring their own
+ * heading and way back, so it has no header of its own.
  */
 export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null; onClose: () => void }) {
   const [stage, setStage] = useState<"where" | "when" | "done">("where")
@@ -31,7 +30,6 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
   const [choice, setChoice] = useState<{ accountIds: string[]; caption: string } | null>(null)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [outcomes, setOutcomes] = useState<PublishOutcome[]>([])
-  const [mode, setMode] = useState<"now" | "scheduled">("now")
   const [when, setWhen] = useState<Date | null>(null)
 
   const clips = clip ? [clip] : []
@@ -46,16 +44,16 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
     setWhen(null)
   }, [onClose])
 
-  const postNow = useCallback(
-    async (accountIds: string[], caption: string) => {
+  /** Post now, for the screen's Publish control: the truth per clip comes back to it. */
+  const publish = useCallback(
+    async (accountIds: string[], caption: string, clipIds?: string[]) => {
       setBusy(true)
-      setChoice({ accountIds, caption })
-      const results = await publishEach(clips, { caption, accountIds })
-      setOutcomes(results)
-      setMode("now")
-      setWhen(null)
-      setBusy(false)
-      setStage("done")
+      try {
+        const chosen = clipIds ? clips.filter((entry) => clipIds.includes(entry.id)) : clips
+        return await publishEach(chosen, { caption, accountIds })
+      } finally {
+        setBusy(false)
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [clip?.id],
@@ -75,7 +73,6 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
         return
       }
       setOutcomes(results)
-      setMode("scheduled")
       setWhen(at)
       setStage("done")
     },
@@ -84,17 +81,13 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
   )
 
   const retryFailed = useCallback(async () => {
-    if (!choice || !outcomes.some((outcome) => !outcome.ok)) return
+    if (!choice || !when || !outcomes.some((outcome) => !outcome.ok)) return
     setBusy(true)
-    const results = await publishEach(clips, {
-      caption: choice.caption,
-      accountIds: choice.accountIds,
-      ...(mode === "scheduled" && when ? { scheduledAt: when.toISOString() } : {}),
-    })
+    const results = await publishEach(clips, { caption: choice.caption, accountIds: choice.accountIds, scheduledAt: when.toISOString() })
     setOutcomes(results)
     setBusy(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [choice, outcomes, mode, when, clip?.id])
+  }, [choice, outcomes, when, clip?.id])
 
   return (
     <Dialog
@@ -120,7 +113,7 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
                     clips={clips}
                     busy={busy}
                     onBack={close}
-                    onPostNow={(accountIds, caption) => void postNow(accountIds, caption)}
+                    onPublish={publish}
                     onSchedule={(accountIds, caption) => {
                       setChoice({ accountIds, caption })
                       setScheduleError(null)
@@ -139,7 +132,7 @@ export function PublishDialog({ clip, onClose }: { clip: PublishableClip | null;
                 )}
                 {stage === "done" && (
                   <PublishDone
-                    mode={mode}
+                    mode="scheduled"
                     when={when}
                     outcomes={outcomes}
                     busy={busy}

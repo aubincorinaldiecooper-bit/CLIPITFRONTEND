@@ -820,16 +820,21 @@ export function DeckStage({
     (clip) => clip.ready && (publishOnly === null || clip.id === publishOnly),
   )
 
-  const postNow = useCallback(
-    async (accountIds: string[], caption: string) => {
+  /**
+   * Post now, for the screen's own Publish control (2026-09-02): the truth
+   * per clip goes back to the screen, which tells it in place — there is
+   * no "done" screen for a publish any more, only for a schedule.
+   */
+  const publish = useCallback(
+    async (accountIds: string[], caption: string, clipIds?: string[]) => {
       setPublishBusy(true)
       setPublishChoice({ accountIds, caption })
-      const results = await publishEach(readyClips, { caption, accountIds })
-      setOutcomes(results)
-      setPublishMode("now")
-      setPublishWhen(null)
-      setPublishBusy(false)
-      setStage("done")
+      const chosen = clipIds ? readyClips.filter((clip) => clipIds.includes(clip.id)) : readyClips
+      try {
+        return await publishEach(chosen, { caption, accountIds })
+      } finally {
+        setPublishBusy(false)
+      }
     },
     [readyClips],
   )
@@ -900,7 +905,7 @@ export function DeckStage({
               setPublishOnly(null)
               setStage("flow")
             }}
-            onPostNow={(accountIds, caption) => void postNow(accountIds, caption)}
+            onPublish={publish}
             onSchedule={(accountIds, caption) => {
               setPublishChoice({ accountIds, caption })
               setScheduleError(null)

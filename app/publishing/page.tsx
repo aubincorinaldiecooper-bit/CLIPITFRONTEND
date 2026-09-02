@@ -29,6 +29,7 @@ import type { ScheduledPost, SocialAccount, SocialAccountsPage } from "@/lib/typ
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { Notice } from "@/components/workspace/notice"
 import { PlatformLogo } from "@/components/platform-logos"
+import { CONNECT_MESSAGE } from "@/components/theater/connect-platform"
 import {
   useAuthConfigured,
   useWorkspaceResumeIntent,
@@ -110,6 +111,32 @@ function CallbackBanner() {
   /** The page that was added, when the backend could identify which one. */
   const account = params.get("account")
   const announced = useRef<string | null>(null)
+
+  // Opened as the sign-in window from the publish screens: tell the screen
+  // that opened this window what happened, and close. The screen reads the
+  // account list itself — the message only says "look now". A window the
+  // browser will not close goes on as the page below.
+  useEffect(() => {
+    if (!connected && !error) return
+    let opener: Window | null = null
+    try {
+      opener = window.opener as Window | null
+    } catch {
+      opener = null
+    }
+    if (!opener || opener.closed) return
+    try {
+      opener.postMessage(
+        connected
+          ? { type: CONNECT_MESSAGE, ok: true, platform: connected, account: account ?? null }
+          : { type: CONNECT_MESSAGE, ok: false, platform: platform ?? null, error },
+        window.location.origin,
+      )
+    } catch {
+      // An opener that will not listen; the page goes on below.
+    }
+    window.close()
+  }, [connected, error, platform, account])
 
   useEffect(() => {
     if (!connected) return

@@ -10,6 +10,7 @@ import type {
   LibraryClip,
   MatchFeedback,
   MatchFeedbackReason,
+  ClipPost,
   ScheduledPost,
   SocialAccount,
   SocialAccountsPage,
@@ -691,6 +692,15 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     })
+  },
+
+  /**
+   * A clip's recent posts, newest first — the truth behind the Publish
+   * control once it is pressed. Ask until every post the publish made is
+   * 'posted' or 'failed'; 'posting' is still on its way.
+   */
+  async listClipPosts(clipId: string): Promise<{ posts: ClipPost[] }> {
+    return request(`/api/clips/${encodeURIComponent(clipId)}/posts`)
   },
 
   /**

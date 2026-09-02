@@ -438,9 +438,25 @@ export interface ApiErrorBody {
 /** A social account connected through Zernio, as the API mirrors it. */
 export interface SocialAccount {
   id: string
-  platform: "tiktok" | "youtube" | "instagram"
+  platform: "tiktok" | "youtube" | "instagram" | "x"
   displayName: string | null
   status: "connected" | "disconnected" | "reconnect_required"
+}
+
+/**
+ * One publish of a clip as the API reads it back: on its way, up, or
+ * refused. `status` is the provider's own word (or CLIPIT's 'submitting' /
+ * 'rendering'); `outcome` is that word read for a person — "posted" only on
+ * the platform's own word that it is up, never on the server having
+ * accepted it.
+ */
+export interface ClipPost {
+  id: string
+  clipId: string | null
+  status: string
+  outcome: "posting" | "posted" | "failed"
+  targets: Array<{ platform: string; accountId: string }>
+  createdAt: string
 }
 
 /**

@@ -14,9 +14,10 @@ vi.mock("../lib/api", () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-const { monthGrid, speakTime, scheduleDate, localIso, publishEach } = await import(
+const { monthGrid, speakTime, scheduleDate, localIso, publishEach, speakList } = await import(
   "../components/theater/publish-flow"
 )
+const { phaseOf, progressOf, retryPlans } = await import("../components/theater/publish-progress")
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -83,15 +84,17 @@ describe("publishEach — the truth per clip", () => {
 
   it("posts each clip and reports rendering separately from submitted", async () => {
     publishClip
-      .mockResolvedValueOnce({ posts: [{ status: "submitted" }] })
-      .mockResolvedValueOnce({ posts: [{ status: "rendering" }] })
+      .mockResolvedValueOnce({ posts: [{ id: "p1", status: "submitted", aspect: "9:16", targets: [{ platform: "tiktok" }] }] })
+      .mockResolvedValueOnce({ posts: [{ id: "p2", status: "rendering", aspect: "9:16", targets: [{ platform: "youtube" }] }] })
 
     const outcomes = await publishEach(clips, { caption: "hello", accountIds: ["acct-1"] })
 
     expect(publishClip).toHaveBeenNthCalledWith(1, "clip-1", { caption: "hello", accountIds: ["acct-1"] })
+    // The posts the server named ride on the outcome: the Publish control
+    // reads its truth from them afterwards.
     expect(outcomes).toEqual([
-      { clipId: "clip-1", title: "Green Mercedes reveal", ok: true, detail: "submitted" },
-      { clipId: "clip-2", title: "Gas station at night", ok: true, detail: "rendering" },
+      { clipId: "clip-1", title: "Green Mercedes reveal", ok: true, detail: "submitted", posts: [{ id: "p1", status: "submitted", platforms: ["tiktok"] }] },
+      { clipId: "clip-2", title: "Gas station at night", ok: true, detail: "rendering", posts: [{ id: "p2", status: "rendering", platforms: ["youtube"] }] },
     ])
   })
 
@@ -104,19 +107,71 @@ describe("publishEach — the truth per clip", () => {
     })
     // Empty selection means "all connected" — the field is omitted, never [].
     expect(publishClip).toHaveBeenCalledWith("clip-1", { caption: "", scheduledAt: "2026-08-31T18:00:00.000Z" })
-    expect(outcomes[0]).toMatchObject({ ok: true, detail: "scheduled" })
+    expect(outcomes[0]).toMatchObject({ ok: true, detail: "scheduled", posts: [] })
   })
 
   it("one clip's refusal is reported on that clip; the other still goes out", async () => {
     const { ApiError } = await import("../lib/api")
     publishClip
       .mockRejectedValueOnce(new (ApiError as unknown as new (message: string) => Error)("This clip is not ready yet"))
-      .mockResolvedValueOnce({ posts: [{ status: "submitted" }] })
+      .mockResolvedValueOnce({ posts: [{ id: "p2", status: "submitted", aspect: "9:16", targets: [{ platform: "tiktok" }] }] })
 
     const outcomes = await publishEach(clips, { caption: "", accountIds: ["acct-1"] })
 
-    expect(outcomes[0]).toMatchObject({ ok: false, detail: "This clip is not ready yet" })
+    expect(outcomes[0]).toMatchObject({ ok: false, detail: "This clip is not ready yet", posts: [] })
     expect(outcomes[1]).toMatchObject({ ok: true, detail: "submitted" })
+  })
+})
+
+describe("the Publish control's truth — read from the posts, never from the 202", () => {
+  const made = (id: string, status = "submitted", platforms = ["tiktok"]) => ({ id, status, platforms })
+  const ok = (clipId: string, posts: ReturnType<typeof made>[]) => ({ clipId, title: clipId, ok: true, detail: "submitted", posts })
+  const refused = (clipId: string) => ({ clipId, title: clipId, ok: false, detail: "no", posts: [] })
+  const seen = (id: string, outcome: "posting" | "posted" | "failed", status: string, accountId = "acc-1", platform = "tiktok") => ({
+    id, clipId: "clip-1", status, outcome, targets: [{ platform, accountId }], createdAt: "2026-09-02T18:00:00.000Z",
+  })
+
+  it("a post the server has not been asked about yet is on its way, with what the 202 said", () => {
+    const progress = progressOf([ok("clip-1", [made("p1", "rendering", ["youtube"])])], new Map())
+    expect(progress).toEqual([{ postId: "p1", clipId: "clip-1", platforms: ["youtube"], accountIds: [], status: "rendering", outcome: "posting" }])
+  })
+
+  it("a post the server names takes the server's word, and the accounts it went to", () => {
+    const progress = progressOf([ok("clip-1", [made("p1")])], new Map([["clip-1", [seen("p1", "posted", "published")]]]))
+    expect(progress[0]).toMatchObject({ outcome: "posted", status: "published", accountIds: ["acc-1"] })
+  })
+
+  it("is Uploading while any post is on its way, Published only when every post is up, Try again on a refusal, Sent when waited out", () => {
+    const up = { postId: "p1", clipId: "c", platforms: ["tiktok"], accountIds: ["a"], status: "published", outcome: "posted" as const }
+    const going = { ...up, postId: "p2", status: "submitted", outcome: "posting" as const }
+    const down = { ...up, postId: "p3", status: "failed", outcome: "failed" as const }
+    expect(phaseOf([up, going], 0, false)).toBe("publishing")
+    expect(phaseOf([up], 0, false)).toBe("published")
+    expect(phaseOf([up, down], 0, false)).toBe("failed")
+    expect(phaseOf([up], 1, false)).toBe("failed")
+    expect(phaseOf([going], 0, true)).toBe("sent")
+    expect(phaseOf([going, down], 0, true)).toBe("failed")
+    expect(phaseOf([], 0, false)).toBe("idle")
+  })
+
+  it("Try again sends only what did not go: every chosen account for a refused clip, a refused post's accounts, never one whose post is up", () => {
+    const chosen = [{ id: "acc-1", platform: "tiktok" }, { id: "acc-2", platform: "youtube" }]
+    const posts = [
+      { postId: "p1", clipId: "clip-1", platforms: ["tiktok"], accountIds: ["acc-1"], status: "published", outcome: "posted" as const },
+      { postId: "p2", clipId: "clip-1", platforms: ["youtube"], accountIds: ["acc-2"], status: "failed", outcome: "failed" as const },
+      { postId: "p3", clipId: "clip-3", platforms: ["youtube"], accountIds: [], status: "failed", outcome: "failed" as const },
+    ]
+    expect(retryPlans([ok("clip-1", [made("p1"), made("p2")]), refused("clip-2"), ok("clip-3", [made("p3")])], posts, chosen)).toEqual([
+      { clipId: "clip-1", accountIds: ["acc-2"] },
+      { clipId: "clip-2", accountIds: ["acc-1", "acc-2"] },
+      { clipId: "clip-3", accountIds: ["acc-2"] },
+    ])
+  })
+
+  it("speaks a list the way a person does", () => {
+    expect(speakList(["TikTok"])).toBe("TikTok")
+    expect(speakList(["TikTok", "X"])).toBe("TikTok and X")
+    expect(speakList(["TikTok", "YouTube Shorts", "X"])).toBe("TikTok, YouTube Shorts and X")
   })
 })
 
