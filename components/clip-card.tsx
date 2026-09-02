@@ -39,25 +39,19 @@ import type { ClipComposition as Composition, LibraryClip } from "@/lib/types"
  * card decides what furniture each one wears — a menu row on the card, a
  * button in the viewer — so nothing is hand-rolled twice.
  *
- * Every card's picture is the same tall box, because a row of cards only
- * reads as a row when the cards match. A vertical clip fills it exactly — the
- * poster is the file. Anything else (a 16:9 original-framing clip) is shown
- * through the same box centred, cut at the sides, the way a social grid
- * treats a wide picture; the pill on the picture says its true shape, and
- * opening it plays it in that shape. That second part is the decision worth
- * knowing about: a wide clip's card shows the middle of its frame.
+ * The card is a THUMBNAIL (owner, 2026-09-02): compact until it is acted on,
+ * the way every social platform shows a video before you open it. Its
+ * picture is the same small 4:3 box for every clip, the reference's shape.
+ * That box cuts every poster a little — top and bottom off a tall one, the
+ * sides off a wide one — and the subject's own coordinate on the cut axis,
+ * where the render recorded one, keeps the subject in view. The pill says
+ * the clip's true shape; the popup is where the clip is seen whole.
  */
 
+/** What a vertical delivery is, and what the popup is shaped like. */
 const CARD_SHAPE = "9:16"
-
-/**
- * The one decision worth a switch. A wide (16:9) clip's card is the same tall
- * box as every other card. `false`: the picture fills the box, centred, cut
- * at the sides — the way a social grid treats a wide picture. `true`: the
- * whole frame is shown inside the box with dark space above and below.
- * Opening the clip plays it wide either way; the pill says 16:9 either way.
- */
-const WIDE_CARD_SHOWS_WHOLE_FRAME = false
+/** The thumbnail's box, for every clip: the reference's compact 4:3. */
+const CARD_BOX = "4:3"
 
 const NAMED_SHAPES: Array<[string, number]> = [
   ["9:16", 9 / 16],
@@ -138,16 +132,26 @@ function viewerComposition(clip: LibraryClip, shape: string): Composition {
 }
 
 /**
- * The composition the card's tall box uses. A vertical clip brings its own —
- * the same framing its file was cut with. Any other shape is centred in the
- * box, whole frame, cut at the sides.
+ * The composition the thumbnail's box uses. The box is 4:3 for every clip,
+ * so the poster is cut on one axis: top and bottom off a tall poster, the
+ * sides off a wide one. The subject's own coordinate on that axis — the
+ * focal point the render stored, which for a tall poster cut from a wide
+ * source is the same vertical coordinate — keeps the subject in view;
+ * without one, the middle.
  */
-function cardComposition(clip: LibraryClip): { composition: Composition; source: string | null } {
-  const media = clip.media
-  if (media && media.composition.aspectRatio === CARD_SHAPE) {
-    return { composition: media.composition, source: media.sourceAspectRatio }
+function cardComposition(clip: LibraryClip): { composition: Composition; source: string } {
+  const source = clipShape(clip)
+  const tall = ratioFromLabel(source, 16 / 9) < ratioFromLabel(CARD_BOX, 4 / 3)
+  const focal = clip.media?.composition ?? null
+  // A wide poster with a crop recorded cannot happen (a crop makes a tall
+  // poster), but a focal x from a crop would be in source coordinates, not
+  // the poster's, so it is not used for one.
+  const along = tall ? focal?.focalY : focal?.crop ? null : focal?.focalX
+  const focusPct = typeof along === "number" ? Math.round(along * 100) : 50
+  return {
+    composition: { aspectRatio: CARD_BOX, mode: "original", focalX: null, focalY: null, focusPct, crop: null },
+    source,
   }
-  return { composition: centredComposition(CARD_SHAPE), source: clipShape(clip) }
 }
 
 /** m:ss, the way every video surface writes a runtime. */
@@ -206,7 +210,7 @@ export function ClipCard({
   return (
     <article
       className={
-        "group relative flex w-full flex-col overflow-hidden rounded-xl " +
+        "group relative flex h-[320px] w-full flex-col overflow-hidden rounded-xl " +
         (surface === "light" ? "bg-shcard ring-1 ring-shborder" : "bg-surface ring-1 ring-white/[0.07]")
       }
     >
@@ -218,15 +222,7 @@ export function ClipCard({
           aria-label={`Open: ${title}`}
           className="block w-full text-left disabled:cursor-default"
         >
-          <ClipComposition
-            composition={composition}
-            sourceAspectRatio={source}
-            // A finished file fills its own shape. A wide picture in the tall
-            // box is "raw source" to the framing rule, which then keeps the
-            // whole frame — the switch above decides.
-            finished={!(WIDE_CARD_SHOWS_WHOLE_FRAME && shape !== CARD_SHAPE)}
-            className="w-full overflow-hidden bg-black"
-          >
+          <ClipComposition composition={composition} sourceAspectRatio={source} finished className="w-full overflow-hidden bg-black">
             {(style) =>
               poster ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
@@ -245,21 +241,11 @@ export function ClipCard({
             }
           </ClipComposition>
           {/* The pill: the clip's true shape, where the reference keeps its
-              category label. It matters most on a wide clip, whose card shows
-              the middle of the frame. */}
+              category label. The thumbnail cuts every poster a little, so
+              the pill is what says what will open. */}
           <span className="absolute left-2 top-2 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-black">
             {shape}
           </span>
-          {playable && (
-            <span className="absolute bottom-2 left-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/30">
-              <PlayGlyph />
-            </span>
-          )}
-          {duration && (
-            <span className="absolute bottom-2 right-2 rounded-[5px] bg-black/80 px-1.5 py-0.5 font-mono text-[11.5px] font-medium tabular-nums text-white">
-              {duration}
-            </span>
-          )}
         </button>
 
         {actions && actions.length > 0 && (
@@ -303,10 +289,24 @@ export function ClipCard({
         )}
       </div>
 
-      <div className="flex flex-col gap-0.5 px-2.5 pb-3 pt-2.5">
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug tracking-tight text-foreground">{title}</h3>
-        <p className="truncate text-xs text-foreground/60">{clip.videoTitle ?? "Your video"}</p>
-        {showDate && <p className="text-xs text-foreground/60">Cut {cutOn(clip)}</p>}
+      {/* The reference's text block: a title, a quiet line, and a footer row
+          pinned to the bottom so every card ends at the same height. */}
+      <div className="flex flex-1 flex-col justify-between gap-2 px-2.5 pb-2.5 pt-2">
+        <div className="flex flex-col gap-0.5">
+          <h3 className="line-clamp-2 text-sm font-medium leading-snug tracking-tight text-foreground">{title}</h3>
+          <p className="truncate text-xs text-foreground/60">{clip.videoTitle ?? "Your video"}</p>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs text-foreground/70">
+          {duration ? (
+            <span className="flex items-center gap-1 font-mono tabular-nums">
+              {playable && <PlayGlyph className="size-3" />}
+              {duration}
+            </span>
+          ) : (
+            <span />
+          )}
+          {showDate && <span className="truncate text-foreground/60">{cutOn(clip)}</span>}
+        </div>
         {children}
       </div>
     </article>

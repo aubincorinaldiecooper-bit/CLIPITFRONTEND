@@ -419,7 +419,7 @@ function ClipsBody() {
             <Skeleton className="h-6 w-48 rounded-md" />
             <div className="scrollbar-none -mx-1 flex gap-3 overflow-x-hidden px-1 pb-2">
               {[0, 1, 2, 3, 4, 5].map((index) => (
-                <Skeleton key={index} className="h-[420px] w-[190px] flex-none rounded-xl sm:w-[220px]" />
+                <Skeleton key={index} className="h-[320px] w-[240px] flex-none rounded-xl md:w-[260px]" />
               ))}
             </div>
           </div>

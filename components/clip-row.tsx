@@ -96,7 +96,7 @@ export function ClipRow({
       </div>
 
       {showAll ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {eachCard(children, "min-w-0")}
         </div>
       ) : (
@@ -105,7 +105,7 @@ export function ClipRow({
           onScroll={measure}
           className="scrollbar-none -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2"
         >
-          {eachCard(children, "w-[190px] flex-none snap-start sm:w-[220px]")}
+          {eachCard(children, "w-[240px] flex-none snap-start md:w-[260px]")}
         </div>
       )}
     </section>

@@ -70,15 +70,25 @@ describe('the clip card', () => {
     expect(screen.getByText('9:16')).toBeTruthy()
     expect(screen.getByText('0:20')).toBeTruthy()
     expect(screen.getByText('Sunday five-a-side')).toBeTruthy()
-    expect(screen.getByText(/^Cut /)).toBeTruthy()
+    // The day sits in the footer row, without ceremony.
+    expect(screen.getByText(/2026/)).toBeTruthy()
     expect(document.querySelector('img')!.getAttribute('src')).toBe('https://cdn/poster.jpg')
   })
 
-  it('says a wide clip is wide, and shows the middle of its frame in the tall box', () => {
+  it('says a wide clip is wide, and shows the middle of its frame in the compact box', () => {
     render(<ClipCard clip={wide()} onOpen={() => {}} />)
     expect(screen.getByText('16:9')).toBeTruthy()
-    // Centred: the sides are what the tall box cuts, evenly.
+    // Centred: the sides are what the 4:3 box cuts off a wide poster, evenly.
     expect(document.querySelector('img')!.style.objectPosition).toBe('50% 50%')
+  })
+
+  it("keeps a vertical clip's subject in view: the box cuts top and bottom around the focal point", () => {
+    const talkingHead = vertical()
+    talkingHead.media = { ...talkingHead.media!, composition: { ...talkingHead.media!.composition, focalY: 0.3 } }
+    render(<ClipCard clip={talkingHead} onOpen={() => {}} />)
+    expect(document.querySelector('img')!.style.objectPosition).toBe('50% 30%')
+    // The pill still says what will open.
+    expect(screen.getByText('9:16')).toBeTruthy()
   })
 
   it('opens from the picture and not from the menu, which holds the actions as a real menu', async () => {
