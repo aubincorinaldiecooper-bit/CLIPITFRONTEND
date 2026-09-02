@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   FolderOpenIcon,
+  FolderRemoveIcon,
   SquareLock01Icon,
   UserAdd01Icon,
   UserGroupIcon,
@@ -19,7 +20,7 @@ import {
 import { api, ApiError } from "@/lib/api"
 import type { WorkspaceDetail } from "@/lib/types"
 import { WORKSPACES_CHANGED_EVENT } from "@/components/side-nav"
-import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
+import { ClipCard, ClipViewer, type ClipAction } from "@/components/clip-card"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { useAuthConfigured, useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { StatusButton, type StatusButtonState } from "@/components/workspace/uselayouts/status-button"
@@ -42,7 +43,7 @@ import { ConfirmDeleteButton } from "@/components/workspace/uselayouts/confirm-d
 function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
   const [page, setPage] = useState<WorkspaceDetail | null>(null)
   const [failed, setFailed] = useState<"missing" | "signin" | "error" | null>(null)
-  const [playingId, setPlayingId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const [email, setEmail] = useState("")
   const [inviting, setInviting] = useState<StatusButtonState>("idle")
   const [formError, setFormError] = useState<string | null>(null)
@@ -234,6 +235,22 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
 
   const { isOwner } = page.workspace
 
+  const openClip = page?.clips.find((clip) => clip.id === openId) ?? null
+
+  /** The card's menu and the viewer's row: Download, and Take out. */
+  const roomActions = (clip: NonNullable<typeof page>["clips"][number]): ClipAction[] => [
+    ...(clip.downloadUrl ? [{ label: "Download", href: clip.downloadUrl }] : []),
+    // "Take out" removes a SHARE — the clip itself is untouched, so a plain
+    // action is honest; the two-press confirm is reserved for taking away
+    // people.
+    {
+      label: busyId === clip.id ? "Taking out…" : "Take out",
+      icon: FolderRemoveIcon,
+      disabled: busyId === clip.id,
+      onClick: () => void takeOut(clip.id),
+    },
+  ]
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -384,34 +401,23 @@ function WorkspaceBody({ workspaceId }: { workspaceId: string }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {page.clips.map((clip) => (
             <ClipCard
               surface="light"
               key={clip.id}
               clip={clip}
-              isPlaying={playingId === clip.id}
-              onPlay={() => setPlayingId(clip.id)}
-              actions={
-                <>
-                  {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} surface="light" />}
-                  {/* "Take out" removes a SHARE — the clip itself is untouched,
-                      so a plain button is honest; the two-press confirm is
-                      reserved for taking away people. */}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={busyId === clip.id}
-                    onClick={() => void takeOut(clip.id)}
-                  >
-                    Take out
-                  </Button>
-                </>
-              }
+              onOpen={() => setOpenId(clip.id)}
+              actions={roomActions(clip)}
             />
           ))}
         </div>
       )}
+      <ClipViewer
+        clip={openClip}
+        onClose={() => setOpenId(null)}
+        actions={openClip ? roomActions(openClip) : undefined}
+      />
     </div>
   )
 }
