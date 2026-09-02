@@ -8,6 +8,7 @@ import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { ChannelToggle, ReclipIcon } from "./review-deck"
 import { PlatformLogo } from "@/components/platform-logos"
 import { useConnectPlatform } from "./connect-platform"
+import { useOptionalWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { mergeOutcome, retryPlans, usePublishProgress, type PostProgress, type PublishOutcome, type PublishPhase } from "./publish-progress"
 
 export type { MadePost, PublishOutcome } from "./publish-progress"
@@ -129,7 +130,9 @@ function BackDisc({ onBack, label }: { onBack: () => void; label: string }) {
       type="button"
       aria-label={label}
       onClick={onBack}
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full ring-1 ring-shborder transition-colors hover:bg-shaccent"
+      // The dialog puts focus here on open; the browser's outline is not the
+      // design's ring (2026-09-02).
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full outline-none ring-1 ring-shborder transition-colors hover:bg-shaccent focus-visible:ring-2 focus-visible:ring-ring"
     >
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M19 12H5M11 18l-6-6 6-6" />
@@ -295,6 +298,7 @@ export function WhereTo({
   const [outcomes, setOutcomes] = useState<PublishOutcome[] | null>(null)
   /** The platform whose row is wearing its "connected" mark. */
   const [marked, setMarked] = useState<string | null>(null)
+  const gate = useOptionalWorkspaceSignInGate()
 
   useEffect(() => {
     let cancelled = false
@@ -411,9 +415,23 @@ export function WhereTo({
       ) : !page.configured ? (
         <p className="py-6 text-sm text-muted-foreground">Publishing isn&apos;t configured on this deployment.</p>
       ) : page.signInRequired ? (
-        <p className="py-6 text-sm text-muted-foreground">
-          Sign in to publish — your connected accounts live with your account, not this tab.
-        </p>
+        // A sentence with no way in was a dead end (2026-09-02): the gate's
+        // own dialog is the way. Sign-in returns to a fresh start page,
+        // which the words say plainly.
+        <div className="py-4">
+          <p className="text-sm text-muted-foreground">
+            Sign in to publish — your connected accounts live with your account, not this tab.
+          </p>
+          {gate && (
+            <button
+              type="button"
+              onClick={gate.askToSignIn}
+              className="mt-5 w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3.5 text-[15px] font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
+            >
+              Sign in
+            </button>
+          )}
+        </div>
       ) : (
         <>
           {/* The channels, as the owner draws them: each platform's own

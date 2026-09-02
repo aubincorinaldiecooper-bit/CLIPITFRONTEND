@@ -79,6 +79,40 @@ describe('Dialogue', () => {
     expect(screen.queryByTestId('dialogue-model')).toBeNull()
   })
 
+  it('opens on the empty state after a first search that found moments before the whole video was read: the reading is not narrated', () => {
+    // The owner's run of 2026-09-02: the first answer opened with "4 so far
+    // — I'm only 11 minutes in. Still watching the rest." The chat is a
+    // conversation, not a report of what the reading is doing.
+    const partial = request({
+      matches: [match(), match({ id: 'm2' })],
+      coverage: {
+        complete: false, locatable: true, unsearchedSeconds: 240,
+        gaps: [{ startSeconds: 361, endSeconds: 601, startTimecode: '6:01', endTimecode: '10:01', reason: 'not_read_yet' }],
+        degraded: [],
+      },
+    } as Partial<ClipRequest>)
+    const exchanges: Exchange[] = [{ request: partial, clips: [] }]
+    render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    expect(screen.getByTestId('dialogue-empty')).toBeTruthy()
+    expect(screen.queryByTestId('dialogue-model')).toBeNull()
+  })
+
+  it('a follow-up asked here still admits the stretch not read yet, in words about how much was read', () => {
+    const partial = request({
+      id: 'r2', instruction: 'find the dunk',
+      matches: [match({ id: 'm3' })],
+      coverage: {
+        complete: false, locatable: true, unsearchedSeconds: 240,
+        gaps: [{ startSeconds: 361, endSeconds: 601, startTimecode: '6:01', endTimecode: '10:01', reason: 'not_read_yet' }],
+        degraded: [],
+      },
+    } as Partial<ClipRequest>)
+    const exchanges: Exchange[] = [{ request: request({ matches: [match()] }), clips: [] }, { request: partial, clips: [] }]
+    const read = { ...video, index: { readThroughSeconds: 445 } } as unknown as Video
+    render(<Dialogue exchanges={exchanges} video={read} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    expect(screen.getByTestId('dialogue-model').textContent).toContain("One so far — I've only read 7 minutes of it. Still watching the rest.")
+  })
+
   it('still admits what the first search could not do: nothing found', () => {
     const exchanges: Exchange[] = [{ request: request({ matches: [] }), clips: [] }]
     render(<Dialogue exchanges={exchanges} video={video} moments={[]} active={undefined} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)

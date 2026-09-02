@@ -40,6 +40,7 @@ Object.defineProperty(window, 'matchMedia', {
 ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} }
 
 const { PublishDialog } = await import('../components/start/publish-dialog')
+const { WorkspaceGateProvider } = await import('../components/workspace/sign-in-gate')
 
 const clip = { id: 'c-a', title: 'The goal from the corner', ready: true }
 const publishButton = () => screen.getByRole('button', { name: /^(publish|uploading…|published|sent|try again)$/i })
@@ -182,6 +183,28 @@ describe('PublishDialog', () => {
     expect(within(screen.getByTestId('channel-youtube')).getByText(/^connected$/i)).toBeTruthy()
     expect(screen.getByRole('switch', { name: /post to youtube shorts/i }).getAttribute('aria-checked')).toBe('true')
     expect(popup.close).toHaveBeenCalled()
+  })
+
+  it('a guest is offered the way in — Sign in, through the gate — instead of a sentence with no way out', async () => {
+    // 2026-09-02: the owner, signed out, pressed Publish and met "Sign in
+    // to publish" with nothing to press.
+    api.listSocialAccounts.mockResolvedValue({ configured: true, signInRequired: true, accounts: [] })
+    const askToSignIn = vi.fn()
+    render(
+      <WorkspaceGateProvider value={{ requireSignIn: vi.fn(() => false), askToSignIn, isSignedIn: false }}>
+        <PublishDialog clip={clip} onClose={vi.fn()} />
+      </WorkspaceGateProvider>,
+    )
+    await screen.findByText(/sign in to publish/i)
+    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+    expect(askToSignIn).toHaveBeenCalled()
+  })
+
+  it('says why a guest cannot publish even where there is no gate to open', async () => {
+    api.listSocialAccounts.mockResolvedValue({ configured: true, signInRequired: true, accounts: [] })
+    render(<PublishDialog clip={clip} onClose={vi.fn()} />)
+    await screen.findByText(/sign in to publish/i)
+    expect(screen.queryByRole('button', { name: /^sign in$/i })).toBeNull()
   })
 
   it('is closed when there is no clip to publish', () => {

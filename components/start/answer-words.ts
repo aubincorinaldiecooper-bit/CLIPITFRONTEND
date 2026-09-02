@@ -37,7 +37,10 @@ export function answerLine(request: ClipRequest, readThroughSeconds?: number | n
 
   if (partial && count > 0) {
     const found = count === 1 ? "One so far" : `${count} so far`
-    const sofar = readThroughSeconds ? ` — I'm only ${describeMinutes(readThroughSeconds)} in` : ""
+    // How much of it has been read — the notes' coverage, which the API
+    // reports as readThroughSeconds — not how far in: parts finish out of
+    // order, so "in" would overstate it.
+    const sofar = readThroughSeconds ? ` — I've only read ${describeMinutes(readThroughSeconds)} of it` : ""
     return `${found}${sofar}. Still watching the rest.`
   }
 
