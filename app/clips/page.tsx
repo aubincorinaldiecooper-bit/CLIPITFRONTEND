@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
+import { HugeiconsIcon } from "@hugeicons/react"
 import {
   CaptionsIcon,
   Delete01Icon,
@@ -31,7 +31,8 @@ import {
 } from "@/components/workspace/sign-in-gate"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { CaptionEditor } from "@/components/caption-editor"
-import { ClipCard, ClipDownloadAction } from "@/components/clip-card"
+import { ClipCard, ClipDownloadAction, ClipMenuItem, ClipViewer } from "@/components/clip-card"
+import { ClipRow } from "@/components/clip-row"
 import { UploadPackage } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
@@ -63,29 +64,6 @@ const CARD_REVEAL = {
  * media surfaces are the owner's carve-out. Download uses the signed attachment
  * URL, so the browser saves the file without this page touching the bytes.
  */
-/** The square secondary buttons on a clip card's action row. */
-function ClipAction({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string
-  icon: IconSvgElement
-  onClick?: () => void
-}) {
-  return (
-    <Button
-      variant="secondary"
-      size="icon-sm"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="rounded-full"
-    >
-      <HugeiconsIcon icon={icon} />
-    </Button>
-  )
-}
 
 function ClipsBody() {
   const router = useRouter()
@@ -133,7 +111,7 @@ function ClipsBody() {
   useEffect(() => {
     pagingRef.current = { hasMore, nextBefore }
   }, [hasMore, nextBefore])
-  const [playingId, setPlayingId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
 
   /** Which clip's caption editor is open — a modal visit, not a page. */
   const [captionClipId, setCaptionClipId] = useState<string | null>(null)
@@ -237,7 +215,7 @@ function ClipsBody() {
       // Use a functional update so any loadOlder/refresh that completed while
       // the delete was in flight is not overwritten by a stale closure.
       setClips((current) => current?.filter((clip) => clip.id !== clipId) ?? [])
-      setPlayingId((current) => (current === clipId ? null : current))
+      setOpenId((current) => (current === clipId ? null : current))
       setDeleteTargetId((current) => (current === clipId ? null : current))
       // Let the empty-state effect decide whether to page in older clips,
       // using the latest pagination values from a ref.
@@ -333,6 +311,41 @@ function ClipsBody() {
     loadOlderAfterDeleteRef.current = null
   }, [clips, loadingMore])
 
+  /**
+   * One row per source video, newest video first, its clips newest first.
+   * The reference's rows are categories; ours are the films the clips came
+   * from, which is how someone remembers what they cut.
+   */
+  const rows = useMemo(() => {
+    const byVideo = new Map<string, { videoId: string; title: string; clips: LibraryClip[] }>()
+    for (const clip of clips ?? []) {
+      const row = byVideo.get(clip.videoId)
+      if (row) row.clips.push(clip)
+      else byVideo.set(clip.videoId, { videoId: clip.videoId, title: clip.videoTitle ?? "Your video", clips: [clip] })
+    }
+    return Array.from(byVideo.values())
+  }, [clips])
+
+  const openClip = clips?.find((clip) => clip.id === openId) ?? null
+
+  /** The same rows in the card's menu and along the bottom of the viewer. */
+  const clipActions = (clip: LibraryClip) => (
+    <>
+      {clip.downloadUrl && <ClipDownloadAction href={clip.downloadUrl} />}
+      {clip.status === "ready" && (
+        <ClipMenuItem label="Edit captions" icon={CaptionsIcon} onClick={() => setCaptionClipId(clip.id)} />
+      )}
+      {clip.status === "ready" && (
+        <ClipMenuItem
+          label="Rename"
+          icon={PencilEdit01Icon}
+          onClick={() => setRenameTarget({ clipId: clip.id, value: clip.description, originalValue: clip.description })}
+        />
+      )}
+      <ClipMenuItem label="Delete" icon={Delete01Icon} tone="danger" onClick={() => setDeleteTargetId(clip.id)} />
+    </>
+  )
+
   return (
     <>
       <div
@@ -404,10 +417,13 @@ function ClipsBody() {
         )}
 
         {clips === null ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {[0, 1, 2, 3, 4, 5].map((index) => (
-              <Skeleton key={index} className="h-[230px] w-full rounded-2xl" />
-            ))}
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-6 w-48 rounded-md" />
+            <div className="scrollbar-none -mx-1 flex gap-3 overflow-x-hidden px-1 pb-2">
+              {[0, 1, 2, 3, 4, 5].map((index) => (
+                <Skeleton key={index} className="h-[420px] w-[190px] flex-none rounded-xl sm:w-[220px]" />
+              ))}
+            </div>
           </div>
         ) : clips.length === 0 || failed ? (
           // The empty page holds its room instead of huddling under the
@@ -502,52 +518,22 @@ function ClipsBody() {
             </CardContent>
           </Card>
         ) : (
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {clips.map((clip, index) => (
-                <TimelineAnimation
-                  key={clip.id}
-                  animationNum={index}
-                  customVariants={CARD_REVEAL}
-                >
-                  <ClipCard
-                    clip={clip}
-                    surface="light"
-                    isPlaying={playingId === clip.id}
-                    onPlay={() => setPlayingId(clip.id)}
-                    showDate
-                    actions={
-                      <>
-                        {clip.downloadUrl && (
-                          <ClipDownloadAction href={clip.downloadUrl} surface="light" />
-                        )}
-                        {clip.status === "ready" && (
-                          <ClipAction
-                            label="Edit"
-                            icon={CaptionsIcon}
-                            onClick={() => setCaptionClipId(clip.id)}
-                          />
-                        )}
-                        {clip.status === "ready" && (
-                          <ClipAction
-                            label="Rename"
-                            icon={PencilEdit01Icon}
-                            onClick={() =>
-                              setRenameTarget({ clipId: clip.id, value: clip.description, originalValue: clip.description })
-                            }
-                          />
-                        )}
-                        <ClipAction
-                          label="Delete"
-                          icon={Delete01Icon}
-                          onClick={() => setDeleteTargetId(clip.id)}
-                        />
-                      </>
-                    }
-                  />
-                </TimelineAnimation>
-              ))}
-            </div>
+          <div className="flex flex-col gap-6">
+            {rows.map((row) => (
+              <ClipRow key={row.videoId} title={row.title} count={row.clips.length}>
+                {row.clips.map((clip, index) => (
+                  <TimelineAnimation key={clip.id} animationNum={index} customVariants={CARD_REVEAL}>
+                    <ClipCard
+                      clip={clip}
+                      surface="light"
+                      onOpen={() => setOpenId(clip.id)}
+                      showDate
+                      actions={clipActions(clip)}
+                    />
+                  </TimelineAnimation>
+                ))}
+              </ClipRow>
+            ))}
             {hasMore && (
               <div className="flex justify-center">
                 <Button variant="secondary" size="sm" disabled={loadingMore} onClick={() => void loadOlder()}>
@@ -558,6 +544,14 @@ function ClipsBody() {
           </div>
         )}
       </div>
+
+      {/* Opening a card: the clip in its true shape, with the same actions. */}
+      <ClipViewer
+        clip={openClip}
+        onClose={() => setOpenId(null)}
+        showDate
+        actions={openClip ? clipActions(openClip) : undefined}
+      />
 
       {/* The caption editor keeps its own furniture for now: it is a working
           editor (toolbar, font pickers, undo) whose innards are still on the

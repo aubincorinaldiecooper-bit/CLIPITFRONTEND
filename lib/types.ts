@@ -403,6 +403,11 @@ export interface Clip {
   /** The source video's true dimensions, when its probe knew them. */
   sourceWidth?: number | null
   sourceHeight?: number | null
+  /**
+   * Which file this moment delivers: its own framing ('original') or a 9:16
+   * derivative ('vertical'). Older servers omit it.
+   */
+  presentation?: "original" | "vertical" | null
   /** Signed with an attachment disposition so the browser saves rather than plays. */
   downloadUrl: string | null
   urlExpiresAt: string | null

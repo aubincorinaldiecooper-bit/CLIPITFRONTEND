@@ -280,3 +280,12 @@ body {
     animation-iteration-count: infinite !important;
   }
 }
+
+/* A row of cards scrolls sideways under its own arrows; the bar would only
+   repeat what they say. Native scrolling and snapping are untouched. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
