@@ -132,9 +132,8 @@ const twoDigits = (n: number) => String(n).padStart(2, "0")
 /**
  * The card's width in Astryx's 4px units (w-64 = 256px, w-52 = 208px on a
  * phone, where the shell's padding leaves 318px for the card and the
- * counter beside it); its height follows from 9:16. Sized so the fan, the
- * hint and the two decisions all fit a 900px-tall window with the header
- * above them — a control below the fold is a control nobody presses. The
+ * counter beside it); its height follows from 9:16. Sized so the fan and
+ * the two decisions fit a 900px-tall window with the header above them — a control below the fold is a control nobody presses. The
  * fan's offsets come from the card's MEASURED height, so the phone's
  * smaller card fans the same way; this constant only stands in before the
  * first measurement.
@@ -293,31 +292,6 @@ function EndCard({ canGoBack, onUploadMore }: { canGoBack: boolean; onUploadMore
         </div>
       </div>
     </VerticalFrame>
-  )
-}
-
-/** The owner's hint: two arrows breathing around the words. */
-function ScrollHint() {
-  const arrow = (path: string) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d={path} />
-    </svg>
-  )
-  return (
-    <motion.div
-      className="flex flex-col items-center gap-1 text-muted-foreground"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.6, duration: 0.6 }}
-    >
-      <motion.span animate={{ y: [0, -6, 0] }} transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5, ease: "easeInOut" }}>
-        {arrow("M12 5v14M5 12l7-7 7 7")}
-      </motion.span>
-      <span className="text-xs font-medium uppercase tracking-widest">Scroll or drag</span>
-      <motion.span animate={{ y: [0, 6, 0] }} transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5, ease: "easeInOut" }}>
-        {arrow("M12 5v14M19 12l-7 7-7-7")}
-      </motion.span>
-    </motion.div>
   )
 }
 
@@ -550,10 +524,8 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
         })}
       </div>
 
-      <ScrollHint />
-
       {top && (
-        <div className="mt-4 flex items-center justify-center gap-8" data-testid="feed-controls">
+        <div className="mt-6 flex items-center justify-center gap-8" data-testid="feed-controls">
           <button
             type="button"
             onClick={() => navigate(1)}

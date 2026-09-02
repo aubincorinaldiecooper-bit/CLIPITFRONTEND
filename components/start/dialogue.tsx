@@ -229,8 +229,7 @@ export function Dialogue({ exchanges, video, active, searching, onAsk, onReclip 
 
   return (
     <div className="flex min-h-80 min-w-64 flex-1 flex-col" data-testid="dialogue">
-      <p className="text-xs uppercase tracking-widest text-muted-foreground">Dialogue</p>
-      <div ref={threadRef} className="mt-4 flex flex-1 flex-col gap-4 overflow-y-auto">
+      <div ref={threadRef} className="flex flex-1 flex-col gap-4 overflow-y-auto">
         {entryCount === 0 && <DialogueEmpty />}
         {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={note.text} />))}
         {exchanges.map((exchange) => (
