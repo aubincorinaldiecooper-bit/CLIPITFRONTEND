@@ -8,20 +8,19 @@ import type { ClipMatch, MatchFeedback, MatchFeedbackReason, Video } from "@/lib
 import type { UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
-import { type StageExchange } from "@/components/theater/deck-stage"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { Wizard } from "@/components/start/wizard"
 import { UploadStep } from "@/components/start/upload-step"
 import { WatchStep } from "@/components/start/watch-step"
 import { ReviewStep } from "@/components/start/review-step"
-import type { StartStep } from "@/components/start/types"
+import type { Exchange, StartStep } from "@/components/start/types"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
 
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
-  const [exchanges, setExchanges] = useState<StageExchange[]>([])
+  const [exchanges, setExchanges] = useState<Exchange[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<StartStep>("upload")
@@ -144,7 +143,7 @@ export default function StartPage() {
   /**
    * Re-applies verdicts the server has not confirmed yet.
    */
-  const reconcileVerdicts = useCallback((request: StageExchange["request"]): StageExchange["request"] => {
+  const reconcileVerdicts = useCallback((request: Exchange["request"]): Exchange["request"] => {
     const pending = pendingVerdicts.current
     if (pending.size === 0 || !request.matches?.length) return request
 
@@ -222,17 +221,24 @@ export default function StartPage() {
    */
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
 
+  /**
+   * Asks a question of the video. The first question goes to the waiting
+   * screen; one asked from the review screen stays there — its moments land
+   * in the feed as they are cut, and the dialogue shows it looking.
+   */
   const startSearch = useCallback(
-    async (instruction: string) => {
-      if (!video || busy) return
+    async (instruction: string, options: { stay?: boolean } = {}): Promise<boolean> => {
+      if (!video || busy) return false
       setError(null)
       setBusy(true)
       try {
         const { clipRequest: created } = await api.createClipRequest(video.id, instruction)
         setExchanges((previous) => [...previous, { request: created, clips: [] }])
-        setStep("watch")
+        if (!options.stay) setStep("watch")
+        return true
       } catch (cause) {
         fail(cause)
+        return false
       } finally {
         setBusy(false)
       }
@@ -286,8 +292,9 @@ export default function StartPage() {
     [uploads, removeUpload, video?.id],
   )
 
+  /** Resolves true once the server has taken the Re-clip; false when it refused, with the reason shown. */
   const reclipMatch = useCallback(
-    async (exchangeRequestId: string, matchId: string) => {
+    async (exchangeRequestId: string, matchId: string): Promise<boolean> => {
       setError(null)
       const paint = (match: ClipMatch): ClipMatch => ({
         ...match,
@@ -322,6 +329,7 @@ export default function StartPage() {
               : exchange,
           ),
         )
+        return true
       } catch (cause) {
         setExchanges((previous) =>
           previous.map((exchange) =>
@@ -339,6 +347,7 @@ export default function StartPage() {
           ),
         )
         fail(cause)
+        return false
       }
     },
     [fail],
@@ -516,18 +525,15 @@ export default function StartPage() {
           </Wizard>
         ) : (
           <ReviewStep
-            request={currentRequest}
-            clips={exchanges.at(-1)?.clips ?? []}
+            exchanges={exchanges}
             video={video}
             busy={busy}
-            onKeep={(matchId) => {
-              if (!currentRequest) return
-              void keepMatch(currentRequest.id, matchId)
-            }}
-            onSkip={(matchId) => {
-              if (!currentRequest) return
-              void rateMatch(currentRequest.id, matchId, "rejected")
-            }}
+            searching={searchRunning}
+            onKeep={keepMatch}
+            onSkip={(requestId, matchId) => rateMatch(requestId, matchId, "rejected")}
+            onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}
+            onReclip={reclipMatch}
+            onAsk={(instruction) => (searchRunning ? false : startSearch(instruction, { stay: true }))}
             onUploadMore={reset}
           />
         )}
