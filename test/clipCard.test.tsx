@@ -145,6 +145,35 @@ describe('the shape a card names', () => {
     expect(clipShape(clip({ presentation: 'original', sourceWidth: 1920, sourceHeight: 1080 }))).toBe('16:9')
   })
 
+  it('does not take "source" for a shape — the server writes it when it could not measure', () => {
+    // An original-framing clip the server could not size: the media block
+    // says "source", the row still knows the pixels.
+    const unmeasured = (w: number, h: number) =>
+      clip({
+        sourceWidth: w,
+        sourceHeight: h,
+        presentation: 'original',
+        media: { ...wide().media!, outputAspectRatio: null, composition: { ...wide().media!.composition, aspectRatio: 'source' } },
+      })
+    expect(clipShape(unmeasured(1080, 1080))).toBe('1:1')
+    expect(clipShape(unmeasured(1080, 1920))).toBe('9:16')
+    expect(clipShape(unmeasured(1920, 1080))).toBe('16:9')
+  })
+
+  it('plays an unmeasured clip through its resolved shape, not through a 9:16 box', () => {
+    const square = clip({
+      sourceWidth: 1080,
+      sourceHeight: 1080,
+      presentation: 'original',
+      media: { ...wide().media!, outputAspectRatio: null, composition: { ...wide().media!.composition, aspectRatio: 'source' } },
+    })
+    render(<ClipViewer clip={square} onClose={() => {}} />)
+    const box = document.querySelector('[data-slot="clip-popup"] [style*="aspect-ratio"]') as HTMLElement | null
+    expect(box).toBeTruthy()
+    const [w, h] = box!.style.aspectRatio.split('/').map((part) => Number(part.trim()))
+    expect(w / h).toBeCloseTo(1)
+  })
+
   it('falls back to the source size, then to wide', () => {
     expect(clipShape(clip({ sourceWidth: 1080, sourceHeight: 1920 }))).toBe('9:16')
     // A pixel off a named shape is still that shape to a person.

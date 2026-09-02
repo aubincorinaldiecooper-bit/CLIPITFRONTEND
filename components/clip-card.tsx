@@ -91,26 +91,50 @@ export function playableUrl(clip: LibraryClip): string | null {
   return clip.media ? clip.media.url : clip.url
 }
 
-/**
- * The shape a clip is delivered in, as the pill says it: "9:16", "16:9"…
- * Taken from the media block the server built (the file's real shape), else
- * from what the server said it delivers, else from the source's size, else
- * assumed wide — the shape every clip had before any vertical delivery
- * existed.
- */
-export function clipShape(clip: LibraryClip): string {
-  const fromMedia = clip.media?.outputAspectRatio ?? clip.media?.composition.aspectRatio ?? null
-  if (!fromMedia && clip.presentation === "vertical") return CARD_SHAPE
-  const ratio = fromMedia
-    ? ratioFromLabel(fromMedia, Number.NaN)
-    : clip.sourceWidth && clip.sourceHeight
-      ? clip.sourceWidth / clip.sourceHeight
-      : Number.NaN
-  if (!Number.isFinite(ratio)) return "16:9"
+/** A label the server wrote that actually names a ratio — "source" and the like do not. */
+function namedRatio(label: string | null | undefined): number | null {
+  const ratio = ratioFromLabel(label, Number.NaN)
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : null
+}
+
+/** The nearest named shape, or the ratio written out. */
+function shapeLabel(ratio: number, exact: string | null): string {
   for (const [label, named] of NAMED_SHAPES) {
     if (Math.abs(ratio - named) / named < 0.03) return label
   }
-  return fromMedia ?? `${clip.sourceWidth}:${clip.sourceHeight}`
+  return exact ?? `${Math.round(ratio * 1000)}:1000`
+}
+
+/**
+ * The shape a clip is delivered in, as the pill says it: "9:16", "16:9"…
+ *
+ * In order of who knows best: the media block's delivered shape, when it
+ * names one (the server writes "source" when it could not measure, and that
+ * is not a shape); then what the server said it delivers — a vertical
+ * delivery is 9:16 whatever the source was; then the source's own size; and
+ * only then wide, the shape every clip had before any vertical delivery
+ * existed.
+ */
+export function clipShape(clip: LibraryClip): string {
+  const delivered = clip.media?.outputAspectRatio ?? clip.media?.composition.aspectRatio ?? null
+  const fromMedia = namedRatio(delivered)
+  if (fromMedia !== null) return shapeLabel(fromMedia, delivered)
+  if (clip.presentation === "vertical") return CARD_SHAPE
+  if (clip.sourceWidth && clip.sourceHeight) {
+    return shapeLabel(clip.sourceWidth / clip.sourceHeight, `${clip.sourceWidth}:${clip.sourceHeight}`)
+  }
+  return "16:9"
+}
+
+/**
+ * The framing the popup plays through: the server's composition when it
+ * names a shape, else a centred one in the shape the clip resolves to — so a
+ * clip whose media block says "source" is not played through a 9:16 box.
+ */
+function viewerComposition(clip: LibraryClip, shape: string): Composition {
+  const own = clip.media?.composition
+  if (own && namedRatio(own.aspectRatio) !== null) return own
+  return centredComposition(shape)
 }
 
 /**
@@ -384,7 +408,7 @@ export function ClipViewer({
                 className="relative flex aspect-[9/16] w-[min(calc(100vw_-_2rem),calc(88vh_*_9_/_16),470px)] flex-col justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
               >
                 <ClipComposition
-                  composition={clip.media?.composition ?? centredComposition(shape)}
+                  composition={viewerComposition(clip, shape)}
                   sourceAspectRatio={clip.media?.sourceAspectRatio ?? shape}
                   finished
                   className="w-full"
