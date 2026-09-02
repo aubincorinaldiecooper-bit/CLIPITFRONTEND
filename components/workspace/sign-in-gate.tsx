@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { authClient } from "@/lib/auth-client"
+import { returnAddress } from "@/lib/sign-in-return"
 import { clearIntent, readIntent, type SignInIntent } from "@/components/sign-in-gate"
 
 /**
@@ -143,9 +144,11 @@ function GateDialog({
       window.history.replaceState(window.history.state, "", url.toString())
     }
 
+    // The return address carries the guest's claim on their work, so the
+    // link brings it along wherever it is opened (lib/sign-in-return.ts).
     const { error } = await authClient.signIn.magicLink({
       email: address,
-      callbackURL: `${window.location.pathname}${window.location.search}`,
+      callbackURL: await returnAddress(),
     })
     setState(error ? "failed" : "sent")
   }

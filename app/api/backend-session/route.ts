@@ -30,11 +30,19 @@ export async function POST(request: Request) {
   // API can hand that session's work — the video uploaded, the clips cut —
   // to the person signing in, instead of stranding it on a session nobody
   // will come back to. Reading it is safe: the browser already holds it.
+  //
+  // And the hand-over the sign-in link carried, if this is that return: the
+  // same claim, for the tab that has no guest token because the link opened
+  // somewhere new. The API redeems it once.
   let guestToken: string | undefined
+  let handoff: string | undefined
   try {
-    const body = (await request.json()) as { guestToken?: unknown }
+    const body = (await request.json()) as { guestToken?: unknown; handoff?: unknown }
     if (typeof body?.guestToken === "string" && body.guestToken.trim() !== "") {
       guestToken = body.guestToken.trim()
+    }
+    if (typeof body?.handoff === "string" && body.handoff.trim() !== "") {
+      handoff = body.handoff.trim()
     }
   } catch {
     // No body, or not JSON. Signing in with nothing to carry is the ordinary
@@ -48,6 +56,7 @@ export async function POST(request: Request) {
       userId: session.user.id,
       email: session.user.email,
       ...(guestToken ? { guestToken } : {}),
+      ...(handoff ? { handoff } : {}),
     }),
   })
 

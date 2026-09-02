@@ -44,10 +44,20 @@ import type {
  * of them.
  */
 
+import { consumeSearchParams, readSearchParam } from "./search-params"
+
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "")
 const TOKEN_KEY = "clipit.session.token"
 /** "guest" or "user" — which kind of session the stored token is. */
 const TOKEN_KIND_KEY = "clipit.session.kind"
+/**
+ * The search parameter a sign-in link's return address carries a hand-over
+ * in: a guest's single-use claim on its work, for the tab the link opens in
+ * — which is almost never the tab that holds the guest token. Issued by
+ * POST /api/sessions/handoff, spent by the exchange, then taken off the
+ * address. See lib/sign-in-return.ts.
+ */
+export const HANDOFF_PARAM = "handoff"
 
 export class ApiError extends Error {
   readonly status: number
@@ -198,10 +208,15 @@ function exchangeSignedInToken(): Promise<string | null> {
       // Carry the guest token so the work done signed-out comes along. Read
       // BEFORE the exchange, because a successful exchange overwrites it.
       const guestToken = readKind() === "guest" ? readToken() : null
+      // And the hand-over the sign-in link brought, if this is that return:
+      // the same claim for the tab that has no token. Read from the address
+      // on every attempt and taken off it only once the exchange succeeds,
+      // so a failed attempt leaves it for the next.
+      const handoff = readSearchParam(HANDOFF_PARAM)
       const response = await fetch("/api/backend-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(guestToken ? { guestToken } : {}),
+        body: JSON.stringify({ ...(guestToken ? { guestToken } : {}), ...(handoff ? { handoff } : {}) }),
         signal: controller.signal,
       })
       if (!response.ok) {
@@ -220,6 +235,10 @@ function exchangeSignedInToken(): Promise<string | null> {
       if (nonce === exchangeNonce) {
         writeToken(body.token, "user")
       }
+      // Spent, whichever way the API answered it: a hand-over is single-use
+      // on the server, so leaving it on the address would only send a dead
+      // one with every later exchange.
+      if (handoff) consumeSearchParams([HANDOFF_PARAM])
       shouldCache = true
       return readToken()
     } catch (e) {
@@ -711,6 +730,23 @@ export const api = {
    */
   async listClipPosts(clipId: string, timeoutMs = 0): Promise<{ posts: ClipPost[] }> {
     return request(`/api/clips/${encodeURIComponent(clipId)}/posts`, {}, true, timeoutMs)
+  },
+
+  /**
+   * A guest's single-use claim on its work, to ride in a sign-in link's
+   * return address (lib/sign-in-return.ts). Null when there is nothing to
+   * claim — no guest session in this tab, or signed in already — and null
+   * when the API cannot be reached: a sign-in without it still works in
+   * the tab that asked, which still holds the token itself.
+   */
+  async requestHandoff(): Promise<string | null> {
+    if (readKind() !== "guest" || !readToken()) return null
+    try {
+      const body = await request<{ handoff: string | null }>("/api/sessions/handoff", { method: "POST", body: "{}" }, true, 8_000)
+      return typeof body.handoff === "string" && body.handoff !== "" ? body.handoff : null
+    } catch {
+      return null
+    }
   },
 
   /**
