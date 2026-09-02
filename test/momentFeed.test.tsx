@@ -187,6 +187,25 @@ describe('MomentFeed — one moment at a time', () => {
     expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('sig=2')
   })
 
+  it('plays a re-cut\'s new file at once, while still ignoring a re-signed link to the same file', () => {
+    // Devin's finding on #75: a re-cut writes a NEW file; the card kept the old one until it failed.
+    const ready = (url: string) => ({
+      request: {
+        ...exchange('r1', [match({ id: 'a', clip: { id: 'c-a', status: 'ready' } })]).request,
+      },
+      clips: [{ id: 'c-a', clipMatchId: 'a', status: 'ready', url, media: null } as never],
+    }) as unknown as Exchange
+    const { rerender } = render(<MomentFeed moments={feedMoments([ready('https://cdn.test/clips/v/c-a.mp4?sig=1')], video)} {...handlers()} />)
+    const first = (screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')
+    expect(first).toContain('c-a.mp4?sig=1')
+
+    rerender(<MomentFeed moments={feedMoments([ready('https://cdn.test/clips/v/c-a.mp4?sig=2')], video)} {...handlers()} />)
+    expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toBe(first)
+
+    rerender(<MomentFeed moments={feedMoments([ready('https://cdn.test/clips/v/c-a-9f3c.mp4?sig=3')], video)} {...handlers()} />)
+    expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('c-a-9f3c.mp4?sig=3')
+  })
+
   it('a held key is one press, and two quick presses are one keep', async () => {
     // Codex's finding on #75: key repeat could keep several moments before
     // the person let go, and a keep is final.
@@ -199,6 +218,21 @@ describe('MomentFeed — one moment at a time', () => {
     fireEvent.keyDown(window, { key: 'ArrowRight' })
     fireEvent.keyDown(window, { key: 'ArrowRight' })
     expect(h.onKeep).toHaveBeenCalledTimes(1)
+  })
+
+  it('two quick presses of the buttons are two decisions: a keep, then a skip on the next card', async () => {
+    // Devin's finding on #75: the cooldown that tames a held key or a
+    // wheel flick must not swallow a deliberate second press.
+    const h = handlers()
+    const before = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
+    const { rerender } = render(<MomentFeed moments={before} {...h} />)
+    await userEvent.click(screen.getByRole('button', { name: /^Keep/ }))
+    expect(h.onKeep).toHaveBeenCalledTimes(1)
+    const after = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9, feedback: 'approved' }), match({ id: 'b', confidence: 0.8 })])], video)
+    rerender(<MomentFeed moments={after} {...h} />)
+    await userEvent.click(screen.getByRole('button', { name: /^Skip/ }))
+    expect(h.onSkip).toHaveBeenCalledTimes(1)
+    expect(h.onSkip.mock.calls[0]![0].match.id).toBe('b')
   })
 
   it('does not steal keys from someone typing', async () => {

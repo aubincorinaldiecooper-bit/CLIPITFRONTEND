@@ -122,6 +122,20 @@ export function feedCursor(moments: FeedMoment[]): number {
   return index === -1 ? moments.length : index
 }
 
+/**
+ * What identifies a file behind a signed URL: its path. A re-signed link
+ * changes only the query (signature, expiry); a re-cut writes a NEW file at
+ * a new path. So the path is what the front card keys its player by —
+ * ignore the one, restart on the other.
+ */
+export function mediaIdentity(url: string): string {
+  try {
+    return new URL(url, "http://clipit.invalid").pathname
+  } catch {
+    return url
+  }
+}
+
 const asClock = (seconds: number) => {
   const whole = Math.max(0, Math.round(seconds))
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
@@ -168,8 +182,10 @@ function fanStyle(diff: number, cardHeight: number) {
  * one reloaded the player every two seconds and threw the moment back to
  * its start. The newest value is taken only when the pinned one fails
  * (an expired link), which is what the theater's VideoStage did too. The
- * caller keys this component by moment and by kind of file, so a change
- * of what is shown still starts afresh.
+ * caller keys this component by moment and by the FILE's identity (its
+ * path — see mediaIdentity), so a re-cut's new file, or the finished file
+ * arriving in place of the source, starts afresh, while a re-signed link
+ * to the same file does not.
  */
 function FeedVideo({
   source,
@@ -250,7 +266,7 @@ function CardFace({
             {(mediaStyle) =>
               front && moment.preview ? (
                 <FeedVideo
-                  key={`${moment.match.id}:${moment.preview.finished ? "file" : "source"}`}
+                  key={`${moment.match.id}:${moment.preview.finished ? "file" : "source"}:${mediaIdentity(moment.preview.url)}`}
                   source={moment.preview}
                   still={moment.still}
                   muted={muted}
@@ -372,9 +388,11 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
   }, [canGoBack, prev, onUndoSkip])
 
   /**
-   * One decision per beat. A flick of the wheel is many events and a held
-   * key repeats; either could keep or skip several moments before the
-   * person let go — and a keep is final. Every decision passes through here.
+   * One decision per beat, for the inputs that repeat on their own: a flick
+   * of the wheel is many events and a held key repeats, and either could
+   * keep or skip several moments before the person let go — a keep is
+   * final. A button press is a decision in itself and is never held back:
+   * a quick keep and then a skip on the next card are both meant.
    */
   const oncePerBeat = useCallback((action: () => void) => {
     const now = Date.now()
@@ -562,7 +580,7 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
         <div className="mt-6 flex items-center justify-center gap-8" data-testid="feed-controls">
           <button
             type="button"
-            onClick={() => navigate(1)}
+            onClick={skip}
             disabled={!canDecide}
             aria-label="Skip — not useful, move on"
             title="Skip"
@@ -572,7 +590,7 @@ export function MomentFeed({ moments, busy = false, onKeep, onSkip, onUndoSkip, 
           </button>
           <button
             type="button"
-            onClick={keepOnce}
+            onClick={keep}
             disabled={!canDecide}
             aria-label="Keep — save this clip to your library"
             title="Keep"
