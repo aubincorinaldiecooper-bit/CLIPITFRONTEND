@@ -1,19 +1,33 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { Spinner } from "@astryxdesign/core/Spinner"
 import { api, ApiError } from "@/lib/api"
 import type { SocialAccount, SocialAccountsPage } from "@/lib/types"
 import { ChannelToggle, ReclipIcon } from "./review-deck"
 import { PlatformLogo } from "@/components/platform-logos"
+import { useConnectPlatform } from "./connect-platform"
+import { mergeOutcome, retryPlans, usePublishProgress, type PostProgress, type PublishOutcome, type PublishPhase } from "./publish-progress"
+
+export type { MadePost, PublishOutcome } from "./publish-progress"
 
 /**
- * Publishing, from the deck: Where do they go? → now or later → the truth
- * about what happened. The owner's screens of 2026-08-30, adapted onto the
- * real Zernio surface this app already has.
+ * Publishing, from the deck and from the feed's dialog: Where do they go? →
+ * now or later → the truth about what happened. The owner's screens of
+ * 2026-08-30, adapted onto the real Zernio surface this app already has,
+ * and the owner's call of 2026-09-02: every channel CLIPIT can post to is
+ * on the list with its own Connect, connecting plays out without leaving
+ * the screen, and Publish is one control that tells the truth in place —
+ * Uploading…, then Published (inactive) on the platforms' own word, Sent
+ * (inactive) when that word is slow in coming, Try again when refused.
  *
  * The honest edges, kept visible rather than smoothed over:
- * - A platform with no connected account shows "Not connected" and leads to
- *   the Publishing page — it is never a silently disabled row.
+ * - A platform with no connected account shows "Not connected" and its
+ *   own Connect — it is never a silently disabled row.
+ * - "Published" is said only on the platform's word, read back from the
+ *   posts (see publish-progress); a post the server merely accepted reads
+ *   Uploading…, and then Sent.
  * - "N clips ready" counts clips whose files exist; a keep still cutting is
  *   named, not hidden, and publishing posts only what is ready.
  * - Post now reports per clip. A submission the platform must reshape first
@@ -24,26 +38,26 @@ import { PlatformLogo } from "@/components/platform-logos"
  */
 
 const PLATFORM_LABELS: Record<string, string> = {
+  youtube: "YouTube Shorts",
   tiktok: "TikTok",
   instagram: "Instagram Reels",
-  youtube: "YouTube Shorts",
+  x: "X",
 }
-/** The order the owner's screen lists them in. */
-const PLATFORM_ORDER = ["tiktok", "instagram", "youtube"] as const
+/** The order the owner's screen lists them in (2026-09-02). */
+const PLATFORM_ORDER = ["youtube", "tiktok", "instagram", "x"] as const
+const labelOf = (platform: string) => PLATFORM_LABELS[platform] ?? platform
+/** "TikTok and X" · "TikTok, YouTube Shorts and X" */
+export function speakList(words: string[]): string {
+  if (words.length <= 1) return words[0] ?? ""
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`
+}
+/** How long a freshly connected row wears its mark. */
+export const CONNECTED_MARK_MS = 1_800
 
 export interface PublishableClip {
   id: string
   title: string
   ready: boolean
-}
-
-/** One clip's outcome from a Post now / Schedule submission. */
-export interface PublishOutcome {
-  clipId: string
-  title: string
-  ok: boolean
-  /** 'submitted' | 'rendering' | 'scheduled' when ok; the refusal when not. */
-  detail: string
 }
 
 // --- Calendar math, kept pure so the tests can hold it still --------------
@@ -125,19 +139,152 @@ function BackDisc({ onBack, label }: { onBack: () => void; label: string }) {
 }
 
 /**
- * "Where do they go?" — the accounts, the caption, and the two ways out.
- * Multi-select: the same clips can go to every ticked account at once.
+ * The mark a row wears the moment its channel is connected: a disc that
+ * springs in on the platform's logo and draws its check. Gone again after
+ * CONNECTED_MARK_MS; instant under reduced motion.
+ */
+function ConnectedMark() {
+  const reduce = useReducedMotion()
+  return (
+    <motion.span
+      aria-hidden
+      data-testid="connected-mark"
+      initial={reduce ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.4 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.6 }}
+      transition={{ type: "spring", stiffness: 480, damping: 24 }}
+      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-shprimary text-primary-foreground ring-2 ring-background"
+    >
+      <motion.svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+        <motion.path
+          d="M4 12.5l5 5L20 6.5"
+          initial={reduce ? { pathLength: 1 } : { pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.32, delay: 0.12, ease: "easeOut" }}
+        />
+      </motion.svg>
+    </motion.span>
+  )
+}
+
+function CheckGlyph({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 12.5l5 5L20 6.5" />
+    </svg>
+  )
+}
+
+/**
+ * Where a row's switch was, once Publish is pressed: what that channel is
+ * doing. The same 60px the switch took, so nothing moves.
+ */
+function PostMark({ outcome, settled }: { outcome: "posting" | "posted" | "failed" | "none"; settled: boolean }) {
+  return (
+    <span className="flex h-[34px] w-[60px] shrink-0 items-center justify-center" aria-hidden>
+      {outcome === "posting" && !settled ? (
+        <Spinner size="md" shade="subtle" aria-label="Uploading" />
+      ) : outcome === "posted" ? (
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-shprimary text-primary-foreground">
+          <CheckGlyph size={14} />
+        </span>
+      ) : outcome === "failed" ? (
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden>
+            <path d="M12 6v7M12 17.5v.5" />
+          </svg>
+        </span>
+      ) : outcome === "posting" ? (
+        <span className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground ring-1 ring-shborder">
+          <CheckGlyph size={13} />
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+/**
+ * Publish, as one control: a full-width pill that draws in to a circle
+ * holding the loading ring while the platforms have the clip, opens back
+ * out saying Published (and stays, inactive) on their word, or Sent
+ * (inactive) when that word is slow in coming, or Try again when something
+ * was refused. The owner's call (2026-09-02): the button itself becomes
+ * the ring. Its footprint — the full-width, 52px box around it — is
+ * reserved and never changes, so nothing around it moves; only the pill
+ * inside draws in and out, and not at all under reduced motion.
+ */
+function PublishButton({ phase, disabled, onClick }: { phase: PublishPhase; disabled: boolean; onClick: () => void }) {
+  const ring = phase === "publishing"
+  const inactive = phase === "publishing" || phase === "published" || phase === "sent"
+  const words =
+    phase === "publishing" ? "Uploading…" : phase === "published" ? "Published" : phase === "sent" ? "Sent" : phase === "failed" ? "Try again" : "Publish"
+  const tone =
+    phase === "sent"
+      ? "bg-shmuted text-foreground ring-1 ring-shborder"
+      : phase === "published"
+        ? "bg-shprimary/80 text-primary-foreground"
+        : "bg-shprimary text-primary-foreground"
+  return (
+    <span className="flex h-[52px] w-full items-center justify-center" data-testid="publish-control">
+    <motion.button
+      layout
+      type="button"
+      onClick={onClick}
+      disabled={disabled || inactive}
+      aria-label={words}
+      aria-live="polite"
+      data-phase={phase}
+      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+      className={`flex h-[52px] items-center justify-center overflow-hidden whitespace-nowrap rounded-full text-[15px] font-semibold ${
+        ring ? "w-[52px]" : "w-full"
+      } ${tone} ${inactive ? "cursor-default" : "transition-transform active:scale-[0.98] disabled:opacity-50"}`}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={phase}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16 }}
+          className="flex items-center gap-2.5"
+        >
+          {ring ? <Spinner size="lg" shade="onMedia" aria-label="Uploading" /> : phase === "published" ? <CheckGlyph /> : null}
+          {ring ? null : words}
+        </motion.span>
+      </AnimatePresence>
+    </motion.button>
+    </span>
+  )
+}
+
+/** What one channel's row says under its name once Publish is pressed. */
+function rowWords(post: PostProgress | undefined, label: string, phase: PublishPhase): string | null {
+  if (!post) return phase === "idle" ? null : "Not sent"
+  if (post.outcome === "posted") return "Published"
+  if (post.outcome === "failed") return "Didn't go through"
+  if (phase === "sent") return `Sent — waiting for ${label} to confirm`
+  return post.status === "rendering" ? `Being cut for ${label}…` : "Uploading…"
+}
+
+/**
+ * "Where do they go?" — the channels, the caption, and the way out. Every
+ * channel CLIPIT can post to is a row: one with an account carries its
+ * switch; one without carries Connect, and connecting plays out here (the
+ * sign-in in a small window, the row's mark when it is done, the switch
+ * on). Publish is one control that tells the truth in place. Multi-select:
+ * the same clips go to every switched-on account at once.
  */
 export function WhereTo({
   clips,
   onBack,
-  onPostNow,
+  onPublish,
   onSchedule,
   busy,
 }: {
   clips: PublishableClip[]
   onBack: () => void
-  onPostNow: (accountIds: string[], caption: string) => void
+  /** Post now: publish the ready clips (or the named ones) to these accounts, and answer the truth per clip. */
+  onPublish: (accountIds: string[], caption: string, clipIds?: string[]) => Promise<PublishOutcome[]>
   onSchedule: (accountIds: string[], caption: string) => void
   busy: boolean
 }) {
@@ -145,6 +292,9 @@ export function WhereTo({
   const [failed, setFailed] = useState(false)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [caption, setCaption] = useState("")
+  const [outcomes, setOutcomes] = useState<PublishOutcome[] | null>(null)
+  /** The platform whose row is wearing its "connected" mark. */
+  const [marked, setMarked] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -153,8 +303,8 @@ export function WhereTo({
       .then((result) => {
         if (cancelled) return
         setPage(result)
-        // Every connected account starts ticked — the common case is "post
-        // it everywhere I post", and unticking is one tap.
+        // Every connected account starts switched on — the common case is
+        // "post it everywhere I post", and switching one off is one tap.
         setChosen(new Set(result.accounts.filter((a) => a.status === "connected").map((a) => a.id)))
       })
       .catch(() => !cancelled && setFailed(true))
@@ -163,6 +313,23 @@ export function WhereTo({
     }
   }, [])
 
+  const connecting = useConnectPlatform({
+    onConnected: (account, fresh) => {
+      setPage(fresh)
+      setChosen((current) => new Set([...current, account.id]))
+      setMarked(account.platform)
+    },
+  })
+  useEffect(() => {
+    if (!marked) return
+    const timer = setTimeout(() => setMarked(null), CONNECTED_MARK_MS)
+    return () => clearTimeout(timer)
+  }, [marked])
+
+  const progress = usePublishProgress(outcomes)
+  const phase = progress.phase
+  const idle = phase === "idle"
+
   const ready = clips.filter((clip) => clip.ready)
   const cutting = clips.length - ready.length
   const connected = page?.accounts.filter((a) => a.status === "connected") ?? []
@@ -170,8 +337,7 @@ export function WhereTo({
   for (const account of connected) {
     byPlatform.set(account.platform, [...(byPlatform.get(account.platform) ?? []), account])
   }
-  const missingPlatforms = PLATFORM_ORDER.filter((platform) => !byPlatform.has(platform))
-  const canGo = !busy && ready.length > 0 && chosen.size > 0
+  const canGo = !busy && idle && ready.length > 0 && chosen.size > 0
 
   const toggle = (id: string) =>
     setChosen((current) => {
@@ -180,6 +346,52 @@ export function WhereTo({
       else next.add(id)
       return next
     })
+
+  const publish = async () => {
+    if (!canGo) return
+    setOutcomes(await onPublish(Array.from(chosen), caption.trim()))
+  }
+
+  const retry = async () => {
+    if (!outcomes || busy) return
+    const plans = retryPlans(outcomes, progress.posts, connected.filter((a) => chosen.has(a.id)))
+    if (plans.length === 0) return
+    const again: PublishOutcome[] = []
+    for (const plan of plans) again.push(...(await onPublish(plan.accountIds, caption.trim(), [plan.clipId])))
+    // Folded into what came before: a channel that is up stays up beside
+    // the retry's word (Devin's and Codex's finding on #77).
+    const byClip = new Map(again.map((outcome) => [outcome.clipId, outcome]))
+    setOutcomes(
+      outcomes.map((outcome) => {
+        const fresh = byClip.get(outcome.clipId)
+        return fresh ? mergeOutcome(outcome, fresh, progress.posts) : outcome
+      }),
+    )
+  }
+
+  /** The post that carries this account's channel, once a publish is running. */
+  const postFor = (account: SocialAccount): PostProgress | undefined =>
+    progress.posts.find((post) => post.accountIds.includes(account.id)) ??
+    progress.posts.find((post) => post.accountIds.length === 0 && post.platforms.includes(account.platform))
+
+  const chosenLabels = speakList(
+    PLATFORM_ORDER.filter((platform) => connected.some((a) => a.platform === platform && chosen.has(a.id))).map(labelOf),
+  )
+  const refusals = outcomes?.filter((outcome) => !outcome.ok) ?? []
+  const words = idle
+    ? `${ready.length} ${ready.length === 1 ? "clip" : "clips"} ready${
+        cutting > 0 ? ` · ${cutting} still cutting (${cutting === 1 ? "it won't" : "they won't"} be posted)` : ""
+      }`
+    : phase === "publishing"
+      ? `Uploading to ${chosenLabels}…`
+      : phase === "published"
+        ? `Published to ${chosenLabels}.`
+        : phase === "sent"
+          ? `Sent to ${chosenLabels} — waiting for ${chosenLabels.includes(" and ") ? "them" : chosenLabels} to confirm it's up. You can leave; it keeps going.`
+          : "Try again sends the ones that didn't go."
+
+  const rowClass = (index: number) => `flex items-center gap-3.5 py-4 ${index > 0 ? "border-t border-shborder" : ""}`
+  let rowIndex = 0
 
   return (
     <div data-testid="publish-where">
@@ -192,7 +404,7 @@ export function WhereTo({
         <p className="py-6 text-sm text-destructive">Couldn&apos;t load your accounts. Close this and try again.</p>
       ) : page === null ? (
         <div className="flex flex-col gap-2.5 py-1">
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-[72px] animate-pulse rounded-2xl bg-shmuted" />
           ))}
         </div>
@@ -205,54 +417,71 @@ export function WhereTo({
       ) : (
         <>
           {/* The channels, as the owner draws them: each platform's own
-              mark, the account it posts as, and a switch. A platform with
-              no connected account is dimmed with its switch off and leads
-              to Publishing — off and unavailable are different states. */}
+              mark, the account it posts as, and a switch — or, with no
+              account yet, Connect. Off and unavailable are different states. */}
           <div>
-            {connected.map((account, index) => {
-              const on = chosen.has(account.id)
-              const label = PLATFORM_LABELS[account.platform] ?? account.platform
-              return (
-                <div
-                  key={account.id}
-                  className={`flex items-center gap-3.5 py-4 ${index > 0 ? "border-t border-shborder" : ""}`}
-                >
-                  <PlatformLogo platform={account.platform} size="sm" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[16px] font-semibold text-foreground">{label}</span>
-                    <span className="block truncate text-[14px] text-muted-foreground">
-                      {account.displayName ? `@${account.displayName.replace(/^@/, "")}` : "Connected"}
+            {PLATFORM_ORDER.map((platform) => {
+              const label = labelOf(platform)
+              const accounts = byPlatform.get(platform) ?? []
+              if (accounts.length === 0) {
+                const attempt = connecting.state.platform === platform ? connecting.state : null
+                const waiting = attempt?.phase === "opening" || attempt?.phase === "waiting"
+                const index = rowIndex++
+                return (
+                  <div key={platform} className={rowClass(index)} data-testid={`channel-${platform}`}>
+                    <span className="opacity-40 grayscale">
+                      <PlatformLogo platform={platform} size="sm" />
                     </span>
-                  </span>
-                  <ChannelToggle
-                    on={on}
-                    disabled={false}
-                    onToggle={() => toggle(account.id)}
-                    label={`Post to ${label}`}
-                  />
-                </div>
-              )
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[16px] font-semibold text-muted-foreground">{label}</span>
+                      <span className={`block text-[14px] ${attempt?.phase === "failed" ? "text-destructive" : "text-muted-foreground/75"}`}>
+                        {waiting ? "Finish signing in in the window that opened…" : attempt?.phase === "failed" ? attempt.error : "Not connected"}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void connecting.connect(platform, connected)}
+                      disabled={waiting || !idle}
+                      aria-label={`Connect ${label}`}
+                      className="flex h-[34px] min-w-[96px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-3.5 text-[13px] font-semibold text-foreground ring-1 ring-shborder transition-colors hover:bg-shaccent disabled:opacity-60"
+                    >
+                      {waiting ? <Spinner size="sm" shade="inherit" aria-label="Connecting" /> : null}
+                      {waiting ? "Connecting" : attempt?.phase === "failed" ? "Try again" : "Connect"}
+                    </button>
+                  </div>
+                )
+              }
+              return accounts.map((account, accountIndex) => {
+                const on = chosen.has(account.id)
+                const wearsMark = marked === platform && accountIndex === 0
+                const post = outcomes === null ? undefined : postFor(account)
+                const line = rowWords(post, label, phase)
+                const index = rowIndex++
+                return (
+                  <div key={account.id} className={rowClass(index)} data-testid={`channel-${platform}`}>
+                    <span className="relative">
+                      <PlatformLogo platform={account.platform} size="sm" />
+                      <AnimatePresence>{wearsMark && <ConnectedMark key="mark" />}</AnimatePresence>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[16px] font-semibold text-foreground">{label}</span>
+                      <span className={`block truncate text-[14px] ${post?.outcome === "failed" ? "text-destructive" : "text-muted-foreground"}`}>
+                        {wearsMark ? (
+                          <span className="font-medium text-shprimary">Connected</span>
+                        ) : (
+                          (line ?? (account.displayName ? `@${account.displayName.replace(/^@/, "")}` : "Connected"))
+                        )}
+                      </span>
+                    </span>
+                    {outcomes === null ? (
+                      <ChannelToggle on={on} disabled={false} onToggle={() => toggle(account.id)} label={`Post to ${label}`} />
+                    ) : (
+                      <PostMark outcome={on ? (post?.outcome ?? "none") : "none"} settled={phase === "sent"} />
+                    )}
+                  </div>
+                )
+              })
             })}
-            {missingPlatforms.map((platform, index) => (
-              <a
-                key={platform}
-                href="/publishing"
-                className={`flex items-center gap-3.5 py-4 transition-colors ${
-                  connected.length > 0 || index > 0 ? "border-t border-shborder" : ""
-                }`}
-              >
-                <span className="opacity-40 grayscale">
-                  <PlatformLogo platform={platform} size="sm" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[16px] font-semibold text-muted-foreground">
-                    {PLATFORM_LABELS[platform]}
-                  </span>
-                  <span className="block text-[14px] text-muted-foreground/75">Not connected — tap to add</span>
-                </span>
-                <ChannelToggle on={false} disabled onToggle={() => undefined} label={`${PLATFORM_LABELS[platform]} is not connected`} />
-              </a>
-            ))}
 
             {/* What the switches add up to, in the owner's words. */}
             <p className="border-t border-shborder py-3.5 text-[14px] text-muted-foreground">
@@ -267,30 +496,23 @@ export function WhereTo({
           </div>
 
           {/* One caption for every post. Optional — an empty caption posts
-              as an empty caption, it is never invented. */}
+              as an empty caption, it is never invented. Read-only once sent. */}
           <input
             type="text"
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
             placeholder="Add a caption (optional)"
             maxLength={2200}
-            className="mt-3 w-full rounded-2xl bg-shmuted px-4 py-3.5 text-sm outline-none ring-1 ring-shborder transition-shadow placeholder:text-muted-foreground focus:ring-ring"
+            readOnly={!idle}
+            className="mt-3 w-full rounded-2xl bg-shmuted px-4 py-3.5 text-sm outline-none ring-1 ring-shborder transition-shadow placeholder:text-muted-foreground focus:ring-ring read-only:text-muted-foreground"
           />
 
-          <p className="mt-3 h-5 text-[13.5px] text-muted-foreground">
-            {ready.length} {ready.length === 1 ? "clip" : "clips"} ready
-            {cutting > 0 ? ` · ${cutting} still cutting (${cutting === 1 ? "it won't" : "they won't"} be posted)` : ""}
-          </p>
-
-          <div className="mt-6 flex flex-col gap-2.5">
-            <button
-              type="button"
-              onClick={() => onPostNow(Array.from(chosen), caption.trim())}
-              disabled={!canGo}
-              className="w-full whitespace-nowrap rounded-full bg-shprimary px-4 py-3.5 text-[15px] font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
-            >
-              {busy ? "Posting…" : "Post now"}
-            </button>
+          <div className="mt-6 flex flex-col items-center gap-2.5">
+            <PublishButton
+              phase={phase}
+              disabled={idle ? !canGo : busy}
+              onClick={() => void (phase === "failed" ? retry() : publish())}
+            />
             <button
               type="button"
               onClick={() => onSchedule(Array.from(chosen), caption.trim())}
@@ -300,6 +522,19 @@ export function WhereTo({
               Schedule
             </button>
           </div>
+
+          <p className="mt-3 min-h-5 text-center text-[13.5px] leading-snug text-muted-foreground" data-testid="publish-words">
+            {words}
+          </p>
+          {refusals.length > 0 && (
+            <div className="mt-3 w-full rounded-2xl bg-destructive/5 p-3 text-left ring-1 ring-destructive/20">
+              {refusals.map((refusal) => (
+                <p key={refusal.clipId} className="py-0.5 text-[12.5px] leading-snug text-destructive">
+                  <span className="font-medium">{refusal.title}:</span> {refusal.detail}
+                </p>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -641,13 +876,25 @@ export async function publishEach(
         : (result.posts ?? []).some((post) => post.status === "rendering")
           ? "rendering"
           : "submitted"
-      outcomes.push({ clipId: clip.id, title: clip.title, ok: true, detail })
+      // The posts the server named: what the Publish control reads its
+      // truth from afterwards. A schedule makes none yet. A server that
+      // names only the singular `post` (the shape kept for older clients)
+      // has still made one — recorded, or the control would read the
+      // accepted clip as never sent and let it go twice (Devin's and
+      // Codex's finding on #77).
+      const named: Array<{ id: string; status: string; targets?: Array<{ platform: string }> }> =
+        result.posts ?? (result.post ? [{ ...result.post, targets: [] }] : [])
+      const posts = result.scheduled
+        ? []
+        : named.map((post) => ({ id: post.id, status: post.status, platforms: (post.targets ?? []).map((target) => target.platform) }))
+      outcomes.push({ clipId: clip.id, title: clip.title, ok: true, detail, posts })
     } catch (cause) {
       outcomes.push({
         clipId: clip.id,
         title: clip.title,
         ok: false,
         detail: cause instanceof ApiError ? cause.message : "Something went wrong submitting this clip.",
+        posts: [],
       })
     }
   }
