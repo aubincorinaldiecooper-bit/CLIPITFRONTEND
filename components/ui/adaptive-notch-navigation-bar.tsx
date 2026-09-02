@@ -61,6 +61,8 @@ export function NotchNav({
           </div>
         ) : null}
 
+        {/* A bar with no destinations is nothing: not drawn. */}
+        {items.length > 0 && (
         <nav
           aria-label="Main"
           className="pointer-events-auto flex max-w-[calc(100%-2rem)] items-center gap-1 rounded-full border border-white/10 bg-zinc-950 px-2 py-2 shadow-2xl"
@@ -146,6 +148,7 @@ export function NotchNav({
             </div>
           ) : null}
         </nav>
+        )}
 
         {rightCorner ? (
           <div className="pointer-events-auto absolute right-4 top-1/2 -translate-y-1/2">

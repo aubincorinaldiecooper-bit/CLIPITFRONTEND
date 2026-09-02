@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Library, LogIn, LogOut, User } from "lucide-react"
+import { LogIn, LogOut, User } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,9 +32,10 @@ interface ProfileLink {
   value?: string
 }
 
-const LINKS: ProfileLink[] = [
-  { label: "Library", href: "/clips", icon: <Library className="size-4" /> },
-]
+// The library is hidden for now (owner, 2026-09-02): its link left this
+// menu with the header's; /clips itself still answers, and the entry comes
+// back with the library. Nothing else lives here yet.
+const LINKS: ProfileLink[] = []
 
 function initialsOf(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2)
@@ -110,7 +111,7 @@ export function ProfileDropdown() {
               </DropdownMenuItem>
             ))}
 
-            <DropdownMenuSeparator className="my-2" />
+            {LINKS.length > 0 && <DropdownMenuSeparator className="my-2" />}
 
             <DropdownMenuItem
               className="cursor-pointer rounded-xl p-3 text-destructive focus:text-destructive"

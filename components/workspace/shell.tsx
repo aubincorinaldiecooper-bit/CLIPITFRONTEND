@@ -1,6 +1,6 @@
 "use client"
 
-import { Library, Upload } from "lucide-react"
+import { Upload } from "lucide-react"
 import { Toaster } from "@/components/ui/sonner"
 import { Logo } from "@/components/brand/logo"
 import { WorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
@@ -23,6 +23,12 @@ import { NotchNav, type NotchItemData } from "@/components/ui/adaptive-notch-nav
  *   deleted — /shared, /shared/[id] and /join keep working, and invite
  *   links still land. When the owner settles Shared's shape it comes back.
  * - Home: the wordmark. /home redirects to /start.
+ *
+ * And the owner's call of 2026-09-02: the Library is hidden for now. Its
+ * entry is withheld from the pill and from the account menu; /clips still
+ * answers, and the entry comes back with it. A switcher with one
+ * destination is nothing to switch between, so the pill itself is not
+ * drawn until there are two again — the wordmark is the way home.
  */
 
 export type AppDestination = "home" | "start" | "clips" | "publishing" | "workspaces" | "join"
@@ -32,8 +38,11 @@ const NOTCH_ITEMS: NotchItemData[] = [
   // genuinely fresh, and a client-side hop to the page already showing
   // would keep the wizard where it was.
   { id: "upload", label: "Upload", icon: Upload, href: "/start", fullNavigation: true },
-  { id: "library", label: "Library", icon: Library, href: "/clips" },
+  // { id: "library", label: "Library", icon: Library, href: "/clips" } — hidden for now (owner, 2026-09-02).
 ]
+
+/** The pill is drawn only with somewhere to switch to. */
+export const NOTCH_SHOWN: NotchItemData[] = NOTCH_ITEMS.length > 1 ? NOTCH_ITEMS : []
 
 /**
  * Which notch item the page being shown belongs to. Pages the nav does not
@@ -87,7 +96,7 @@ export function WorkspaceShell({
             build-time switch that nothing set, so production showed a plain
             bar for a day while the real header waited in the code. */}
         <NotchNav
-          items={NOTCH_ITEMS}
+          items={NOTCH_SHOWN}
           activeId={activeId}
           logo={NOTCH_LOGO}
           rightCorner={<ProfileDropdown />}

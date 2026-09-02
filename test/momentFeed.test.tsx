@@ -341,7 +341,9 @@ describe('MomentFeed — one moment at a time', () => {
     const h = handlers()
     render(<MomentFeed moments={moments} {...h} />)
     expect(screen.getByTestId('feed-end').textContent).toContain("That's every moment")
-    expect(screen.getByRole('link', { name: 'Go to your library' }).getAttribute('href')).toBe('/clips')
+    // The library is hidden for now (owner, 2026-09-02): the only way on is more video.
+    expect(screen.getByRole('button', { name: 'Upload more video' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Go to your library' })).toBeNull()
     expect(screen.queryByTestId('feed-controls')).toBeNull()
   })
 
