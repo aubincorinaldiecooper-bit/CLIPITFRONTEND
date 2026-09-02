@@ -64,7 +64,12 @@ export interface Video {
   }
   createdAt: string
   /** Signed source playback URL; present on the detail endpoint once bytes are in storage. */
-  playback?: { url: string; expiresAt: string } | null
+  playback?: {
+    url: string
+    expiresAt: string
+    /** The watchable 1080-line proxy; the review cards and Preview play this. Null falls back to `url`. */
+    proxyUrl?: string | null
+  } | null
 }
 
 /**
@@ -245,6 +250,14 @@ export interface ClipRequest {
   mode: string
   resolvedMode: "visual" | "transcript" | "both" | null
   status: ClipRequestStatus
+  /** Present only for a request that named a platform: the vertical deck's state. */
+  deck?: {
+    requestedResultCount: number | null
+    availableCandidateCount: number | null
+    effectiveDeckTarget: number | null
+    readyResultCount: number
+    complete: boolean
+  }
   error: string | null
   /** Whether this was recalled from the notes or read off the footage. */
   answeredFrom: "notes" | "footage" | null
@@ -336,6 +349,32 @@ export interface ClipCaption {
   outline: boolean
 }
 
+/**
+ * How a moment is framed — decided once on the server, applied everywhere.
+ * `focusPct` is what CSS object-position wants along the axis being cut;
+ * `crop` is the exact window the export kept, normalised 0..1.
+ */
+export interface ClipComposition {
+  aspectRatio: string
+  mode: "smart_crop" | "blurred_background" | "padded" | "original"
+  focalX: number | null
+  focalY: number | null
+  focusPct: number
+  crop: { x: number; y: number; width: number; height: number } | null
+}
+
+export interface ClipMedia {
+  composition: ClipComposition
+  url: string | null
+  canonicalUrl: string | null
+  posterUrl: string | null
+  posterTimestampSeconds: number | null
+  sourceAspectRatio: string | null
+  outputAspectRatio: string | null
+  compositionMode: ClipComposition["mode"] | null
+  derivativeStatus: "pending" | "ready" | "failed" | null
+}
+
 export interface Clip {
   id: string
   videoId: string
@@ -349,6 +388,13 @@ export interface Clip {
   durationSeconds: number | null
   sizeBytes: number | null
   url: string | null
+  /**
+   * What to show and how it is framed. `media.url` is the 9:16 derivative for
+   * a vertical moment (null until it is finished), `media.posterUrl` its still,
+   * and `media.composition` the one framing the thumbnail, card, Preview and
+   * export all derive from.
+   */
+  media?: ClipMedia
   /** The caption spec this render carries, so the editor starts from it. */
   captions?: ClipCaption[] | null
   derivedFromClipId?: string | null

@@ -1,15 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Card } from "@astryxdesign/core/Card"
 import { VStack, HStack } from "@astryxdesign/core/Stack"
 import { Text, Heading } from "@astryxdesign/core/Text"
 import { Button } from "@astryxdesign/core/Button"
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout"
-import { AspectRatio } from "@astryxdesign/core/AspectRatio"
+import { ClipComposition, centredComposition } from "@/components/media/clip-composition"
 import { X, Check } from "lucide-react"
-import type { Clip, ClipMatch, ClipRequest, Video } from "@/lib/types"
+import type { Clip, ClipComposition as Composition, ClipMatch, ClipRequest, Video } from "@/lib/types"
 import { ClipSlider } from "./clip-slider"
 
 export interface ReviewStepProps {
@@ -38,6 +38,11 @@ interface PreviewSource {
   url: string
   start: number
   end: number | null
+  /** The same framing the card used and the export will use. */
+  composition: Composition
+  sourceAspectRatio: string | null
+  /** True for the rendered file; false when the source stands in for it. */
+  finished: boolean
 }
 
 /**
@@ -48,16 +53,32 @@ interface PreviewSource {
  * for it: same footage, seeked to the moment's bounds. Deciding whether to
  * keep a clip you cannot watch is not a decision.
  */
-function previewFor(match: ClipMatch, clips: Clip[], video: Video | null): PreviewSource | null {
+function previewFor(
+  match: ClipMatch,
+  clips: Clip[],
+  video: Video | null,
+  request: ClipRequest | null | undefined,
+): PreviewSource | null {
   const clip = clipForMatch(match, clips)
-  if (clip?.url) return { url: clip.url, start: 0, end: null }
-  const source = video?.playback?.url
+  const sourceAspectRatio =
+    clip?.media?.sourceAspectRatio ?? (video?.width && video?.height ? `${video.width}:${video.height}` : null)
+  // Framed as the server decided — the export is cut from the same numbers.
+  // Before it has decided, a platform request is 9:16 at the centre.
+  const composition =
+    clip?.media?.composition ?? centredComposition(request?.deck != null ? "9:16" : (sourceAspectRatio ?? "16:9"))
+  // The finished, framed file when it exists. For a vertical moment only
+  // the 9:16 derivative counts; the landscape cut is never shown in its
+  // place. Otherwise the source — the watchable proxy when there is one —
+  // seeked to the moment and shown THROUGH the same framing.
+  const finished = clip?.media ? clip.media.url : (clip?.url ?? null)
+  if (finished) return { url: finished, start: 0, end: null, composition, sourceAspectRatio, finished: true }
+  const source = video?.playback?.proxyUrl ?? video?.playback?.url
   if (!source) return null
-  return { url: source, start: match.startSeconds, end: match.endSeconds }
+  return { url: source, start: match.startSeconds, end: match.endSeconds, composition, sourceAspectRatio, finished: false }
 }
 
 /** Plays a moment and stops at its out-point rather than running on. */
-function PreviewPlayer({ source }: { source: PreviewSource }) {
+function PreviewPlayer({ source, style }: { source: PreviewSource; style: CSSProperties }) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -73,6 +94,8 @@ function PreviewPlayer({ source }: { source: PreviewSource }) {
       autoPlay
       muted
       playsInline
+      className="h-full w-full bg-black"
+      style={style}
       onTimeUpdate={(event) => {
         const element = event.currentTarget
         if (source.end !== null && element.currentTime >= source.end) element.pause()
@@ -106,14 +129,14 @@ export function ReviewStep({ request, clips, video, busy, onKeep, onSkip, onUplo
           src: match.thumbnailUrl ?? "",
           title: match.description || "Moment",
           description: `${videoLabel} · ${asMinutes(match.startSeconds)} – ${asMinutes(match.endSeconds)}`,
-          videoUrl: previewFor(match, clips, video)?.url,
+          videoUrl: previewFor(match, clips, video, request)?.url,
         }
       }),
     [pending, clips, video, videoLabel],
   )
 
   const previewMatch = previewId ? matches.find((m) => m.id === previewId) : undefined
-  const preview = previewMatch ? previewFor(previewMatch, clips, video) : null
+  const preview = previewMatch ? previewFor(previewMatch, clips, video, request) : null
 
   const keptCount = matches.filter((m) => m.feedback === "approved").length
   const skippedCount = matches.filter((m) => m.feedback === "rejected").length
@@ -210,9 +233,9 @@ export function ReviewStep({ request, clips, video, busy, onKeep, onSkip, onUplo
           content={
             <LayoutContent padding={0} isScrollable={false}>
               {preview && (
-                <AspectRatio ratio={9 / 16} fit="cover">
-                  <PreviewPlayer source={preview} />
-                </AspectRatio>
+                <ClipComposition composition={preview.composition} sourceAspectRatio={preview.sourceAspectRatio} finished={preview.finished}>
+                  {(style) => <PreviewPlayer source={preview} style={style} />}
+                </ClipComposition>
               )}
             </LayoutContent>
           }

@@ -167,7 +167,12 @@ export default function StartPage() {
         exchange.request.status === "pending" ||
         exchange.request.status === "searching" ||
         exchange.request.matches?.some((match) => match.reclipStatus === "pending") ||
-        exchange.clips.some((clip) => clip.status === "pending" || clip.status === "generating"),
+        exchange.clips.some((clip) => clip.status === "pending" || clip.status === "generating") ||
+        // A vertical moment is not finished when its landscape cut is: the
+        // 9:16 render follows, and the tile says "Cutting…" until it lands.
+        // Without this the request settles on the cut and the render is
+        // never fetched — the tile stays cutting until a reload.
+        exchange.clips.some((clip) => clip.media?.derivativeStatus === "pending"),
     )
     .map((exchange) => exchange.request.id)
   const unsettledKey = unsettledIds.join(",")

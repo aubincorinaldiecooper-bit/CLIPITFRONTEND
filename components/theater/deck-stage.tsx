@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { api } from "@/lib/api"
 import type { Clip, ClipMatch, ClipRequest, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 import { FilmLeader } from "./film-leader"
+import { ClipComposition, centredComposition } from "@/components/media/clip-composition"
 import { VerticalFrame } from "@/components/media/vertical-frame"
 import {
   DeckControls,
@@ -317,14 +318,17 @@ function usePinnedThumbnails(matches: ClipMatch[]) {
 }
 
 /**
- * The deck itself: the tall card, ↻ on its corner, ✕/✓ beneath. The moment
- * plays IN the card — full frame, letterboxed rather than cropped, because
- * a decision made on a crop is a decision about a different clip.
+ * The deck itself: the card, ↻ on its corner, ✕/✓ beneath. The moment plays
+ * IN the card, framed exactly as it will be delivered — the same
+ * composition the export is cut from — so a decision made here is a
+ * decision about the clip the creator will get, not about the source.
  */
 function Deck({
   matches,
   clipByMatch,
   requestIdByMatch,
+  requestByMatch,
+  sourceAspectRatio,
   playbackUrl,
   onSeek,
   onKeep,
@@ -336,6 +340,10 @@ function Deck({
   clipByMatch: Map<string, Clip>
   /** Which answer each moment came from — a moment outlives its answer. */
   requestIdByMatch: Map<string, string>
+  /** The answer itself, for its shape: a platform request frames its moments 9:16. */
+  requestByMatch: Map<string, ClipRequest>
+  /** The video's own shape, e.g. "1920:1080", for moments that keep it. */
+  sourceAspectRatio: string | null
   playbackUrl: string | null
   onSeek: (seconds: number) => void
   onKeep: (matchId: string) => void
@@ -439,7 +447,21 @@ function Deck({
 
   const activeThumbnail = thumbnails[active.id] ?? null
   const clip = clipByMatch.get(active.id) ?? null
-  const playable = clip?.status === "ready" && clip?.url ? clip.url : null
+  // How this moment is FRAMED. The server decides once, and the export is
+  // cut from the same numbers; until it has, a platform request is 9:16 at
+  // the centre and anything else keeps the video's own shape.
+  const sourceAspect = clip?.media?.sourceAspectRatio ?? sourceAspectRatio
+  const frameFor = (match: ClipMatch) =>
+    clipByMatch.get(match.id)?.media?.composition ??
+    centredComposition(requestByMatch.get(match.id)?.deck != null ? "9:16" : (sourceAspect ?? "16:9"))
+  const composition = frameFor(active)
+  // The finished file, framed. For a vertical moment that is the 9:16
+  // derivative and nothing else — null until it exists; the landscape cut
+  // is never played in its place.
+  const playable = clip?.media ? clip.media.url : clip?.status === "ready" && clip?.url ? clip.url : null
+  // The render's own poster — cut from the finished file at the chosen
+  // framing — over the candidate's still.
+  const still = clip?.media?.posterUrl ?? activeThumbnail
   const regenerating = active.reclipStatus === "pending"
   /** The cards waiting behind, fanned either side — the owner's stack. */
   const behind = queue.slice(1, 5)
@@ -454,11 +476,12 @@ function Deck({
         {behind.map((peer, index) => {
           const side = index % 2 === 0 ? 1 : -1
           const rank = Math.floor(index / 2) + 1
-          const peerThumb = thumbnails[peer.id] ?? null
+          const peerThumb = clipByMatch.get(peer.id)?.media?.posterUrl ?? thumbnails[peer.id] ?? null
           return (
-            <VerticalFrame
+            <ClipComposition
               key={peer.id}
-              isVertical
+              composition={frameFor(peer)}
+              sourceAspectRatio={sourceAspect}
               className="pointer-events-none absolute w-[48%] overflow-hidden rounded-[24px] bg-[#101013]"
               style={{
                 transform: `translateX(${side * rank * 30}%) scale(${1 - rank * 0.09})`,
@@ -466,21 +489,29 @@ function Deck({
                 filter: `brightness(${0.55 - rank * 0.14})`,
               }}
             >
-              {peerThumb ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={peerThumb} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="block h-full w-full" />
-              )}
-            </VerticalFrame>
+              {(mediaStyle) =>
+                peerThumb ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={peerThumb} alt="" className="h-full w-full object-cover" style={mediaStyle} />
+                ) : (
+                  <span className="block h-full w-full" />
+                )
+              }
+            </ClipComposition>
           )
         })}
 
-        <VerticalFrame
-          isVertical
+        <ClipComposition
+          composition={composition}
+          sourceAspectRatio={sourceAspect}
+          // The in-place preview plays the SOURCE; everything else in this
+          // box (the still, the finished cut) is already the moment's shape.
+          finished={!(!playable && previewingId === active.id && pinnedPlayback != null)}
           className="relative z-20 w-[58%] overflow-hidden rounded-[26px] bg-[#101013] shadow-[0_18px_50px_rgba(17,17,22,0.22)]"
           style={{ animation: "fade-up 380ms cubic-bezier(0.23,1,0.32,1) both" }}
         >
+          {(mediaStyle) => (
+          <>
           <ReclipCardButton
             pending={regenerating}
             remaining={active.reclipsRemaining ?? 0}
@@ -497,14 +528,14 @@ function Deck({
               className="group/still relative block h-full w-full"
               aria-label={`Play this moment (${asPlayerTime(active.startSeconds)} to ${asPlayerTime(active.endSeconds)})`}
             >
-              {activeThumbnail ? (
+              {still ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
-                  src={activeThumbnail}
+                  src={still}
                   alt=""
                   onError={() => refreshThumbnail(active.id)}
                   className="h-full w-full object-cover"
-                  style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+                  style={{ ...mediaStyle, animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
                 />
               ) : (
                 <span className="block h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
@@ -543,7 +574,10 @@ function Deck({
                 // The preview is the MOMENT, not the film: stop at its end.
                 if (event.currentTarget.currentTime >= active.endSeconds) event.currentTarget.pause()
               }}
-              className="h-full w-full bg-black object-contain"
+              // The source THROUGH the moment's framing: cover, positioned
+              // where the export will look — the card is the crop.
+              className="h-full w-full bg-black"
+              style={mediaStyle}
             />
           )}
 
@@ -553,11 +587,13 @@ function Deck({
               controls
               preload="metadata"
               playsInline
-              className="h-full w-full bg-black object-contain"
-              style={{ animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
+              className="h-full w-full bg-black"
+              style={{ ...mediaStyle, animation: "pop-in 300ms cubic-bezier(0.23,1,0.32,1) both" }}
             />
           )}
-        </VerticalFrame>
+          </>
+          )}
+        </ClipComposition>
 
         {/* The take-back, floating over the stack and leaving on its own. */}
         <AnimatePresence>
@@ -675,20 +711,22 @@ export function DeckStage({
    * deck switched wholesale and there was no way back to them. A moment is
    * undecided until someone decides it, whichever question found it.
    */
-  const { matches, clipByMatch, requestIdByMatch } = useMemo(() => {
+  const { matches, clipByMatch, requestIdByMatch, requestByMatch } = useMemo(() => {
     const collected: ClipMatch[] = []
     const clips = new Map<string, Clip>()
     const owners = new Map<string, string>()
+    const requests = new Map<string, ClipRequest>()
     // Newest first, so the freshest answer's moments lead the queue.
     for (const exchange of [...exchanges].reverse()) {
       if (exchange.request.status !== "completed") continue
       for (const match of exchange.request.matches ?? []) {
         collected.push(match)
         owners.set(match.id, exchange.request.id)
+        requests.set(match.id, exchange.request)
       }
       for (const clip of exchange.clips) clips.set(clip.clipMatchId, clip)
     }
-    return { matches: collected, clipByMatch: clips, requestIdByMatch: owners }
+    return { matches: collected, clipByMatch: clips, requestIdByMatch: owners, requestByMatch: requests }
   }, [exchanges])
 
   const queue = useMemo(() => deckQueue(matches), [matches])
@@ -712,15 +750,32 @@ export function DeckStage({
           title: titleOverrides[id] ?? match.description ?? "Kept moment",
           videoTitle: video.title ?? video.originalFilename ?? null,
           duration: durationSeconds != null ? asPlayerTime(durationSeconds) : null,
-          url: clip?.status === "ready" ? (clip.url ?? null) : null,
-          poster: match.thumbnailUrl ?? null,
+          // For a vertical moment only the finished 9:16 file counts as the
+          // clip; the landscape cut never stands in for it.
+          url: clip?.media ? clip.media.url : clip?.status === "ready" ? (clip.url ?? null) : null,
+          poster: clip?.media?.posterUrl ?? match.thumbnailUrl ?? null,
+          composition:
+            clip?.media?.composition ??
+            centredComposition(
+              exchange.request.deck != null
+                ? "9:16"
+                : (clip?.media?.sourceAspectRatio ?? (video.width && video.height ? `${video.width}:${video.height}` : "16:9")),
+            ),
+          sourceAspectRatio: clip?.media?.sourceAspectRatio ?? null,
           status:
             clip == null || clip.status === "pending" || clip.status === "generating"
               ? "cutting"
-              : clip.status === "failed"
+              : clip.status === "failed" || clip.media?.derivativeStatus === "failed"
                 ? "failed"
-                : "ready",
-          error: clip?.status === "failed" ? (clip.error ?? null) : null,
+                : clip.media?.derivativeStatus === "pending"
+                  ? "cutting"
+                  : "ready",
+          error:
+            clip?.status === "failed"
+              ? (clip.error ?? null)
+              : clip?.media?.derivativeStatus === "failed"
+                ? "The vertical cut failed. Keep it again to retry."
+                : null,
         })
       }
     }
@@ -967,7 +1022,9 @@ export function DeckStage({
                 matches={matches}
                 clipByMatch={clipByMatch}
                 requestIdByMatch={requestIdByMatch}
-                playbackUrl={video.playback?.url ?? null}
+                playbackUrl={video.playback?.proxyUrl ?? video.playback?.url ?? null}
+                requestByMatch={requestByMatch}
+                sourceAspectRatio={video.width && video.height ? `${video.width}:${video.height}` : null}
                 onSeek={onSeek}
                 onKeep={(matchId) => {
                   const requestId = requestIdByMatch.get(matchId)
