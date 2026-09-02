@@ -322,6 +322,8 @@ function EndCard({ canGoBack, onUploadMore }: { canGoBack: boolean; onUploadMore
             : "Ask for another, or keep going with what you kept."}
         </p>
         <div className="mt-6 flex w-full flex-col gap-2">
+          {/* Only the way on: the library is hidden for now (owner,
+              2026-09-02), so nothing here leads to it. */}
           <button
             type="button"
             onClick={onUploadMore}
@@ -329,12 +331,6 @@ function EndCard({ canGoBack, onUploadMore }: { canGoBack: boolean; onUploadMore
           >
             Upload more video
           </button>
-          <a
-            href="/clips"
-            className="w-full whitespace-nowrap rounded-full border border-border py-3 text-center text-sm font-medium text-foreground transition hover:border-foreground"
-          >
-            Go to your library
-          </a>
         </div>
       </div>
     </VerticalFrame>

@@ -5,12 +5,6 @@ import { UploadPackage, type UploadEntry } from "@/components/flow/upload-packag
 import type { Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-const SUGGESTIONS = [
-  "Find me 3 moments I can post on TikTok",
-  "Clip every time the energy peaks",
-  "Find the part where they introduce themselves",
-]
-
 export interface UploadStepProps {
   entries: UploadEntry[]
   video?: Video | null
@@ -29,7 +23,9 @@ export interface UploadStepProps {
 /**
  * Step 01: upload a video and ask for moments. The upload container shows a
  * preview of the video once it lands; the prompt input sits below it and stays
- * inactive until the video is ready for search.
+ * inactive until the video is ready for search. Nothing else: the owner's
+ * call (2026-09-02) is a clean landing page — no suggested questions under
+ * the box, no step rail above it.
  */
 export function UploadStep({
   entries,
@@ -121,22 +117,6 @@ export function UploadStep({
           <p className="text-center text-xs text-muted-foreground">
             Your video is still being prepared — you can type now, then send once it&apos;s ready.
           </p>
-        )}
-
-        {!isSearching && (
-          <div className="flex flex-wrap justify-center gap-2">
-            {SUGGESTIONS.map((text) => (
-              <button
-                key={text}
-                type="button"
-                disabled={!somethingToAskAbout || disabled}
-                onClick={() => onPromptChange(text)}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-              >
-                {text}
-              </button>
-            ))}
-          </div>
         )}
       </div>
     </div>

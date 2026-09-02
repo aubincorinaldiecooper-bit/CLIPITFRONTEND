@@ -18,6 +18,12 @@ const items: NotchItemData[] = [
 afterEach(cleanup)
 
 describe('the notch nav', () => {
+  it('draws no bar at all when it has no destinations — the library is hidden for now, and one entry is nothing to switch between', () => {
+    render(<NotchNav items={[]} activeId={null}><div>page</div></NotchNav>)
+    expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull()
+    expect(screen.getByText('page')).toBeTruthy()
+  })
+
   it('marks only the page being shown as current', () => {
     render(<NotchNav items={items} activeId="library"><div /></NotchNav>)
     expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBe('page')
