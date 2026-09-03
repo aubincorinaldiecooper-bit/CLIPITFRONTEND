@@ -158,10 +158,14 @@ describe('Dialogue', () => {
   })
 
   it('says it is still looking while a search runs, and takes no second question', () => {
-    const exchanges: Exchange[] = [{ request: request({ status: 'searching', progress: { stage: 'search', percent: 20, chunksTotal: 5, chunksCompleted: 1, chunksFailed: 0, message: 'Reading 1 of 5' } }), clips: [] }]
+    const exchanges: Exchange[] = [{ request: request({ status: 'searching', progress: { stage: 'search', percent: 20, chunksTotal: 5, chunksCompleted: 2, chunksFailed: 0, message: 'Reading 1 of 5' } }), clips: [] }]
     render(<Dialogue exchanges={exchanges} video={video} moments={[]} active={undefined} searching onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Looking through your video')
-    expect(screen.getByTestId('dialogue-model').textContent).toContain('Reading 1 of 5')
+    // The backend's own progress string is no longer printed word for word
+    // into the conversation. How far along it is lives in the activity row,
+    // in words a person would use.
+    expect(screen.getByTestId('dialogue-model').textContent).not.toContain('Reading 1 of 5')
+    expect(document.body.textContent).toContain('2/5')
     // A contentEditable cannot be `disabled`; it is made uneditable instead,
     // which is how the composer refuses a second question mid-search.
     expect(screen.getByRole('textbox', { name: 'Ask for a moment' }).getAttribute('contenteditable')).toBe('false')
