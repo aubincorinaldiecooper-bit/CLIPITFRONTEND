@@ -86,9 +86,14 @@ export function previewFor(
   const sourceAspectRatio =
     clip?.media?.sourceAspectRatio ?? (video?.width && video?.height ? `${video.width}:${video.height}` : null)
   // Framed as the server decided — the export is cut from the same numbers.
-  // Before it has decided, a platform request is 9:16 at the centre.
-  const composition =
-    clip?.media?.composition ?? centredComposition(request?.deck != null ? "9:16" : (sourceAspectRatio ?? "16:9"))
+  // Before it has decided, 9:16 at the centre, for every request.
+  //
+  // This used to guess the SOURCE shape when the request named no platform,
+  // which is how a wide clip ended up in a tall card looking broken: the card
+  // is fixed at 9:16, so a 16:9 guess drew a narrow band floating in black.
+  // Every clip is vertical now (owner's rule, 2026-09-03), so the guess before
+  // the server answers is the same shape as the answer.
+  const composition = clip?.media?.composition ?? centredComposition("9:16")
   const finished = clip?.media ? clip.media.url : (clip?.url ?? null)
   if (finished) return { url: finished, start: 0, end: null, composition, sourceAspectRatio, finished: true }
   const source = video?.playback?.proxyUrl ?? video?.playback?.url

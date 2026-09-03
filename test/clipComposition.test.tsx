@@ -111,3 +111,42 @@ describe("fitFor — raw source is never shown through a crop the export will no
     expect(fitFor(smartCrop({ aspectRatio: "16:9", mode: "padded", crop: null, focusPct: 50 }), false, "1920:1081")).toBe("contain")
   })
 })
+
+/**
+ * The seconds before a moment's vertical cut exists.
+ *
+ * Devin flagged, correctly, that making the card's fallback 9:16 changes the
+ * BOX and not the picture inside it: a wide source still arrives letterboxed.
+ * These pin what actually happens, because the earlier test checked only the
+ * ratio and would have passed either way.
+ *
+ * The letterboxing is deliberate and is NOT this PR's to reverse. fitFor's own
+ * reasoning: "a vertical moment whose framing has not been decided yet is
+ * shown whole rather than through a guessed crop, so nobody rejects a moment
+ * because a centre crop hid its subject." Filling the card early would mean
+ * centre-cropping before the server has decided where to look — which is the
+ * exact failure that rule exists to prevent. It is a question for the owner,
+ * raised rather than answered here.
+ *
+ * What DOES close the visual failure is the backend rule: every clip is cut
+ * 9:16, so the finished file is vertical and covers.
+ */
+describe('a moment whose vertical cut has not arrived yet', () => {
+  it('is shown whole, not centre-cropped, while nothing has decided the framing', () => {
+    const pending = centredComposition('9:16')
+    expect(pending.mode).toBe('original')
+    expect(pending.crop).toBeNull()
+    // Letterboxed inside a 9:16 card. Honest, and still a wide band.
+    expect(fitFor(pending, false, '1920:1080')).toBe('contain')
+  })
+
+  it('fills the card the moment a real vertical file exists', () => {
+    // The state the backend rule now guarantees for every clip.
+    expect(fitFor(centredComposition('9:16'), true, '1920:1080')).toBe('cover')
+  })
+
+  it('fills it early only when the server chose a crop it can reproduce', () => {
+    const smart = { ...centredComposition('9:16'), mode: 'smart_crop' as const }
+    expect(fitFor(smart, false, '1920:1080')).toBe('cover')
+  })
+})
