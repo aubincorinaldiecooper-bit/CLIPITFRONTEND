@@ -90,6 +90,41 @@ Object.defineProperty(window, 'matchMedia', {
 
 afterEach(cleanup)
 
+/**
+ * Every clip is vertical. Never landscape. Ever. (Owner, 2026-09-03.)
+ *
+ * The card is a fixed 9:16 box, and it used to GUESS the source shape while
+ * waiting for the server — so a wide video with no platform word in the
+ * question drew a narrow band floating in black. It looked broken and nothing
+ * had failed. The guess is 9:16 now, the same shape as the answer.
+ */
+describe('the card assumes vertical before the server has said anything', () => {
+  it('is 9:16 for a moment with no clip and no platform word in the question', () => {
+    // Needs a playback source: with none there is nothing to stand in for the
+    // cut, and the card has no preview at all.
+    const wide = {
+      ...video,
+      width: 1920,
+      height: 1080,
+      playback: { proxyUrl: 'https://cdn.test/videos/v1/playback.mp4?sig=1', url: null },
+    } as never
+    const [moment] = feedMoments(
+      [{ request: request('r1', [match({ id: 'a' })]), clips: [] }],
+      wide,
+    )
+    // Was "1920:1080" — the source shape — which the tall card letterboxed.
+    expect(moment!.preview?.composition.aspectRatio).toBe('9:16')
+  })
+
+  it('still prefers what the server actually decided, when it has', () => {
+    const [moment] = feedMoments(
+      [cutExchange('r1', {}, verticalMedia('ready'))],
+      video as never,
+    )
+    expect(moment!.preview?.composition.aspectRatio).toBe('9:16')
+  })
+})
+
 describe('feedMoments — every moment of every question, in order', () => {
   it('walks the questions in the order asked and the moments strongest first inside each', () => {
     const moments = feedMoments(
