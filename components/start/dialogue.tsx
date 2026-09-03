@@ -106,7 +106,7 @@ function DialogueEmpty({ composer }: { composer: React.ReactNode }) {
     // every child to its own content width, which crushes the composer into
     // a pill with its placeholder wrapping over the send button. Only the
     // words are centred; the box fills the column.
-    <VStack gap={6} justify="center" height="100%" data-testid="dialogue-empty">
+    <VStack gap={6} justify="center" height="100%" className="min-h-80 min-w-64 flex-1" data-testid="dialogue-empty">
       <VStack gap={2} align="center">
         <DialogueIllustration />
         <Heading level={3}>Talk to your footage</Heading>
@@ -381,10 +381,12 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
       // would make them type it again to retry.
       const outcome = await handleAsk(trimmed)
       if (outcome === false) {
-        // Put it back. The composer empties itself the moment it submits,
-        // and re-rendering with the same draft cannot undo that — React sees
-        // no change and leaves the cleared box alone. So the words go back
-        // through the composer's own handle, with the cursor in them.
+        // Put it back, in BOTH places. The composer empties itself the moment
+        // it submits — the visible box and the value it reports — and the two
+        // have to agree. Restoring only the visible text is worse than not
+        // restoring it: the question sits there looking ready while the send
+        // button stays dead and Enter submits nothing.
+        setDraft(trimmed)
         inputRef.current?.insertText(trimmed)
         inputRef.current?.focus()
       } else {
@@ -414,7 +416,12 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   if (entryCount === 0) return <DialogueEmpty composer={composer} />
 
   return (
-    <ChatLayout data-testid="dialogue" composer={composer}>
+    // min-w-64 / min-h-80 are the old wrapper's, and they are load-bearing:
+    // beside the feed's fixed 440px, a 600px window leaves this column about
+    // 112px. The minimum is what makes the row wrap and put the chat BELOW
+    // the feed instead of squeezing it into a strip. ChatLayout brings no
+    // minimum of its own.
+    <ChatLayout data-testid="dialogue" className="min-h-80 min-w-64 flex-1" composer={composer}>
       {(
         // Busy while an answer is still arriving, so a screen reader waits
         // and reads the finished sentence once instead of each fragment.

@@ -131,6 +131,16 @@ describe('Dialogue', () => {
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Found 2 moments.')
   })
 
+  it('keeps a minimum width, so it wraps below the feed instead of being squeezed', () => {
+    // Beside the feed's fixed 440px, a 600px window leaves this column about
+    // 112px. The minimum is what makes the row wrap and put the chat below
+    // the feed; without it the messages and the box collapse into a strip.
+    const { container } = render(
+      <Dialogue exchanges={[]} video={video} moments={[]} active={undefined} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />,
+    )
+    expect((container.firstElementChild as HTMLElement).className).toMatch(/min-w-/)
+  })
+
   it('keeps a question the server refused in the box, to edit and send again', async () => {
     const onAsk = vi.fn(async () => false)
     render(<Dialogue exchanges={[]} video={video} moments={[]} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
@@ -143,8 +153,13 @@ describe('Dialogue', () => {
     // put, and a taken one leaves.
     expect(box.textContent).toBe('find the goal')
 
+    // And it can actually be sent again. Putting the words back on screen
+    // without the composer knowing about them looks like a retry and is not
+    // one: the send button stays dead and Enter submits nothing.
     onAsk.mockResolvedValueOnce(true as never)
     await userEvent.type(box, '{enter}')
+    expect(onAsk).toHaveBeenCalledTimes(2)
+    expect(onAsk).toHaveBeenLastCalledWith('find the goal')
     expect(box.textContent).toBe('')
   })
 
