@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ClipCard, ClipViewer, clipShape, playableUrl } from '../components/clip-card'
 import type { LibraryClip } from '../lib/types'
+import { astryxRatio } from './support/astryxRatio'
 
 /**
  * The card after the owner's reference: poster on top, a shape pill and one
@@ -190,10 +191,12 @@ describe('the shape a card names', () => {
       media: { ...wide().media!, outputAspectRatio: null, composition: { ...wide().media!.composition, aspectRatio: 'source' } },
     })
     render(<ClipViewer clip={square} onClose={() => {}} />)
-    const box = document.querySelector('[data-slot="clip-popup"] [style*="aspect-ratio"]') as HTMLElement | null
+    // The documented theme target, rather than sniffing the style attribute:
+    // where Astryx puts the ratio moved in 0.5 and a selector on it broke.
+    const box = document.querySelector('[data-slot="clip-popup"] .astryx-aspect-ratio') as HTMLElement | null
     expect(box).toBeTruthy()
-    const [w, h] = box!.style.aspectRatio.split('/').map((part) => Number(part.trim()))
-    expect(w / h).toBeCloseTo(1)
+    const ratio = astryxRatio(box as HTMLElement)
+    expect(ratio).toBeCloseTo(1)
   })
 
   it('falls back to the source size, then to wide', () => {

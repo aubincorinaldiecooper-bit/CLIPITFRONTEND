@@ -1,10 +1,22 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { ArrowUp } from "lucide-react"
+import { Fragment, useRef, useState } from "react"
+import {
+  ChatComposer,
+  ChatComposerInput,
+  type ChatComposerInputHandle,
+  ChatLayout,
+  ChatMessage,
+  ChatMessageBubble,
+  ChatMessageList,
+  ChatToolCalls,
+  type ChatToolCallItem,
+} from "@astryxdesign/core/Chat"
+import { Heading } from "@astryxdesign/core/Heading"
+import { Text } from "@astryxdesign/core/Text"
+import { VStack } from "@astryxdesign/core/VStack"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import type { Video } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import type { ClipRequest, Video } from "@/lib/types"
 import { answerLine, coverageLine, uncertainLine } from "./answer-words"
 import type { FeedMoment } from "./moment-feed"
 import type { Exchange } from "./types"
@@ -22,14 +34,17 @@ import type { Exchange } from "./types"
  * for a better standalone cut; it does not trim an intro because it was
  * asked to. So the dialogue says exactly that when it takes an edit, rather
  * than letting "trim the slow intro" look obeyed.
- */
-
-/**
- * A word the dialogue adds itself — a Re-clip taken, or refused. Placed
- * after the question it followed. A note about a re-cut that started
- * carries the moment's id instead of fixed words: what it says follows the
- * moment — underway, failed with the reason, or done — so the thread never
- * claims work is happening after it has finished.
+ *
+ * The thread, the bubbles and the box are Astryx's Chat components rather
+ * than ours (owner's call, 2026-09-03). What that buys, beyond the look: a
+ * log region screen readers announce politely, a busy flag while an answer
+ * is still arriving so a reader is not read half a sentence, scrolling that
+ * follows new messages with a button back to the bottom when you have
+ * scrolled away, and a composer that grows with what you type. All of that
+ * was either hand-rolled here or simply missing.
+ *
+ * What is NOT theirs, and stays ours, is every word and every rule about
+ * when to say it.
  */
 interface Note {
   id: string
@@ -75,36 +90,141 @@ function DialogueIllustration() {
   )
 }
 
-function DialogueEmpty() {
+/**
+ * The zero state, on Astryx's ai-chat-landing pattern (owner's call,
+ * 2026-09-03): a title, one line of help, and the box — centred, with the
+ * conversation's weight where the conversation will be.
+ *
+ * Deliberately WITHOUT the template's suggestion furniture: no category
+ * toggles, no grid of example prompts, no attachment drawer. Prompt chips
+ * would be guesses about someone else's footage, and there is nothing to
+ * attach — the video is already here, which is why there is a chat at all.
+ */
+function DialogueEmpty({ composer }: { composer: React.ReactNode }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center text-center" data-testid="dialogue-empty">
-      <DialogueIllustration />
-      <p className="mt-5 max-w-xs text-sm leading-relaxed text-muted-foreground">
-        Talk to your footage — &ldquo;find the part where the car pulls out&rdquo;, or &ldquo;re-cut this one&rdquo;. New moments land in
-        the feed; a re-cut reworks the clip on screen.
-      </p>
-    </div>
+    // Centred down the page, but NOT across it: a cross-axis centre shrinks
+    // every child to its own content width, which crushes the composer into
+    // a pill with its placeholder wrapping over the send button. Only the
+    // words are centred; the box fills the column.
+    <VStack gap={6} justify="center" height="100%" className="min-h-80 min-w-64 flex-1" data-testid="dialogue-empty">
+      <VStack gap={2} align="center">
+        <DialogueIllustration />
+        <Heading level={3}>Talk to your footage</Heading>
+        <Text type="supporting" as="p">
+          &ldquo;Find the part where the car pulls out&rdquo;, or &ldquo;re-cut this one&rdquo;. New moments land in the feed; a re-cut
+          reworks the clip on screen.
+        </Text>
+      </VStack>
+      {composer}
+    </VStack>
   )
 }
 
 function UserLine({ text }: { text: string }) {
   return (
-    <p className="ml-auto max-w-5/6 text-right text-sm font-medium leading-relaxed text-foreground" data-testid="dialogue-user">
-      {text}
-    </p>
+    <ChatMessage sender="user">
+      <ChatMessageBubble>
+        <span data-testid="dialogue-user">{text}</span>
+      </ChatMessageBubble>
+    </ChatMessage>
   )
 }
 
+/**
+ * What the system says, in a ghost bubble.
+ *
+ * Ghost rather than filled deliberately: these are the product's own words
+ * about your footage, and the owner's screen shows them as quiet text
+ * rather than a coloured slab. Ghost keeps the bubble's alignment and
+ * padding without the fill.
+ */
 function ModelLine({ text, children }: { text?: string; children?: React.ReactNode }) {
   return (
-    <div className="max-w-5/6 text-sm leading-relaxed text-muted-foreground" data-testid="dialogue-model">
-      {text}
-      {children}
-    </div>
+    <ChatMessage sender="assistant">
+      <ChatMessageBubble variant="ghost">
+        <span className="text-sm leading-relaxed text-muted-foreground" data-testid="dialogue-model">
+          {text}
+          {children}
+        </span>
+      </ChatMessageBubble>
+    </ChatMessage>
   )
 }
 
 const isSearching = (exchange: Exchange) => exchange.request.status === "pending" || exchange.request.status === "searching"
+
+/**
+ * The search itself, shown as the piece of work it is.
+ *
+ * A question here is model work: it reads the video in pieces, in one of two
+ * ways, and either answers from what it already wrote down or goes back to
+ * the footage. All of that was invisible before — the chat said "Looking
+ * through your video…" and nothing else. This is the row you can open to see
+ * what actually happened.
+ *
+ * It shows pieces REFUSED as well as pieces read, deliberately. A stretch the
+ * model would not look at is the one thing this product must never quietly
+ * swallow, and the answer's own words say it too; they should agree.
+ *
+ * It is NOT a running commentary on the reading. The words of an answer still
+ * never narrate progress (the owner's call of 2026-09-02) — this sits beside
+ * them, collapsed, for when you want to know.
+ */
+/** Where the answer came from, in words rather than in our field names. */
+function sourceWords(request: ClipRequest): string | undefined {
+  if (request.answeredFrom === "notes") return "from what I'd noted"
+  if (request.answeredFrom === "footage") return "from the footage"
+  if (request.resolvedMode === "visual") return "watching"
+  if (request.resolvedMode === "transcript") return "listening"
+  if (request.resolvedMode === "both") return "watching and listening"
+  return undefined
+}
+
+function searchActivity(request: ClipRequest): ChatToolCallItem[] {
+  const running = request.status === "pending" || request.status === "searching"
+  const total = request.progress?.chunksTotal ?? 0
+  const read = request.progress?.chunksCompleted ?? 0
+  const refused = request.progress?.chunksFailed ?? 0
+  return [
+    {
+      key: request.id,
+      name: running ? "Reading your video" : "Read your video",
+      status: running ? "running" : request.status === "failed" ? "error" : "complete",
+      // No `target`. It would be the question, which is in the bubble
+      // directly above this row — and repeating it here squeezed the row so
+      // hard at the drawer's 380px that the name itself truncated to "R…".
+      // One trailing item, not two. The row shrinks its own name first, and
+      // at the drawer's 380px a name, a pill AND a count turned "Read your
+      // video" into "R…". Said the way a person would say it, too: "notes",
+      // "footage" and "visual" are our words for our own machinery.
+      stats: [
+        total > 0 ? `${read}/${total}${refused > 0 ? ` · ${refused} unavailable` : ""}` : null,
+        // Only once it has finished. Where an answer came from is not known
+        // while the search is still running, and a row that says "from what
+        // I'd noted" mid-search is claiming something that has not happened.
+        running ? null : sourceWords(request),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      errorMessage: request.error ?? undefined,
+      // Also as detail you can open. errorMessage alone reaches a mouse
+      // (tooltip) and a screen reader, and nobody on a touchscreen. This is
+      // where the server's exact words live now that they are out of the
+      // conversation, so they have to be reachable.
+      resultDetail: request.status === "failed" ? (request.error ?? undefined) : undefined,
+    },
+  ]
+}
+
+function SearchActivity({ request }: { request: ClipRequest }) {
+  return (
+    <ChatMessage sender="assistant">
+      <ChatMessageBubble variant="ghost">
+        <ChatToolCalls calls={searchActivity(request)} />
+      </ChatMessageBubble>
+    </ChatMessage>
+  )
+}
 
 /**
  * What the system says about one question once it has answered.
@@ -135,15 +255,30 @@ function ExchangeLines({ exchange, readThroughSeconds, first }: { exchange: Exch
   const { request } = exchange
   if (isSearching(exchange)) {
     return (
-      <ModelLine>
-        <TextShimmer as="span">Looking through your video…</TextShimmer>
-        {request.progress?.message && <span className="mt-1 block text-xs">{request.progress.message}</span>}
-      </ModelLine>
+      <>
+        <SearchActivity request={request} />
+        {/*
+          The backend's own progress string used to be printed here word for
+          word — "Reading 1 of 5". It is a log line, not something anyone
+          said, and the owner's call (2026-09-03) is that the chat talks like
+          a person. How far along it is now lives in the activity row above,
+          in our words, for anyone who opens it.
+        */}
+        <ModelLine>
+          <TextShimmer as="span">Looking through your video…</TextShimmer>
+        </ModelLine>
+      </>
     )
   }
+  const lines = exchangeLines(exchange, readThroughSeconds, first)
+  // Silence stays silence. When the first answer has nothing to admit the
+  // chat says nothing at all and the cards speak — so the activity row does
+  // not appear either, or the empty state would never be reached.
+  if (lines.length === 0) return null
   return (
     <>
-      {exchangeLines(exchange, readThroughSeconds, first).map((line, index) => (
+      <SearchActivity request={request} />
+      {lines.map((line, index) => (
         <ModelLine key={`${request.id}-${index}`} text={line} />
       ))}
     </>
@@ -156,66 +291,6 @@ function ExchangeLines({ exchange, readThroughSeconds, first }: { exchange: Exch
  * else counts as taken.
  */
 export type AskOutcome = boolean | void
-
-/** The question box: one line, sent with Enter or the arrow. */
-export function AskBar({
-  onAsk,
-  disabled,
-  placeholder,
-}: {
-  onAsk: (text: string) => AskOutcome | Promise<AskOutcome>
-  disabled: boolean
-  placeholder: string
-}) {
-  const [draft, setDraft] = useState("")
-  const [pending, setPending] = useState(false)
-  const trimmed = draft.trim()
-  const canSend = trimmed !== "" && !pending && !disabled
-
-  const send = async () => {
-    if (!canSend) return
-    setPending(true)
-    try {
-      // The words leave the box only once the ask was taken: a question
-      // the server refused is still the person's question, and clearing it
-      // would make them type it again to retry.
-      const outcome = await onAsk(trimmed)
-      if (outcome !== false) setDraft("")
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        void send()
-      }}
-      className="mt-5 flex items-center gap-2"
-    >
-      <input
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        disabled={disabled || pending}
-        placeholder={placeholder}
-        aria-label="Ask for a moment"
-        className="h-10 min-w-0 flex-1 border-b border-border bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground disabled:cursor-not-allowed"
-      />
-      <button
-        type="submit"
-        disabled={!canSend}
-        aria-label="Send"
-        className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-foreground transition hover:border-foreground",
-          !canSend && "opacity-40",
-        )}
-      >
-        <ArrowUp aria-hidden size={16} />
-      </button>
-    </form>
-  )
-}
 
 export interface DialogueProps {
   exchanges: Exchange[]
@@ -248,7 +323,9 @@ function reclipNoteText(moments: FeedMoment[], matchId: string, fallback: string
 
 export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip }: DialogueProps) {
   const [notes, setNotes] = useState<Note[]>([])
-  const threadRef = useRef<HTMLDivElement>(null)
+  const [draft, setDraft] = useState("")
+  const [pending, setPending] = useState(false)
+  const inputRef = useRef<ChatComposerInputHandle>(null)
   const readThroughSeconds = video?.index?.readThroughSeconds
 
   const addNote = (role: Note["role"], text: string, reclipOf?: string) =>
@@ -263,10 +340,6 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const first = exchanges[0]
   const firstSpeaks = first !== undefined && (isSearching(first) || exchangeLines(first, readThroughSeconds, true).length > 0)
   const entryCount = (firstSpeaks ? 1 : 0) + Math.max(0, exchanges.length - 1) + notes.length
-  useEffect(() => {
-    const element = threadRef.current
-    if (element) element.scrollTop = element.scrollHeight
-  }, [entryCount])
 
   const handleAsk = async (text: string): Promise<AskOutcome> => {
     if (isEditRequest(text)) {
@@ -299,26 +372,84 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   }
 
   const ready = video?.readyForSearch === true
+  const disabled = searching || !ready
   const placeholder = searching ? "Still looking…" : ready ? "Ask for a moment…" : "Your video is still being prepared…"
   const notesAfter = (requestId: string | null) => notes.filter((note) => note.afterRequestId === requestId)
 
+  const submit = async (value: string) => {
+    const trimmed = value.trim()
+    if (trimmed === "" || pending || disabled) return
+    setPending(true)
+    try {
+      // The words leave the box only once the ask was taken: a question
+      // the server refused is still the person's question, and clearing it
+      // would make them type it again to retry.
+      const outcome = await handleAsk(trimmed)
+      if (outcome === false) {
+        // Put it back, in BOTH places. The composer empties itself the moment
+        // it submits — the visible box and the value it reports — and the two
+        // have to agree. Restoring only the visible text is worse than not
+        // restoring it: the question sits there looking ready while the send
+        // button stays dead and Enter submits nothing.
+        // The controlled value alone, NOT insertText. The composer only
+        // notices it is non-empty when the value it is handed differs from
+        // what is already in the box — and insertText had put the words
+        // there first, so the two matched and it stayed "empty", leaving the
+        // placeholder drawn over the restored question. Setting the value
+        // against an empty box makes it write the text and drop the
+        // placeholder in one go.
+        setDraft(trimmed)
+        inputRef.current?.focus()
+      } else {
+        setDraft("")
+      }
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const composer = (
+        <ChatComposer
+          value={draft}
+          onChange={setDraft}
+          onSubmit={(value) => void submit(value)}
+          placeholder={placeholder}
+          isDisabled={disabled || pending}
+          // Controlled from here, not from the composer: the composer clears
+          // itself on submit, and a question the server refused is still the
+          // person's question. It leaves the box only when the ask was taken.
+          input={<ChatComposerInput label="Ask for a moment" maxRows={4} handleRef={inputRef} />}
+        />
+  )
+
+  // Nothing said yet: the landing, with the box in the middle of the column
+  // rather than docked under an empty thread.
+  if (entryCount === 0) return <DialogueEmpty composer={composer} />
+
   return (
-    <div className="flex min-h-80 min-w-64 flex-1 flex-col" data-testid="dialogue">
-      <div ref={threadRef} className="flex flex-1 flex-col gap-4 overflow-y-auto">
-        {entryCount === 0 && <DialogueEmpty />}
-        {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
-        {exchanges.map((exchange, index) => (
-          <div key={exchange.request.id} className="flex flex-col gap-4">
-            {/* The first question was asked on the upload step; only its caveats belong here. */}
-            {index > 0 && <UserLine text={exchange.request.instruction} />}
-            <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} first={index === 0} />
-            {notesAfter(exchange.request.id).map((note) =>
-              note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
-            )}
-          </div>
-        ))}
-      </div>
-      <AskBar onAsk={handleAsk} disabled={searching || !ready} placeholder={placeholder} />
-    </div>
+    // min-w-64 / min-h-80 are the old wrapper's, and they are load-bearing:
+    // beside the feed's fixed 440px, a 600px window leaves this column about
+    // 112px. The minimum is what makes the row wrap and put the chat BELOW
+    // the feed instead of squeezing it into a strip. ChatLayout brings no
+    // minimum of its own.
+    <ChatLayout data-testid="dialogue" className="min-h-80 min-w-64 flex-1" composer={composer}>
+      {(
+        // Busy while an answer is still arriving, so a screen reader waits
+        // and reads the finished sentence once instead of each fragment.
+        <ChatMessageList isStreaming={exchanges.some(isSearching)}>
+          {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
+          {exchanges.map((exchange, index) => (
+            <Fragment key={exchange.request.id}>
+              {/* The first question was asked on the upload step; only its caveats belong here. */}
+              {index > 0 && <UserLine text={exchange.request.instruction} />}
+              <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} first={index === 0} />
+              {notesAfter(exchange.request.id).map((note) =>
+                note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
+              )}
+            </Fragment>
+          ))}
+        </ChatMessageList>
+      )}
+    </ChatLayout>
   )
 }

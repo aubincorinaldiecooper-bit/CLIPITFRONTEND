@@ -12,6 +12,7 @@ import {
 } from '../components/theater/review-deck'
 import type { ClipMatch } from '../lib/types'
 import { centredComposition } from '../components/media/clip-composition'
+import { astryxRatio } from './support/astryxRatio'
 
 /**
  * The owner's review flow, held by tests: one moment at a time; Keep, Skip
@@ -310,8 +311,8 @@ describe('KeptGrid — a tile is shaped and framed by its composition, not by a 
   })
 
   const boxRatio = (el: Element) => {
-    const [w, h] = (el as HTMLElement).style.aspectRatio.split('/').map((part) => Number(part.trim()))
-    return w / (h || 1)
+    const ratio = astryxRatio(el as HTMLElement)
+    return ratio
   }
 
   it('keeps a 16:9 moment landscape', () => {

@@ -28,7 +28,13 @@ export function describeDuration(seconds: number): string {
 
 export function answerLine(request: ClipRequest, readThroughSeconds?: number | null): string {
   const count = request.matches?.length ?? 0
-  if (request.status === "failed") return request.error ?? "Something went wrong with that search."
+  // The server's own error text is NOT repeated here. It is written for
+  // whoever is reading the logs — a provider's refusal, a timeout, a code —
+  // and the chat is a conversation (the owner's call, 2026-09-03). The exact
+  // words are still carried, on the search's activity row, for anyone who
+  // opens it; nothing is hidden, it is just not shouted in the middle of a
+  // sentence.
+  if (request.status === "failed") return "That search didn't finish. Nothing was lost — ask me again."
 
   // Answered before the whole video had been watched: said in the answer,
   // not in a warning box — the box's words ("couldn't look") would be

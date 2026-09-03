@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { VerticalFrame, VERTICAL_RATIO } from '../components/media/vertical-frame'
+import { astryxRatio } from './support/astryxRatio'
 
 /**
  * The frame is Astryx's, not ours. These tests hold the two things that
@@ -25,8 +26,8 @@ describe('VerticalFrame — Astryx AspectRatio at the canonical ratio', () => {
     // Astryx sets aspectRatio inline from the `ratio` prop. jsdom normalises
     // a bare number to "<n> / 1", which is the same ratio — assert the value
     // rather than the spelling.
-    const [w, h] = root.style.aspectRatio.split('/').map((part) => Number(part.trim()))
-    expect(w / (h || 1)).toBeCloseTo(9 / 16, 6)
+    const ratio = astryxRatio(root)
+    expect(ratio).toBeCloseTo(9 / 16, 6)
     expect(screen.getByTestId('child')).toBeTruthy()
   })
 

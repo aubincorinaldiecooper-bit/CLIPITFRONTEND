@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Dialogue, isEditRequest } from '../components/start/dialogue'
 import type { FeedMoment } from '../components/start/moment-feed'
@@ -131,17 +131,42 @@ describe('Dialogue', () => {
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Found 2 moments.')
   })
 
+  it('keeps a minimum width, so it wraps below the feed instead of being squeezed', () => {
+    // Beside the feed's fixed 440px, a 600px window leaves this column about
+    // 112px. The minimum is what makes the row wrap and put the chat below
+    // the feed; without it the messages and the box collapse into a strip.
+    const { container } = render(
+      <Dialogue exchanges={[]} video={video} moments={[]} active={undefined} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />,
+    )
+    expect((container.firstElementChild as HTMLElement).className).toMatch(/min-w-/)
+  })
+
   it('keeps a question the server refused in the box, to edit and send again', async () => {
     const onAsk = vi.fn(async () => false)
     render(<Dialogue exchanges={[]} video={video} moments={[]} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
-    const box = screen.getByRole('textbox', { name: 'Ask for a moment' }) as HTMLInputElement
+    const box = screen.getByRole('textbox', { name: 'Ask for a moment' })
     await userEvent.type(box, 'find the goal{enter}')
     expect(onAsk).toHaveBeenCalledWith('find the goal')
-    expect(box.value).toBe('find the goal')
+    // The box is Astryx's composer now, which is a rich contentEditable
+    // rather than an <input>, so the words live in its text rather than a
+    // `value`. What is being held to is unchanged: a refused question stays
+    // put, and a taken one leaves.
+    expect(box.textContent).toBe('find the goal')
+    // And the box looks like it holds it: the placeholder is a separate
+    // layer, and restoring the text without telling the composer it is no
+    // longer empty leaves "Ask for a moment…" drawn over the question.
+    // Waited for, not asserted flat: the restore lands in a state update, and
+    // a bare assertion passed alone and failed inside the full suite.
+    await waitFor(() => expect(screen.queryByText('Ask for a moment…')).toBeNull())
 
+    // And it can actually be sent again. Putting the words back on screen
+    // without the composer knowing about them looks like a retry and is not
+    // one: the send button stays dead and Enter submits nothing.
     onAsk.mockResolvedValueOnce(true as never)
     await userEvent.type(box, '{enter}')
-    expect(box.value).toBe('')
+    expect(onAsk).toHaveBeenCalledTimes(2)
+    expect(onAsk).toHaveBeenLastCalledWith('find the goal')
+    expect(box.textContent).toBe('')
   })
 
   it('says a re-cut did not start when the server refused it, instead of claiming it is underway', async () => {
@@ -154,11 +179,17 @@ describe('Dialogue', () => {
   })
 
   it('says it is still looking while a search runs, and takes no second question', () => {
-    const exchanges: Exchange[] = [{ request: request({ status: 'searching', progress: { stage: 'search', percent: 20, chunksTotal: 5, chunksCompleted: 1, chunksFailed: 0, message: 'Reading 1 of 5' } }), clips: [] }]
+    const exchanges: Exchange[] = [{ request: request({ status: 'searching', progress: { stage: 'search', percent: 20, chunksTotal: 5, chunksCompleted: 2, chunksFailed: 0, message: 'Reading 1 of 5' } }), clips: [] }]
     render(<Dialogue exchanges={exchanges} video={video} moments={[]} active={undefined} searching onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Looking through your video')
-    expect(screen.getByTestId('dialogue-model').textContent).toContain('Reading 1 of 5')
-    expect((screen.getByRole('textbox', { name: 'Ask for a moment' }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
+    // The backend's own progress string is no longer printed word for word
+    // into the conversation. How far along it is lives in the activity row,
+    // in words a person would use.
+    expect(screen.getByTestId('dialogue-model').textContent).not.toContain('Reading 1 of 5')
+    expect(document.body.textContent).toContain('2/5')
+    // A contentEditable cannot be `disabled`; it is made uneditable instead,
+    // which is how the composer refuses a second question mid-search.
+    expect(screen.getByRole('textbox', { name: 'Ask for a moment' }).getAttribute('contenteditable')).toBe('false')
   })
 
   it('names a stretch it could not look at', () => {
