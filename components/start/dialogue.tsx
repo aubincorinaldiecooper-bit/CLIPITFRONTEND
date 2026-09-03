@@ -207,6 +207,11 @@ function searchActivity(request: ClipRequest): ChatToolCallItem[] {
         .filter(Boolean)
         .join(" · "),
       errorMessage: request.error ?? undefined,
+      // Also as detail you can open. errorMessage alone reaches a mouse
+      // (tooltip) and a screen reader, and nobody on a touchscreen. This is
+      // where the server's exact words live now that they are out of the
+      // conversation, so they have to be reachable.
+      resultDetail: request.status === "failed" ? (request.error ?? undefined) : undefined,
     },
   ]
 }
@@ -386,8 +391,14 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
         // have to agree. Restoring only the visible text is worse than not
         // restoring it: the question sits there looking ready while the send
         // button stays dead and Enter submits nothing.
+        // The controlled value alone, NOT insertText. The composer only
+        // notices it is non-empty when the value it is handed differs from
+        // what is already in the box — and insertText had put the words
+        // there first, so the two matched and it stayed "empty", leaving the
+        // placeholder drawn over the restored question. Setting the value
+        // against an empty box makes it write the text and drop the
+        // placeholder in one go.
         setDraft(trimmed)
-        inputRef.current?.insertText(trimmed)
         inputRef.current?.focus()
       } else {
         setDraft("")

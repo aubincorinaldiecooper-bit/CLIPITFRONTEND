@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Dialogue, isEditRequest } from '../components/start/dialogue'
 import type { FeedMoment } from '../components/start/moment-feed'
@@ -152,6 +152,12 @@ describe('Dialogue', () => {
     // `value`. What is being held to is unchanged: a refused question stays
     // put, and a taken one leaves.
     expect(box.textContent).toBe('find the goal')
+    // And the box looks like it holds it: the placeholder is a separate
+    // layer, and restoring the text without telling the composer it is no
+    // longer empty leaves "Ask for a moment…" drawn over the question.
+    // Waited for, not asserted flat: the restore lands in a state update, and
+    // a bare assertion passed alone and failed inside the full suite.
+    await waitFor(() => expect(screen.queryByText('Ask for a moment…')).toBeNull())
 
     // And it can actually be sent again. Putting the words back on screen
     // without the composer knowing about them looks like a retry and is not
