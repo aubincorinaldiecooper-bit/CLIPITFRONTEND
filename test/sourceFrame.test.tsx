@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { SourceFrame } from '../components/media/source-frame'
+import { astryxRatio } from './support/astryxRatio'
 
 /**
  * The frame the original video plays in.
@@ -16,11 +17,7 @@ import { SourceFrame } from '../components/media/source-frame'
  * the bottom of the screen.
  */
 
-/** Astryx sets aspectRatio inline; jsdom normalises a bare number to "n / 1". */
-function ratioOf(root: HTMLElement): number {
-  const [w, h] = root.style.aspectRatio.split('/').map((part) => Number(part.trim()))
-  return w / (h || 1)
-}
+const ratioOf = astryxRatio
 
 function frame(width: number | null | undefined, height: number | null | undefined) {
   cleanup()

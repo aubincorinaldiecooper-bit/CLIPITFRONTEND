@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 import { ClipComposition, centredComposition, fitFor, objectPositionFor, ratioFromLabel } from "../components/media/clip-composition"
 import type { ClipComposition as Composition } from "../lib/types"
+import { astryxRatio } from './support/astryxRatio'
 
 /**
  * The card and the Preview must not independently work out where a moment
@@ -58,8 +59,8 @@ describe("ClipComposition", () => {
       </ClipComposition>,
     )
     const box = container.firstElementChild as HTMLElement
-    const [w, h] = box.style.aspectRatio.split("/").map((part) => Number(part.trim()))
-    expect(w / (h || 1)).toBeCloseTo(9 / 16, 6)
+    const ratio = astryxRatio(box)
+    expect(ratio).toBeCloseTo(9 / 16, 6)
     expect((screen.getByTestId("media") as HTMLElement).style.objectPosition).toBe("75% 50%")
   })
 
@@ -71,8 +72,8 @@ describe("ClipComposition", () => {
       </ClipComposition>,
     )
     const box = container.firstElementChild as HTMLElement
-    const [w, h] = box.style.aspectRatio.split("/").map((part) => Number(part.trim()))
-    expect(w / (h || 1)).toBeCloseTo(16 / 9, 6)
+    const ratio = astryxRatio(box)
+    expect(ratio).toBeCloseTo(16 / 9, 6)
   })
 })
 
