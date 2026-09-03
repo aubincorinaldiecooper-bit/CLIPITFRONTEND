@@ -52,26 +52,24 @@ describe('SourceFrame — the box is the shape of the video', () => {
     expect(ratioOf(frame(720, 1280))).toBeCloseTo(720 / 1280, 6)
   })
 
-  it('sizes an upright video from its height, so it fits on the screen', () => {
-    // The box takes its width from the stage, so a 9:16 video at full width
-    // would be nearly twice the height of the viewport. Capping the height
-    // only works if the width is released to follow it — a cap on its own
-    // would clamp the box off ratio and squash the picture, which is why
-    // both classes are asserted rather than just the cap.
-    const root = frame(1080, 1920)
-    expect(root.style.maxHeight).toBe('70svh')
-    // Both, or neither. A rendered check with only the cap gave a box of
-    // 479x665 for a 1080x1920 video — clamped, off ratio, picture squashed.
-    // With the width released it is 374x665, which is the ratio exactly.
-    expect(root.style.width).toBe('auto')
-    // The ratio still wins: AspectRatio applies it after this style.
-    expect(ratioOf(root)).toBeCloseTo(9 / 16, 6)
-  })
-
-  it('leaves a wide video to fill the stage', () => {
-    const root = frame(1920, 1080)
-    expect(root.style.maxHeight).toBeFalsy()
-    expect(root.style.width).toBeFalsy()
+  it('caps the height and releases the width, whatever the shape', () => {
+    // Both, or neither. A rendered check with only the cap gave 479x665 for a
+    // 1080x1920 video — clamped, off ratio, picture squashed. With the width
+    // released it renders 354x630, which is the ratio exactly.
+    //
+    // The cap goes on every shape, not just upright ones: a square video at
+    // the stage's full width is as tall as the stage is wide, which clears
+    // the cap comfortably. `width: auto` means the browser only derives a
+    // narrower width when the height actually hits the cap, so a landscape
+    // video is untouched — rendered, it fills the stage at 896x504 while a
+    // square is held to 630x630.
+    for (const [w, h] of [[1080, 1920], [1000, 1000], [1920, 1080], [2560, 1080]]) {
+      const root = frame(w, h)
+      expect(root.style.maxHeight).toBe('70svh')
+      expect(root.style.width).toBe('auto')
+      // The ratio still wins: AspectRatio applies it after this style.
+      expect(ratioOf(root)).toBeCloseTo(w / h, 6)
+    }
   })
 
   it('falls back to 16:9 while the video has not been measured yet', () => {

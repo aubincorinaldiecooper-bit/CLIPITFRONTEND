@@ -23,12 +23,19 @@ import type { ReactNode } from "react"
 const LANDSCAPE = 16 / 9
 
 /**
- * An upright video would otherwise run off the bottom of the screen: the box
- * takes its width from the stage, so a 9:16 video across the stage's full
- * width is nearly twice the height of the viewport. Capping the height only
- * works if the width is released to follow it — AspectRatio's own docs are
- * explicit that a height cap on its own clamps the box off ratio and squashes
- * the picture, and a rendered check confirmed exactly that.
+ * A tall video would otherwise run off the bottom of the screen: the box takes
+ * its width from the stage, so a 9:16 video across the stage's full width is
+ * nearly twice the height of the viewport. Capping the height only works if
+ * the width is released to follow it — AspectRatio's own docs are explicit
+ * that a height cap on its own clamps the box off ratio and squashes the
+ * picture, and a rendered check confirmed exactly that.
+ *
+ * This is applied to every shape rather than only to upright ones, because
+ * "upright" was the wrong test: a square video at the stage's full width is
+ * as tall as the stage is wide, which clears the cap comfortably. With
+ * `width: auto` the browser only derives the width when the height actually
+ * hits the cap, so a conventional landscape video is untouched and fills the
+ * stage exactly as before.
  *
  * Two roads not taken, both dead ends worth recording:
  *
@@ -45,7 +52,7 @@ const LANDSCAPE = 16 / 9
  * inline because it cannot be a static class. `svh` rather than `vh` so a
  * phone's address bar cannot push the controls off the bottom.
  */
-const UPRIGHT_CAP = { maxHeight: "70svh", width: "auto" } as const
+const HEIGHT_CAP = { maxHeight: "70svh", width: "auto" } as const
 
 export function SourceFrame({
   children,
@@ -57,6 +64,14 @@ export function SourceFrame({
   /** Display width as measured at upload. Null until the video is probed. */
   width: number | null | undefined
   height: number | null | undefined
+  /**
+   * The stage's own surface — background, corners, ring — belongs here rather
+   * than on a wrapper around it. A wrapper stays the full width of the page
+   * while this box narrows for a tall video, which leaves a wide dark panel
+   * with the picture pushed against one edge: the same "it looks landscape"
+   * complaint, one layer out. Pass `mx-auto` with it so a narrowed box sits
+   * in the middle.
+   */
   className?: string
 }) {
   const measured =
@@ -65,10 +80,9 @@ export function SourceFrame({
   // probe lands, and a box that resizes once is better than one that starts
   // at some arbitrary square.
   const ratio = measured ? width / height : LANDSCAPE
-  const upright = ratio < 1
 
   return (
-    <AspectRatio ratio={ratio} className={className} style={upright ? UPRIGHT_CAP : undefined}>
+    <AspectRatio ratio={ratio} className={className} style={HEIGHT_CAP}>
       {children}
     </AspectRatio>
   )

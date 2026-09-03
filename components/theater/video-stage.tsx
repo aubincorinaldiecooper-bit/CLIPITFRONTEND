@@ -264,14 +264,18 @@ export function VideoStage({
   return (
     <motion.div
       layout
-      className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-2xl bg-[#0b0b0d] shadow-[0_18px_50px_rgba(18,18,18,0.18)] ring-1 ring-black/10"
+      className="mx-auto w-full max-w-4xl"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: EASE }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <SourceFrame width={video?.width} height={video?.height}>
+      <SourceFrame
+        width={video?.width}
+        height={video?.height}
+        className="mx-auto rounded-2xl bg-[#0b0b0d] shadow-[0_18px_50px_rgba(18,18,18,0.18)] ring-1 ring-black/10"
+      >
         {playbackUrl ? (
           <video
             ref={videoRef}
