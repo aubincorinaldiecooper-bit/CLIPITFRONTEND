@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import type { ClipMatch, Video } from "@/lib/types"
+import { SourceFrame } from "@/components/media/source-frame"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 
@@ -270,7 +271,7 @@ export function VideoStage({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div className="relative aspect-video w-full">
+      <SourceFrame width={video?.width} height={video?.height}>
         {playbackUrl ? (
           <video
             ref={videoRef}
@@ -394,7 +395,7 @@ export function VideoStage({
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </SourceFrame>
     </motion.div>
   )
 }
