@@ -1,10 +1,17 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { ArrowUp } from "lucide-react"
+import { Fragment, useRef, useState } from "react"
+import {
+  ChatComposer,
+  ChatComposerInput,
+  type ChatComposerInputHandle,
+  ChatLayout,
+  ChatMessage,
+  ChatMessageBubble,
+  ChatMessageList,
+} from "@astryxdesign/core/Chat"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import type { Video } from "@/lib/types"
-import { cn } from "@/lib/utils"
 import { answerLine, coverageLine, uncertainLine } from "./answer-words"
 import type { FeedMoment } from "./moment-feed"
 import type { Exchange } from "./types"
@@ -22,14 +29,17 @@ import type { Exchange } from "./types"
  * for a better standalone cut; it does not trim an intro because it was
  * asked to. So the dialogue says exactly that when it takes an edit, rather
  * than letting "trim the slow intro" look obeyed.
- */
-
-/**
- * A word the dialogue adds itself — a Re-clip taken, or refused. Placed
- * after the question it followed. A note about a re-cut that started
- * carries the moment's id instead of fixed words: what it says follows the
- * moment — underway, failed with the reason, or done — so the thread never
- * claims work is happening after it has finished.
+ *
+ * The thread, the bubbles and the box are Astryx's Chat components rather
+ * than ours (owner's call, 2026-09-03). What that buys, beyond the look: a
+ * log region screen readers announce politely, a busy flag while an answer
+ * is still arriving so a reader is not read half a sentence, scrolling that
+ * follows new messages with a button back to the bottom when you have
+ * scrolled away, and a composer that grows with what you type. All of that
+ * was either hand-rolled here or simply missing.
+ *
+ * What is NOT theirs, and stays ours, is every word and every rule about
+ * when to say it.
  */
 interface Note {
   id: string
@@ -77,30 +87,44 @@ function DialogueIllustration() {
 
 function DialogueEmpty() {
   return (
-    <div className="flex h-full flex-col items-center justify-center text-center" data-testid="dialogue-empty">
+    <figure className="m-0 flex flex-col items-center text-center" data-testid="dialogue-empty">
       <DialogueIllustration />
-      <p className="mt-5 max-w-xs text-sm leading-relaxed text-muted-foreground">
+      <figcaption className="mt-5 max-w-xs text-sm leading-relaxed text-muted-foreground">
         Talk to your footage — &ldquo;find the part where the car pulls out&rdquo;, or &ldquo;re-cut this one&rdquo;. New moments land in
         the feed; a re-cut reworks the clip on screen.
-      </p>
-    </div>
+      </figcaption>
+    </figure>
   )
 }
 
 function UserLine({ text }: { text: string }) {
   return (
-    <p className="ml-auto max-w-5/6 text-right text-sm font-medium leading-relaxed text-foreground" data-testid="dialogue-user">
-      {text}
-    </p>
+    <ChatMessage sender="user">
+      <ChatMessageBubble>
+        <span data-testid="dialogue-user">{text}</span>
+      </ChatMessageBubble>
+    </ChatMessage>
   )
 }
 
+/**
+ * What the system says, in a ghost bubble.
+ *
+ * Ghost rather than filled deliberately: these are the product's own words
+ * about your footage, and the owner's screen shows them as quiet text
+ * rather than a coloured slab. Ghost keeps the bubble's alignment and
+ * padding without the fill.
+ */
 function ModelLine({ text, children }: { text?: string; children?: React.ReactNode }) {
   return (
-    <div className="max-w-5/6 text-sm leading-relaxed text-muted-foreground" data-testid="dialogue-model">
-      {text}
-      {children}
-    </div>
+    <ChatMessage sender="assistant">
+      <ChatMessageBubble variant="ghost">
+        <span className="text-sm leading-relaxed text-muted-foreground" data-testid="dialogue-model">
+          {text}
+          {children}
+        </span>
+      </ChatMessageBubble>
+    </ChatMessage>
   )
 }
 
@@ -157,66 +181,6 @@ function ExchangeLines({ exchange, readThroughSeconds, first }: { exchange: Exch
  */
 export type AskOutcome = boolean | void
 
-/** The question box: one line, sent with Enter or the arrow. */
-export function AskBar({
-  onAsk,
-  disabled,
-  placeholder,
-}: {
-  onAsk: (text: string) => AskOutcome | Promise<AskOutcome>
-  disabled: boolean
-  placeholder: string
-}) {
-  const [draft, setDraft] = useState("")
-  const [pending, setPending] = useState(false)
-  const trimmed = draft.trim()
-  const canSend = trimmed !== "" && !pending && !disabled
-
-  const send = async () => {
-    if (!canSend) return
-    setPending(true)
-    try {
-      // The words leave the box only once the ask was taken: a question
-      // the server refused is still the person's question, and clearing it
-      // would make them type it again to retry.
-      const outcome = await onAsk(trimmed)
-      if (outcome !== false) setDraft("")
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        void send()
-      }}
-      className="mt-5 flex items-center gap-2"
-    >
-      <input
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        disabled={disabled || pending}
-        placeholder={placeholder}
-        aria-label="Ask for a moment"
-        className="h-10 min-w-0 flex-1 border-b border-border bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground disabled:cursor-not-allowed"
-      />
-      <button
-        type="submit"
-        disabled={!canSend}
-        aria-label="Send"
-        className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-foreground transition hover:border-foreground",
-          !canSend && "opacity-40",
-        )}
-      >
-        <ArrowUp aria-hidden size={16} />
-      </button>
-    </form>
-  )
-}
-
 export interface DialogueProps {
   exchanges: Exchange[]
   video: Video | null
@@ -248,7 +212,9 @@ function reclipNoteText(moments: FeedMoment[], matchId: string, fallback: string
 
 export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip }: DialogueProps) {
   const [notes, setNotes] = useState<Note[]>([])
-  const threadRef = useRef<HTMLDivElement>(null)
+  const [draft, setDraft] = useState("")
+  const [pending, setPending] = useState(false)
+  const inputRef = useRef<ChatComposerInputHandle>(null)
   const readThroughSeconds = video?.index?.readThroughSeconds
 
   const addNote = (role: Note["role"], text: string, reclipOf?: string) =>
@@ -263,10 +229,6 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const first = exchanges[0]
   const firstSpeaks = first !== undefined && (isSearching(first) || exchangeLines(first, readThroughSeconds, true).length > 0)
   const entryCount = (firstSpeaks ? 1 : 0) + Math.max(0, exchanges.length - 1) + notes.length
-  useEffect(() => {
-    const element = threadRef.current
-    if (element) element.scrollTop = element.scrollHeight
-  }, [entryCount])
 
   const handleAsk = async (text: string): Promise<AskOutcome> => {
     if (isEditRequest(text)) {
@@ -299,26 +261,69 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   }
 
   const ready = video?.readyForSearch === true
+  const disabled = searching || !ready
   const placeholder = searching ? "Still looking…" : ready ? "Ask for a moment…" : "Your video is still being prepared…"
   const notesAfter = (requestId: string | null) => notes.filter((note) => note.afterRequestId === requestId)
 
+  const submit = async (value: string) => {
+    const trimmed = value.trim()
+    if (trimmed === "" || pending || disabled) return
+    setPending(true)
+    try {
+      // The words leave the box only once the ask was taken: a question
+      // the server refused is still the person's question, and clearing it
+      // would make them type it again to retry.
+      const outcome = await handleAsk(trimmed)
+      if (outcome === false) {
+        // Put it back. The composer empties itself the moment it submits,
+        // and re-rendering with the same draft cannot undo that — React sees
+        // no change and leaves the cleared box alone. So the words go back
+        // through the composer's own handle, with the cursor in them.
+        inputRef.current?.insertText(trimmed)
+        inputRef.current?.focus()
+      } else {
+        setDraft("")
+      }
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-80 min-w-64 flex-1 flex-col" data-testid="dialogue">
-      <div ref={threadRef} className="flex flex-1 flex-col gap-4 overflow-y-auto">
-        {entryCount === 0 && <DialogueEmpty />}
-        {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
-        {exchanges.map((exchange, index) => (
-          <div key={exchange.request.id} className="flex flex-col gap-4">
-            {/* The first question was asked on the upload step; only its caveats belong here. */}
-            {index > 0 && <UserLine text={exchange.request.instruction} />}
-            <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} first={index === 0} />
-            {notesAfter(exchange.request.id).map((note) =>
-              note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
-            )}
-          </div>
-        ))}
-      </div>
-      <AskBar onAsk={handleAsk} disabled={searching || !ready} placeholder={placeholder} />
-    </div>
+    <ChatLayout
+      data-testid="dialogue"
+      emptyState={<DialogueEmpty />}
+      composer={
+        <ChatComposer
+          value={draft}
+          onChange={setDraft}
+          onSubmit={(value) => void submit(value)}
+          placeholder={placeholder}
+          isDisabled={disabled || pending}
+          // Controlled from here, not from the composer: the composer clears
+          // itself on submit, and a question the server refused is still the
+          // person's question. It leaves the box only when the ask was taken.
+          input={<ChatComposerInput label="Ask for a moment" maxRows={4} handleRef={inputRef} />}
+        />
+      }
+    >
+      {entryCount === 0 ? null : (
+        // Busy while an answer is still arriving, so a screen reader waits
+        // and reads the finished sentence once instead of each fragment.
+        <ChatMessageList isStreaming={exchanges.some(isSearching)}>
+          {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
+          {exchanges.map((exchange, index) => (
+            <Fragment key={exchange.request.id}>
+              {/* The first question was asked on the upload step; only its caveats belong here. */}
+              {index > 0 && <UserLine text={exchange.request.instruction} />}
+              <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} first={index === 0} />
+              {notesAfter(exchange.request.id).map((note) =>
+                note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
+              )}
+            </Fragment>
+          ))}
+        </ChatMessageList>
+      )}
+    </ChatLayout>
   )
 }

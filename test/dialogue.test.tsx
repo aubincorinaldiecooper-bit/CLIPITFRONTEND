@@ -134,14 +134,18 @@ describe('Dialogue', () => {
   it('keeps a question the server refused in the box, to edit and send again', async () => {
     const onAsk = vi.fn(async () => false)
     render(<Dialogue exchanges={[]} video={video} moments={[]} active={undefined} searching={false} onAsk={onAsk} onReclip={vi.fn()} />)
-    const box = screen.getByRole('textbox', { name: 'Ask for a moment' }) as HTMLInputElement
+    const box = screen.getByRole('textbox', { name: 'Ask for a moment' })
     await userEvent.type(box, 'find the goal{enter}')
     expect(onAsk).toHaveBeenCalledWith('find the goal')
-    expect(box.value).toBe('find the goal')
+    // The box is Astryx's composer now, which is a rich contentEditable
+    // rather than an <input>, so the words live in its text rather than a
+    // `value`. What is being held to is unchanged: a refused question stays
+    // put, and a taken one leaves.
+    expect(box.textContent).toBe('find the goal')
 
     onAsk.mockResolvedValueOnce(true as never)
     await userEvent.type(box, '{enter}')
-    expect(box.value).toBe('')
+    expect(box.textContent).toBe('')
   })
 
   it('says a re-cut did not start when the server refused it, instead of claiming it is underway', async () => {
@@ -158,7 +162,9 @@ describe('Dialogue', () => {
     render(<Dialogue exchanges={exchanges} video={video} moments={[]} active={undefined} searching onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Looking through your video')
     expect(screen.getByTestId('dialogue-model').textContent).toContain('Reading 1 of 5')
-    expect((screen.getByRole('textbox', { name: 'Ask for a moment' }) as HTMLButtonElement | HTMLInputElement).disabled).toBe(true)
+    // A contentEditable cannot be `disabled`; it is made uneditable instead,
+    // which is how the composer refuses a second question mid-search.
+    expect(screen.getByRole('textbox', { name: 'Ask for a moment' }).getAttribute('contenteditable')).toBe('false')
   })
 
   it('names a stretch it could not look at', () => {
