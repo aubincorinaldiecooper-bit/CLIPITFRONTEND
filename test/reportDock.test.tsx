@@ -97,6 +97,26 @@ describe('ReportDock', () => {
     expect(sendReport).toHaveBeenCalledTimes(2)
   })
 
+  it('refuses a report longer than the server takes, whole, with the words kept', async () => {
+    // Devin's finding on #88: a long report was shortened to a prefix and confirmed as sent.
+    render(<ReportDock />)
+    await userEvent.click(screen.getByRole('button', { name: /Report/ }))
+    const box = screen.getByLabelText('What went wrong') as HTMLTextAreaElement
+    const long = 'x'.repeat(2001)
+    fireEvent.change(box, { target: { value: long } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(status()).toContain('over 2,000 characters'))
+    expect(sendReport).not.toHaveBeenCalled()
+    expect(box.value).toBe(long)
+    // Trimmed under the line, it sends as written.
+    sendReport.mockResolvedValue({ report: { id: 'r-4', handedOff: false } })
+    fireEvent.change(box, { target: { value: 'x'.repeat(2000) } })
+    await waitFor(() => expect(status()).toContain('What were you doing'))
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(sendReport).toHaveBeenCalledTimes(1))
+    expect(sendReport.mock.calls[0]![0].message).toHaveLength(2000)
+  })
+
   it('does not send empty words', async () => {
     render(<ReportDock />)
     await userEvent.click(screen.getByRole('button', { name: /Report/ }))

@@ -37,7 +37,7 @@ import { readReportContext } from "@/lib/report-context"
  * inside a MediaTheme so they read on the dark pill; the pill itself and
  * the collapse are the only things drawn here.
  */
-type DockMode = "idle" | "composing" | "sending" | "sent" | "failed"
+type DockMode = "idle" | "composing" | "overlong" | "sending" | "sent" | "failed"
 
 const MAX_LENGTH = 2000
 /** How long "Got it" stays before the dock settles again. */
@@ -47,6 +47,7 @@ const EASE = [0.22, 1, 0.36, 1] as const
 const STATUS: Record<DockMode, string> = {
   idle: "Something not working? Tell us.",
   composing: "What were you doing, and what happened?",
+  overlong: "That's over 2,000 characters — trim it a little, then send.",
   sending: "Sending…",
   sent: "Got it — thanks. We'll look into it.",
   failed: "Couldn't send. Your words are still here — try again.",
@@ -64,11 +65,11 @@ export function ReportDock() {
   const shouldReduceMotion = useReducedMotion()
   // Open through sending too: the box keeps its place while the words are
   // on their way, and does not collapse and spring back on a failure.
-  const open = mode === "composing" || mode === "failed" || mode === "sending"
+  const open = mode === "composing" || mode === "overlong" || mode === "failed" || mode === "sending"
   const sending = mode === "sending"
 
   const openComposer = useCallback(() => {
-    setMode((current) => (current === "sending" || current === "failed" ? current : "composing"))
+    setMode((current) => (current === "sending" || current === "failed" || current === "overlong" ? current : "composing"))
   }, [])
   const close = useCallback(() => {
     setMode((current) => (current === "sending" ? current : "idle"))
@@ -80,10 +81,17 @@ export function ReportDock() {
       openComposer()
       return
     }
+    // Never a prefix: a report longer than the server takes is refused
+    // whole, with the words kept, rather than shortened and confirmed as
+    // sent (Devin's finding on #88). The server holds the same line.
+    if (text.length > MAX_LENGTH) {
+      setMode("overlong")
+      return
+    }
     setMode("sending")
     try {
       await api.sendReport({
-        message: text.slice(0, MAX_LENGTH),
+        message: text,
         page: window.location.pathname,
         ...readReportContext(),
         userAgent: navigator.userAgent,
@@ -174,7 +182,11 @@ export function ReportDock() {
                   label="What went wrong"
                   isLabelHidden
                   value={message}
-                  onChange={(value) => setMessage(value)}
+                  onChange={(value) => {
+                    setMessage(value)
+                    if (mode === "overlong" && value.trim().length <= MAX_LENGTH) setMode("composing")
+                  }}
+                  maxLength={MAX_LENGTH}
                   rows={3}
                   size="sm"
                   placeholder="What were you doing, and what happened instead?"
