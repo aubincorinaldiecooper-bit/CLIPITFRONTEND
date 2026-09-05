@@ -1,0 +1,64 @@
+import type { PublishableClip } from "@/components/theater/publish-flow"
+import type { Clip, ClipMatch } from "@/lib/types"
+import type { Exchange } from "./types"
+
+/**
+ * Where a kept moment's file is.
+ *
+ * A moment is the evidence — a stretch of the video, its words, a still —
+ * and its finished 9:16 file is made when a person keeps it. Between the
+ * press and the file there is a state the card, the dialogue and the
+ * publish screens all need to agree on, so it is decided in one place from
+ * the clip row the server tells.
+ *
+ * Null means nothing was asked for: no clip exists for the moment.
+ */
+export type Production = "producing" | "produced" | "failed"
+
+export function productionOf(clip: Clip | null | undefined, stub?: ClipMatch["clip"] | null): Production | null {
+  if (!clip) {
+    // The match knows a clip exists before the row itself has been fetched.
+    if (!stub) return null
+    return stub.status === "failed" ? "failed" : "producing"
+  }
+  if (clip.status === "failed") return "failed"
+  if (clip.status !== "ready") return "producing"
+  // A vertical moment's file is its 9:16 derivative — never the landscape
+  // cut in its place. The media block says whether that file exists.
+  if (clip.media) {
+    if (clip.media.derivativeStatus === "failed") return "failed"
+    return clip.media.url ? "produced" : "producing"
+  }
+  return clip.url ? "produced" : "producing"
+}
+
+/**
+ * The file to save, once there is one: the same file the card plays. A
+ * vertical moment whose 9:16 file has not landed offers nothing rather than
+ * the landscape cut; so does a server that does not sign one for saving.
+ */
+export function downloadUrlOf(clip: Clip | null | undefined): string | null {
+  if (!clip || productionOf(clip) !== "produced") return null
+  if (clip.media) return clip.media.downloadUrl ?? null
+  return clip.downloadUrl ?? null
+}
+
+/**
+ * The clip the publish screens are open for, read fresh from the
+ * conversation on every render: Publish keeps the moment, its file is made,
+ * and the dialog's "ready" flips the moment the server says the file is
+ * there — not on a timer, and not from a snapshot taken at the press.
+ */
+export function publishableFor(exchanges: Exchange[], clipId: string, fallbackTitle: string): PublishableClip {
+  for (const exchange of exchanges) {
+    const clip = exchange.clips.find((candidate) => candidate.id === clipId)
+    const match = exchange.request.matches?.find((candidate) => candidate.clip?.id === clipId)
+    if (!clip && !match) continue
+    return {
+      id: clipId,
+      title: match?.description || fallbackTitle,
+      ready: productionOf(clip ?? null, match?.clip ?? null) === "produced",
+    }
+  }
+  return { id: clipId, title: fallbackTitle, ready: false }
+}

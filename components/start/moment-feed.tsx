@@ -1,34 +1,38 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject, type WheelEvent as ReactWheelEvent } from "react"
 import { motion, type PanInfo } from "motion/react"
-import { Check, Volume2, VolumeX, X } from "lucide-react"
-import { PublishGlyph } from "@/components/clip-action-icons"
+import { Check, ChevronDown, Pause, Play, Volume2, VolumeX, X } from "lucide-react"
+import { DownloadGlyph, PublishGlyph } from "@/components/clip-action-icons"
 import { ClipComposition, centredComposition } from "@/components/media/clip-composition"
 import { VerticalFrame } from "@/components/media/vertical-frame"
 import type { Clip, ClipComposition as Composition, ClipMatch, ClipRequest, Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { downloadUrlOf, productionOf, type Production } from "./production"
 import type { Exchange } from "./types"
 
 /**
- * The moment feed — the owner's screen and stack component of 2026-09-02.
+ * The moment feed — the owner's screen and stack component of 2026-09-02,
+ * with the rules of 2026-09-05.
  *
  * A fan of 9:16 cards, one in front: the moment before leans away above it,
  * the one after leans away below, each a step smaller and fainter. The
  * person scrolls, drags the front card, or presses a key to move through
- * them. Moving DOWN past a moment skips it; moving back UP onto a skipped
- * moment un-skips it. ✓ keeps the moment — it goes to the library, and
- * that is final here, so a kept moment cannot be scrolled back onto. The
- * button on the card's corner PUBLISHES the moment: it is kept, and the
- * owner's "Where do they go?" screens open for it (the owner's call,
- * 2026-09-02, replacing the re-cut control that sat there; a re-cut is
- * asked for in the dialogue — "re-cut this one").
+ * them. Moving DOWN past an undecided moment skips it; moving back UP onto
+ * a skipped moment un-skips it. ✓ KEEPS the moment, and keeping is
+ * production: the cut, the framing and the 9:16 file are made from that
+ * press, and the card stays where it is, saying so, until the person moves
+ * on — a kept moment remains in the feed to be watched, downloaded and
+ * published. The controls on the card's corner: Publish (keep, make the
+ * file, and open the owner's "Where do they go?" screens for it) and, once
+ * the file exists, Download.
  *
- * Every moment in the feed is one the server already cut; the front card
- * plays the finished file, or the source seeked to the moment while a cut
- * is on its way. The counter at the left is the position in the feed; the
- * dots at the right are the feed itself, and a dot for a skipped moment
- * brings it back.
+ * A moment is the evidence — a stretch of the source video — and the front
+ * card plays exactly that stretch from the source, through the 9:16 frame,
+ * with a play/pause control in the middle and the time within the moment
+ * beside it. When the file has been made the card plays the file instead.
+ * The counter at the left is the position in the feed; the dots at the
+ * right are the feed itself, and each one goes to its moment.
  *
  * Hand-rolled on purpose, like the theater before it: a feed of footage is
  * not interface furniture, and no Astryx surface is a card fan. The ratio
@@ -45,7 +49,7 @@ export interface PreviewSource {
   /** The same framing the still used and the export will use. */
   composition: Composition
   sourceAspectRatio: string | null
-  /** True for the rendered file; false when the source stands in for it. */
+  /** True for the finished file; false when the source stands in for it. */
   finished: boolean
 }
 
@@ -57,14 +61,19 @@ export interface FeedMoment {
   still: string | null
   preview: PreviewSource | null
   decision: "kept" | "skipped" | null
+  /** Where the kept moment's file is; null when none was asked for. */
+  production: Production | null
+  /** The finished file, signed to be saved; null until it exists. */
+  downloadUrl: string | null
   /** The system is reworking this moment; its decision is still open. */
   reworking: boolean
 }
 
+/** The clip row recorded for a moment, in whatever state it is in. */
 function clipForMatch(match: ClipMatch, clips: Clip[]): Clip | null {
   const clipId = match.clip?.id
   if (!clipId) return null
-  return clips.find((clip) => clip.id === clipId && clip.status === "ready" && clip.url) ?? null
+  return clips.find((clip) => clip.id === clipId) ?? null
 }
 
 /**
@@ -94,7 +103,8 @@ export function previewFor(
   // Every clip is vertical now (owner's rule, 2026-09-03), so the guess before
   // the server answers is the same shape as the answer.
   const composition = clip?.media?.composition ?? centredComposition("9:16")
-  const finished = clip?.media ? clip.media.url : (clip?.url ?? null)
+  const produced = productionOf(clip, match.clip) === "produced"
+  const finished = produced ? (clip?.media ? clip.media.url : (clip?.url ?? null)) : null
   if (finished) return { url: finished, start: 0, end: null, composition, sourceAspectRatio, finished: true }
   const source = video?.playback?.proxyUrl ?? video?.playback?.url
   if (!source) return null
@@ -119,13 +129,15 @@ export function feedMoments(exchanges: Exchange[], video: Video | null): FeedMom
           still: clip?.media?.posterUrl ?? match.thumbnailUrl ?? null,
           preview: previewFor(match, clips, video, request),
           decision: match.feedback === "approved" ? "kept" : match.feedback === "rejected" ? "skipped" : null,
+          production: productionOf(clip, match.clip),
+          downloadUrl: downloadUrlOf(clip),
           reworking: match.reclipStatus === "pending",
         }
       }),
   )
 }
 
-/** The card in front: the first moment nobody has decided on. Past the end once every one is decided. */
+/** Where the feed opens: the first moment nobody has decided on. Past the end once every one is decided. */
 export function feedCursor(moments: FeedMoment[]): number {
   const index = moments.findIndex((moment) => moment.decision === null)
   return index === -1 ? moments.length : index
@@ -145,8 +157,9 @@ export function mediaIdentity(url: string): string {
   }
 }
 
-const asClock = (seconds: number) => {
-  const whole = Math.max(0, Math.round(seconds))
+/** m:ss, for a position or a length within a moment. */
+export const asClock = (seconds: number) => {
+  const whole = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0))
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
 }
 
@@ -167,6 +180,8 @@ const CARD_HEIGHT_PX = (CARD_UNITS * 4 * 16) / 9
 const NAVIGATION_COOLDOWN_MS = 400
 const DRAG_THRESHOLD_PX = 50
 const WHEEL_THRESHOLD_PX = 30
+/** How long the play/pause control stays after a touch while the moment plays. */
+const CONTROL_LINGER_MS = 1600
 const SPRING = { type: "spring", stiffness: 300, damping: 30, mass: 1 } as const
 
 /**
@@ -182,6 +197,15 @@ function fanStyle(diff: number, cardHeight: number) {
   return { y: step * 0.58 * cardHeight, scale: 0.7, opacity: 0.3, rotateX: -step * 15, zIndex: 3 }
 }
 
+/** What the media element reports, relative to the moment. */
+interface Playback {
+  playing: boolean
+  /** Seconds into the moment. */
+  current: number
+  /** The moment's length. */
+  total: number
+}
+
 /**
  * The front card's picture, playing.
  *
@@ -195,6 +219,10 @@ function fanStyle(diff: number, cardHeight: number) {
  * path — see mediaIdentity), so a re-cut's new file, or the finished file
  * arriving in place of the source, starts afresh, while a re-signed link
  * to the same file does not.
+ *
+ * What it reports — playing or not, how far into the moment, how long the
+ * moment is — comes from the element's own events, never from a clock of
+ * ours: a stall, a seek and a slow network all show as what they are.
  */
 function FeedVideo({
   source,
@@ -202,26 +230,41 @@ function FeedVideo({
   muted,
   style,
   label,
+  videoRef,
+  onPlayback,
 }: {
   source: PreviewSource
   still: string | null
   muted: boolean
   style: CSSProperties
   label: string
+  videoRef: RefObject<HTMLVideoElement | null>
+  onPlayback: (playback: Playback) => void
 }) {
-  const ref = useRef<HTMLVideoElement>(null)
   const [pinnedUrl, setPinnedUrl] = useState(source.url)
   const latestUrl = useRef(source.url)
   latestUrl.current = source.url
 
   useEffect(() => {
-    const element = ref.current
+    const element = videoRef.current
     if (element) element.currentTime = source.start
-  }, [pinnedUrl, source.start])
+  }, [pinnedUrl, source.start, videoRef])
+
+  const report = (element: HTMLVideoElement) => {
+    const offset = source.finished ? 0 : source.start
+    const length = source.finished
+      ? Number.isFinite(element.duration) ? element.duration : 0
+      : Math.max(0, (source.end ?? source.start) - source.start)
+    onPlayback({
+      playing: !element.paused && !element.ended,
+      current: Math.min(Math.max(0, element.currentTime - offset), length || Number.POSITIVE_INFINITY),
+      total: length,
+    })
+  }
 
   return (
     <video
-      ref={ref}
+      ref={videoRef}
       src={source.finished ? pinnedUrl : `${pinnedUrl}#t=${source.start}`}
       data-testid="feed-video"
       onError={() => {
@@ -234,16 +277,131 @@ function FeedVideo({
       autoPlay
       loop={source.finished}
       playsInline
-      className="h-full w-full bg-black"
+      // The source stands in for the file inside a frame it does not fill;
+      // what shows around it is the card's own fill, not black bars.
+      className={cn("h-full w-full", source.finished ? "bg-black" : "bg-transparent")}
       style={style}
+      onLoadedMetadata={(event) => report(event.currentTarget)}
+      onPlay={(event) => report(event.currentTarget)}
+      onPause={(event) => report(event.currentTarget)}
+      onEnded={(event) => report(event.currentTarget)}
+      onSeeked={(event) => report(event.currentTarget)}
       onTimeUpdate={(event) => {
         // The source stands in for an unfinished cut: play the moment, then
         // the moment again — never the rest of the video.
         const element = event.currentTarget
         if (source.end !== null && element.currentTime >= source.end) element.currentTime = source.start
+        report(element)
       }}
     />
   )
+}
+
+/**
+ * The front card's media and the controls that belong to it: the moment
+ * playing through its frame, play/pause in the middle, the time within the
+ * moment at the bottom right, sound at the bottom left. Keyed by the caller
+ * on the file's identity, so a new file starts from nothing.
+ */
+function FrontMedia({
+  moment,
+  source,
+  muted,
+  onToggleMute,
+  label,
+}: {
+  moment: FeedMoment
+  source: PreviewSource
+  muted: boolean
+  onToggleMute: () => void
+  label: string
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [playback, setPlayback] = useState<Playback>({
+    playing: false,
+    current: 0,
+    total: source.finished ? 0 : Math.max(0, (source.end ?? source.start) - source.start),
+  })
+  // The control shows while the moment is paused, and after a touch while
+  // it plays; then it leaves, so the footage is the picture.
+  const [lingering, setLingering] = useState(true)
+  const lingerTimer = useRef<number | undefined>(undefined)
+  const linger = useCallback(() => {
+    setLingering(true)
+    window.clearTimeout(lingerTimer.current)
+    lingerTimer.current = window.setTimeout(() => setLingering(false), CONTROL_LINGER_MS)
+  }, [])
+  useEffect(() => () => window.clearTimeout(lingerTimer.current), [])
+  useEffect(() => {
+    if (playback.playing) linger()
+  }, [playback.playing, linger])
+
+  const toggle = () => {
+    const element = videoRef.current
+    if (!element) return
+    linger()
+    if (element.paused || element.ended) {
+      // A play the browser refuses (no gesture yet, a stalled load) is
+      // reported by the element's own events, not thrown at the page.
+      void element.play()?.catch(() => undefined)
+    } else {
+      element.pause()
+    }
+  }
+
+  return (
+    <>
+      {!source.finished && moment.still && (
+        // The source stands in for the file inside the 9:16 frame. Behind
+        // its letterboxed picture, the moment's own still spread and blurred
+        // — the way the finished file fills that frame — instead of black.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={moment.still} alt="" aria-hidden draggable={false} className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-70 blur-2xl" />
+      )}
+      {/* A tap on the picture is play/pause, like every vertical player. */}
+      <div className="relative flex h-full w-full cursor-pointer items-center" onClick={toggle} onPointerMove={linger}>
+        <ClipComposition composition={source.composition} sourceAspectRatio={source.sourceAspectRatio} finished={source.finished} className="w-full">
+          {(mediaStyle) => (
+            <FeedVideo videoRef={videoRef} source={source} still={moment.still} muted={muted} style={mediaStyle} label={label} onPlayback={setPlayback} />
+          )}
+        </ClipComposition>
+      </div>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={playback.playing ? "Pause" : "Play"}
+        title={playback.playing ? "Pause" : "Play"}
+        data-testid="feed-playpause"
+        className={cn(
+          "absolute left-1/2 top-1/2 z-10 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity duration-300 hover:bg-black/70 focus-visible:opacity-100",
+          playback.playing && !lingering && "opacity-0",
+        )}
+      >
+        {playback.playing ? <Pause aria-hidden size={22} fill="currentColor" /> : <Play aria-hidden size={22} fill="currentColor" className="ml-0.5" />}
+      </button>
+      <p className="pointer-events-none absolute bottom-3 right-3 z-10 text-sm font-medium tabular-nums text-white" data-testid="feed-time">
+        {asClock(playback.current)} / {asClock(playback.total)}
+      </p>
+      <button
+        type="button"
+        onClick={onToggleMute}
+        aria-pressed={!muted}
+        aria-label={muted ? "Unmute" : "Mute"}
+        title={muted ? "Unmute" : "Mute"}
+        className="absolute bottom-3 left-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+      >
+        {muted ? <VolumeX aria-hidden size={16} /> : <Volume2 aria-hidden size={16} />}
+      </button>
+    </>
+  )
+}
+
+/** The badge on a decided card: what was decided, and for a kept one, where its file is. */
+function decisionWords(moment: FeedMoment): string {
+  if (moment.decision === "skipped") return "Skipped"
+  if (moment.production === "producing") return "Kept · cutting…"
+  if (moment.production === "failed") return "Kept · cut failed"
+  return "Kept"
 }
 
 /**
@@ -256,11 +414,13 @@ function CardFace({
   moment,
   front,
   muted,
+  onToggleMute,
   children,
 }: {
   moment: FeedMoment
   front: boolean
   muted: boolean
+  onToggleMute: () => void
   children?: React.ReactNode
 }) {
   const label = moment.match.description || "A moment from your video"
@@ -269,45 +429,49 @@ function CardFace({
   const finished = moment.preview?.finished ?? true
   return (
     <VerticalFrame isVertical className="rounded-3xl bg-black shadow-2xl ring-1 ring-foreground/10">
-      <div role="group" aria-label={label} data-testid={front ? "feed-card" : undefined} className="relative h-full w-full">
-        <div className="flex h-full w-full items-center">
-          <ClipComposition composition={composition} sourceAspectRatio={sourceAspectRatio} finished={finished} className="w-full">
-            {(mediaStyle) =>
-              front && moment.preview ? (
-                <FeedVideo
-                  key={`${moment.match.id}:${moment.preview.finished ? "file" : "source"}:${mediaIdentity(moment.preview.url)}`}
-                  source={moment.preview}
-                  still={moment.still}
-                  muted={muted}
-                  style={mediaStyle}
-                  label={label}
-                />
-              ) : moment.still ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={moment.still} alt="" draggable={false} className="h-full w-full select-none bg-black" style={mediaStyle} />
-              ) : (
-                <p className="flex h-full w-full items-center justify-center px-6 text-center text-sm text-white/70">{label}</p>
-              )
-            }
-          </ClipComposition>
-        </div>
+      <div role="group" aria-label={label} data-testid={front ? "feed-card" : undefined} className="relative h-full w-full overflow-hidden rounded-3xl">
+        {front && moment.preview ? (
+          <FrontMedia
+            key={`${moment.match.id}:${moment.preview.finished ? "file" : "source"}:${mediaIdentity(moment.preview.url)}`}
+            moment={moment}
+            source={moment.preview}
+            muted={muted}
+            onToggleMute={onToggleMute}
+            label={label}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center">
+            <ClipComposition composition={composition} sourceAspectRatio={sourceAspectRatio} finished={finished} className="w-full">
+              {(mediaStyle) =>
+                moment.still ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={moment.still} alt="" draggable={false} className="h-full w-full select-none bg-black" style={mediaStyle} />
+                ) : (
+                  <p className="flex h-full w-full items-center justify-center px-6 text-center text-sm text-white/70">{label}</p>
+                )
+              }
+            </ClipComposition>
+          </div>
+        )}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent" />
-        <p className="pointer-events-none absolute bottom-3 right-3 z-10 text-sm font-medium text-white">
-          {asClock(moment.match.durationSeconds)}
-        </p>
-        {moment.decision && !front && (
-          // Low enough to clear the strip the stage clips off a card leaning
-          // away above the front one: that band is all of it that shows.
-          <span className="absolute left-3 top-16 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
-            {moment.decision === "kept" ? (
-              <>
-                <Check aria-hidden size={12} strokeWidth={3} /> Kept
-              </>
-            ) : (
-              <>
-                <X aria-hidden size={12} strokeWidth={3} /> Skipped
-              </>
+        {!(front && moment.preview) && (
+          <p className="pointer-events-none absolute bottom-3 right-3 z-10 text-sm font-medium tabular-nums text-white">
+            {asClock(moment.match.durationSeconds)}
+          </p>
+        )}
+        {moment.decision && (
+          // On the front card, in the corner the actions leave free. On a
+          // card leaning away above it, low enough to clear the strip the
+          // stage clips off: that band is all of it that shows.
+          <span
+            data-testid={front ? "feed-decision" : undefined}
+            className={cn(
+              "absolute left-3 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white",
+              front ? "top-3" : "top-16",
             )}
+          >
+            {moment.decision === "kept" ? <Check aria-hidden size={12} strokeWidth={3} /> : <X aria-hidden size={12} strokeWidth={3} />}
+            {decisionWords(moment)}
           </span>
         )}
         {children}
@@ -316,17 +480,31 @@ function CardFace({
   )
 }
 
-function EndCard({ canGoBack, onUploadMore }: { canGoBack: boolean; onUploadMore: () => void }) {
+/**
+ * The card after the last moment. The moments are still there — a tester
+ * on 2026-09-04 came back from publishing to this card and read it as her
+ * moments being gone — so it says so, and offers the way back to them.
+ */
+function EndCard({ canGoBack, onBack, onUploadMore }: { canGoBack: boolean; onBack: () => void; onUploadMore: () => void }) {
   return (
     <VerticalFrame isVertical className="rounded-3xl border border-border bg-card shadow-2xl">
       <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center" data-testid="feed-end">
         <p className="text-lg font-semibold text-foreground">That&apos;s every moment</p>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
           {canGoBack
-            ? "Scroll up to revisit the last one you skipped, ask for another, or keep going."
+            ? "They're all still here to watch, download or publish. Ask for another, or keep going."
             : "Ask for another, or keep going with what you kept."}
         </p>
         <div className="mt-6 flex w-full flex-col gap-2">
+          {canGoBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="w-full whitespace-nowrap rounded-full border border-border py-3 text-sm font-semibold text-foreground transition hover:border-foreground"
+            >
+              Look back over them
+            </button>
+          )}
           {/* Only the way on: the library is hidden for now (owner,
               2026-09-02), so nothing here leads to it. */}
           <button
@@ -342,31 +520,75 @@ function EndCard({ canGoBack, onUploadMore }: { canGoBack: boolean; onUploadMore
   )
 }
 
+/** The card that stands where the first moment will: a search is running and nothing has been found yet. */
+function SearchingCard() {
+  return (
+    <VerticalFrame isVertical className="rounded-3xl border border-border bg-card shadow-2xl">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center" data-testid="feed-searching">
+        <span aria-hidden className="h-2.5 w-2.5 animate-pulse rounded-full bg-foreground/60" />
+        <p className="text-sm leading-relaxed text-muted-foreground">Moments land here once they&apos;re found.</p>
+      </div>
+    </VerticalFrame>
+  )
+}
+
 export interface MomentFeedProps {
   moments: FeedMoment[]
   /** Another decision is being written; the controls wait for it. */
   busy?: boolean
+  /** A search is running: with nothing found yet, the feed says where its moments will land. */
+  searching?: boolean
+  /** Keep the moment and make its file. */
   onKeep: (moment: FeedMoment) => void
   onSkip: (moment: FeedMoment) => void
   /** Scrolling back onto a skipped moment, or pressing its dot, brings it back. */
   onUndoSkip: (moment: FeedMoment) => void
-  /** Keep the moment and send it to socials. Only a moment whose cut is finished can go. */
+  /** Keep the moment, make its file, and send it to socials once the file exists. */
   onPublish: (moment: FeedMoment) => void
   onUploadMore: () => void
   /** Something else has the screen — the publish dialog — and no key, wheel or drag decides a moment behind it. */
   paused?: boolean
+  /** Which moment is in front, as the person moves through the feed. */
+  onFrontChange?: (index: number) => void
 }
 
-export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSkip, onUndoSkip, onPublish, onUploadMore }: MomentFeedProps) {
-  const cursor = feedCursor(moments)
+export function MomentFeed({
+  moments,
+  busy = false,
+  searching = false,
+  paused = false,
+  onKeep,
+  onSkip,
+  onUndoSkip,
+  onPublish,
+  onUploadMore,
+  onFrontChange,
+}: MomentFeedProps) {
   const total = moments.length
+  // Where the person is in the feed: opens on the first open decision, and
+  // from there moves only when they move it. Keeping does not move it — the
+  // kept moment stays on screen, saying what is being made of it.
+  const [position, setPosition] = useState(() => feedCursor(moments))
+  const cursor = Math.min(position, total)
+  // Moments that land while the person sits on the end card — or before
+  // anything had landed — bring the first new one to the front. Ones that
+  // land while they are mid-feed wait their turn.
+  const seenTotal = useRef(total)
+  useEffect(() => {
+    if (total > seenTotal.current && position >= seenTotal.current) setPosition(seenTotal.current)
+    seenTotal.current = total
+  }, [total, position])
+  useEffect(() => {
+    onFrontChange?.(cursor)
+  }, [cursor, onFrontChange])
+
   const top = moments[cursor]
   const prev = cursor > 0 ? moments[cursor - 1] : undefined
   const reworking = top?.reworking ?? false
-  // A kept moment is in the library; the feed cannot take it back. Only a
-  // skip is undone by scrolling up onto it.
-  const canGoBack = prev?.decision === "skipped" && !busy && !paused
-  const canDecide = top !== undefined && !reworking && !busy && !paused
+  const free = !busy && !paused
+  const canDecide = top !== undefined && top.decision === null && !reworking && free
+  const canGoBack = cursor > 0 && free
+  const canGoForward = top !== undefined && (top.decision !== null || !reworking) && free
 
   const lastNavigation = useRef(0)
   const [muted, setMuted] = useState(true)
@@ -388,12 +610,28 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
   const keep = useCallback(() => {
     if (canDecide && top) onKeep(top)
   }, [canDecide, top, onKeep])
-  const skip = useCallback(() => {
-    if (canDecide && top) onSkip(top)
-  }, [canDecide, top, onSkip])
+  /** Down: past a decided moment, or skipping an undecided one. */
+  const forward = useCallback(() => {
+    if (!canGoForward || !top) return
+    if (top.decision === null) onSkip(top)
+    setPosition(cursor + 1)
+  }, [canGoForward, top, cursor, onSkip])
+  /** Up: back onto the moment before; a skipped one is brought back as it comes into view. */
   const back = useCallback(() => {
-    if (canGoBack && prev) onUndoSkip(prev)
-  }, [canGoBack, prev, onUndoSkip])
+    if (!canGoBack || !prev) return
+    if (prev.decision === "skipped") onUndoSkip(prev)
+    setPosition(cursor - 1)
+  }, [canGoBack, prev, cursor, onUndoSkip])
+  /** A dot: straight to that moment; a skipped one comes back. */
+  const goTo = useCallback(
+    (index: number) => {
+      if (!free) return
+      const target = moments[index]
+      if (target?.decision === "skipped") onUndoSkip(target)
+      setPosition(index)
+    },
+    [free, moments, onUndoSkip],
+  )
 
   /**
    * One decision per beat, for the inputs that repeat on their own: a flick
@@ -409,17 +647,16 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
     action()
   }, [])
 
-  /** Down is the next moment (skipping this one); up is the last skip, taken back. */
   const navigate = useCallback(
-    (direction: 1 | -1) => oncePerBeat(direction > 0 ? skip : back),
-    [oncePerBeat, skip, back],
+    (direction: 1 | -1) => oncePerBeat(direction > 0 ? forward : back),
+    [oncePerBeat, forward, back],
   )
   const keepOnce = useCallback(() => oncePerBeat(keep), [oncePerBeat, keep])
 
-  // The keyboard: → keep, ← or ↓ skip, ↑ (or Backspace, or u) back — unless
-  // the person is typing somewhere, or a dialog has the screen: a key
-  // pressed on a dialog's button is that dialog's, never a decision about
-  // the moment hidden behind it. A held key is one press.
+  // The keyboard: → keep, ← or ↓ onward, ↑ (or Backspace, or u) back —
+  // unless the person is typing somewhere, or a dialog has the screen: a
+  // key pressed on a dialog's button is that dialog's, never a decision
+  // about the moment hidden behind it. A held key is one press.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (paused) return
@@ -447,21 +684,32 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
     if (Math.abs(event.deltaY) > WHEEL_THRESHOLD_PX) navigate(event.deltaY > 0 ? 1 : -1)
   }
 
-  // Publishing sends the FINISHED file — for a vertical moment the 9:16
-  // derivative, never the landscape cut in its place — so a moment whose
-  // card is still playing the source in that file's stead cannot go yet.
-  const finished = top?.preview?.finished === true
-  const derivativeFailed = top?.clip?.media?.derivativeStatus === "failed"
-  const canPublish = top !== undefined && finished && !paused && !reworking && !busy
+  // Publish is keep-and-send: it can be pressed before the file exists, and
+  // the publish screens wait for the file. A moment whose cut failed can be
+  // kept again the same way — the server makes it again.
+  const canPublish = top !== undefined && !reworking && free
   const publishTitle = reworking
     ? "Reworking this edit…"
-    : derivativeFailed
-      ? "The vertical cut failed — ask for a re-cut, or skip it"
-      : !finished
-        ? "Still cutting — publish once it's ready"
-        : "Publish — send this moment to your socials"
+    : top?.production === "failed"
+      ? "The cut failed — publishing makes it again, then sends it"
+      : top?.production === "producing"
+        ? "Publish — it goes out once the cut is ready"
+        : top?.production === "produced"
+          ? "Publish — send this moment to your socials"
+          : "Publish — keep this moment, make its clip, and send it to your socials"
 
   if (total === 0) {
+    if (searching) {
+      return (
+        <div className="flex w-full max-w-110 shrink-0 flex-col items-center sm:w-110" data-testid="moment-feed">
+          <div className="relative flex h-140 w-full items-center justify-center">
+            <div className="w-52 sm:w-64">
+              <SearchingCard />
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex w-full max-w-sm flex-col items-center justify-center py-16 text-center" data-testid="feed-empty">
         <p className="text-lg font-semibold text-foreground">No moments yet</p>
@@ -480,6 +728,7 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
   // The cards: every moment, then the end card. Only the front card and two
   // neighbours each way are drawn.
   const cards = [...moments.map((moment) => ({ key: moment.match.id, moment })), { key: "end", moment: null as FeedMoment | null }]
+  const decided = top !== undefined && top.decision !== null
 
   return (
     <div className="flex w-full max-w-110 shrink-0 flex-col items-center sm:w-110" data-testid="moment-feed">
@@ -500,27 +749,25 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
           </span>
         </div>
 
-        {/* The feed itself, in the right gutter: one dot per moment, the front one stretched. A skipped moment's dot brings it back. */}
+        {/* The feed itself, in the right gutter: one dot per moment, the front one stretched. Each dot goes to its moment; a skipped moment's brings it back. */}
         <div className="absolute right-0 top-1/2 flex w-14 -translate-y-1/2 flex-col items-center gap-2 sm:w-20" data-testid="feed-dots">
           {moments.map((moment, index) => {
             const front = index === cursor
-            const className = cn(
-              "w-2 rounded-full transition-all duration-300",
-              front ? "h-6 bg-foreground" : "h-2 bg-foreground/30",
+            const title = moment.match.description || "a moment"
+            return (
+              <button
+                key={moment.match.id}
+                type="button"
+                disabled={!free || front}
+                onClick={() => goTo(index)}
+                aria-current={front ? "true" : undefined}
+                aria-label={moment.decision === "skipped" ? `Bring back: ${title}` : `Go to: ${title}`}
+                className={cn(
+                  "w-2 rounded-full transition-all duration-300",
+                  front ? "h-6 bg-foreground" : "h-2 bg-foreground/30 hover:bg-foreground/50 disabled:hover:bg-foreground/30",
+                )}
+              />
             )
-            if (index < cursor && moment.decision === "skipped") {
-              return (
-                <button
-                  key={moment.match.id}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onUndoSkip(moment)}
-                  aria-label={`Bring back: ${moment.match.description || "a skipped moment"}`}
-                  className={cn(className, "hover:bg-foreground/50")}
-                />
-              )
-            }
-            return <span key={moment.match.id} aria-hidden className={className} />
           })}
         </div>
 
@@ -533,11 +780,11 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
             <motion.div
               key={key}
               data-feed-card
-              className={cn("absolute w-52 sm:w-64", front && canDecide && "cursor-grab active:cursor-grabbing")}
+              className={cn("absolute w-52 sm:w-64", front && (canGoForward || canGoBack) && "cursor-grab active:cursor-grabbing")}
               initial={false}
               animate={style}
               transition={SPRING}
-              drag={front && (canDecide || canGoBack) ? "y" : false}
+              drag={front && (canGoForward || canGoBack) ? "y" : false}
               dragConstraints={{ top: 0, bottom: 0 }}
               dragElastic={0.2}
               onDragEnd={onDragEnd}
@@ -545,31 +792,35 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
               aria-hidden={!front}
             >
               {moment ? (
-                <CardFace moment={moment} front={front} muted={muted}>
+                <CardFace moment={moment} front={front} muted={muted} onToggleMute={() => setMuted((value) => !value)}>
                   {front && (
                     <>
+                      {/* The corner: Download once the file exists, and Publish. Two buttons stacked, so neither moves when the other appears. */}
+                      {moment.production === "produced" && moment.downloadUrl && (
+                        <a
+                          href={moment.downloadUrl}
+                          download
+                          aria-label="Download — save this clip"
+                          title="Download this clip"
+                          data-testid="feed-download"
+                          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+                        >
+                          <DownloadGlyph />
+                        </a>
+                      )}
                       <button
                         type="button"
                         onClick={() => onPublish(moment)}
                         disabled={!canPublish}
                         aria-label="Publish — send this moment to your socials"
                         title={publishTitle}
-                        className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70 disabled:cursor-default disabled:opacity-60"
+                        className={cn(
+                          "absolute right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70 disabled:cursor-default disabled:opacity-60",
+                          moment.production === "produced" && moment.downloadUrl ? "top-14" : "top-3",
+                        )}
                       >
                         <PublishGlyph />
                       </button>
-                      {moment.preview && (
-                        <button
-                          type="button"
-                          onClick={() => setMuted((value) => !value)}
-                          aria-pressed={!muted}
-                          aria-label={muted ? "Unmute" : "Mute"}
-                          title={muted ? "Unmute" : "Mute"}
-                          className="absolute bottom-3 left-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
-                        >
-                          {muted ? <VolumeX aria-hidden size={16} /> : <Volume2 aria-hidden size={16} />}
-                        </button>
-                      )}
                       {reworking && (
                         <div
                           className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 bg-black/60 text-white backdrop-blur-sm"
@@ -588,7 +839,7 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
                   )}
                 </CardFace>
               ) : (
-                <EndCard canGoBack={canGoBack} onUploadMore={onUploadMore} />
+                <EndCard canGoBack={cursor > 0} onBack={() => goTo(total - 1)} onUploadMore={onUploadMore} />
               )}
             </motion.div>
           )
@@ -596,23 +847,38 @@ export function MomentFeed({ moments, busy = false, paused = false, onKeep, onSk
       </div>
 
       {top && (
+        // Two slots that never move. For an open decision: Skip and Keep.
+        // For a kept moment: onward, and the keep it already has.
         <div className="mt-6 flex items-center justify-center gap-8" data-testid="feed-controls">
-          <button
-            type="button"
-            onClick={skip}
-            disabled={!canDecide}
-            aria-label="Skip — not useful, move on"
-            title="Skip"
-            className="flex h-14 w-14 items-center justify-center rounded-full border border-border text-foreground transition hover:border-foreground disabled:opacity-40"
-          >
-            <X aria-hidden size={22} />
-          </button>
+          {decided ? (
+            <button
+              type="button"
+              onClick={forward}
+              disabled={!canGoForward}
+              aria-label="Next moment"
+              title="Next"
+              className="flex h-14 w-14 items-center justify-center rounded-full border border-border text-foreground transition hover:border-foreground disabled:opacity-40"
+            >
+              <ChevronDown aria-hidden size={22} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={forward}
+              disabled={!canDecide}
+              aria-label="Skip — not useful, move on"
+              title="Skip"
+              className="flex h-14 w-14 items-center justify-center rounded-full border border-border text-foreground transition hover:border-foreground disabled:opacity-40"
+            >
+              <X aria-hidden size={22} />
+            </button>
+          )}
           <button
             type="button"
             onClick={keep}
             disabled={!canDecide}
-            aria-label="Keep — save this clip to your library"
-            title="Keep"
+            aria-label={decided ? "Kept" : "Keep — make this clip and save it to your library"}
+            title={decided ? "Kept" : "Keep"}
             className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background transition hover:bg-foreground/90 disabled:opacity-40"
           >
             <Check aria-hidden size={26} strokeWidth={2.5} />

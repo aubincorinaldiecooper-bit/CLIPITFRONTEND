@@ -6,9 +6,12 @@ import type { Exchange } from '../components/start/types'
 import type { ClipMatch, ClipRequest, Video } from '../lib/types'
 
 /**
- * The owner's feed of 2026-09-02, held by tests: one moment at a time;
- * moving on skips, moving back un-skips, ✓ keeps and keeps for good; ↻
- * reworks the same moment and holds the card while it does.
+ * The owner's feed of 2026-09-02 with the rules of 2026-09-05, held by
+ * tests: one moment at a time; moving on skips, moving back un-skips; ✓
+ * keeps — which makes the file — and the card stays on screen saying so,
+ * still there to watch, download and publish; the front card plays exactly
+ * the moment from the source, with a real clock; ↻ reworks the same moment
+ * and holds the card while it does.
  */
 
 const match = (overrides: Partial<ClipMatch> = {}): ClipMatch =>
@@ -162,7 +165,7 @@ describe('MomentFeed — one moment at a time', () => {
     expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('Harbour skyline')
   })
 
-  it('✓ keeps the moment on screen, after the card has left', async () => {
+  it('✓ keeps the moment on screen', async () => {
     const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
     const h = handlers()
     render(<MomentFeed moments={moments} {...h} />)
@@ -210,7 +213,7 @@ describe('MomentFeed — one moment at a time', () => {
     expect(screen.getByText('Kept')).toBeTruthy()
   })
 
-  it('a dot for a skipped moment brings it back; the other dots are not buttons', async () => {
+  it("every dot goes to its moment; a skipped moment's dot brings it back", async () => {
     const moments = feedMoments(
       [exchange('r1', [match({ id: 'saved', confidence: 0.9, feedback: 'approved' }), match({ id: 'gone', confidence: 0.8, feedback: 'rejected' }), match({ id: 'open', confidence: 0.7 })])],
       video,
@@ -218,10 +221,16 @@ describe('MomentFeed — one moment at a time', () => {
     const h = handlers()
     render(<MomentFeed moments={moments} {...h} />)
     const dots = screen.getByTestId('feed-dots')
-    expect(dots.querySelectorAll('button')).toHaveLength(1)
+    expect(dots.querySelectorAll('button')).toHaveLength(3)
     await userEvent.click(screen.getByRole('button', { name: 'Bring back: Harbour skyline' }))
     expect(h.onUndoSkip).toHaveBeenCalledTimes(1)
     expect(h.onUndoSkip.mock.calls[0]![0].match.id).toBe('gone')
+    expect(screen.getByTestId('feed-position').textContent).toContain('02')
+    // A kept moment's dot just goes there: it stays kept, and its card says so.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Go to: Harbour skyline' })[0]!)
+    expect(screen.getByTestId('feed-position').textContent).toContain('01')
+    expect(screen.getByTestId('feed-decision').textContent).toContain('Kept')
+    expect(h.onUndoSkip).toHaveBeenCalledTimes(1)
   })
 
   it('keeps playing the link it started with while the page re-signs it, and takes the new one only when the old fails', () => {
@@ -274,19 +283,85 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).toHaveBeenCalledTimes(1)
   })
 
-  it('two quick presses of the buttons are two decisions: a keep, then a skip on the next card', async () => {
-    // Devin's finding on #75: the cooldown that tames a held key or a
-    // wheel flick must not swallow a deliberate second press.
+  it('a keep leaves the card on screen, saying its file is being made; onward is the next card, and a skip there is its own decision', async () => {
+    // Keep is production (owner, 2026-09-05): the cut starts from the
+    // press, and the moment stays where it is — to be watched, then
+    // downloaded or published — rather than leaving the screen.
+    // Devin's finding on #75 still holds: the cooldown that tames a held
+    // key or a wheel flick must not swallow a deliberate second press.
     const h = handlers()
     const before = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
     const { rerender } = render(<MomentFeed moments={before} {...h} />)
     await userEvent.click(screen.getByRole('button', { name: /^Keep/ }))
     expect(h.onKeep).toHaveBeenCalledTimes(1)
-    const after = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9, feedback: 'approved' }), match({ id: 'b', confidence: 0.8 })])], video)
+    // The server records the keep and starts the cut; the card stays.
+    const after = feedMoments(
+      [
+        {
+          request: request('r1', [match({ id: 'a', confidence: 0.9, feedback: 'approved', clip: { id: 'c-a', status: 'pending' } }), match({ id: 'b', confidence: 0.8 })]),
+          clips: [{ id: 'c-a', clipMatchId: 'a', status: 'pending', url: null, media: null } as never],
+        },
+      ],
+      video,
+    )
     rerender(<MomentFeed moments={after} {...h} />)
+    expect(screen.getByTestId('feed-position').textContent).toContain('01')
+    expect(screen.getByTestId('feed-decision').textContent).toContain('Kept · cutting')
+    expect((screen.getByRole('button', { name: 'Kept' }) as HTMLButtonElement).disabled).toBe(true)
+    await userEvent.click(screen.getByRole('button', { name: 'Next moment' }))
+    expect(h.onSkip).not.toHaveBeenCalled()
+    expect(screen.getByTestId('feed-position').textContent).toContain('02')
     await userEvent.click(screen.getByRole('button', { name: /^Skip/ }))
     expect(h.onSkip).toHaveBeenCalledTimes(1)
     expect(h.onSkip.mock.calls[0]![0].match.id).toBe('b')
+  })
+
+  it('moments that land while the person sits on the end card come to the front', () => {
+    const h = handlers()
+    const { rerender } = render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })])], video)} {...h} />)
+    expect(screen.queryByTestId('feed-controls')).toBeNull()
+    rerender(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })]), exchange('r2', [match({ id: 'b', description: 'The dunk' })])], video)} {...h} />)
+    expect(screen.getByTestId('feed-position').textContent).toContain('02')
+    expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('The dunk')
+  })
+
+  it('while the first search runs, says where the moments will land instead of "No moments yet"', () => {
+    render(<MomentFeed moments={[]} searching {...handlers()} />)
+    expect(screen.getByTestId('feed-searching').textContent).toContain('Moments land here')
+    expect(screen.queryByTestId('feed-empty')).toBeNull()
+  })
+
+  it('plays exactly the moment from the source, with play/pause in the middle and the time within the moment', () => {
+    // The owner's session of 2026-09-05: the card showed "1:38" over a
+    // moment at 1:38–1:51 of the video, and nothing to press. The clock is
+    // the moment's own, and every number on it comes from the element.
+    const withPlayback = { ...video, playback: { url: 'https://cdn.test/source.mp4', expiresAt: '' } } as unknown as Video
+    render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a', startSeconds: 98, endSeconds: 111.2 })])], withPlayback)} {...handlers()} />)
+    const element = screen.getByTestId('feed-video') as HTMLVideoElement
+    expect(element.getAttribute('src')).toContain('#t=98')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy()
+    expect(screen.getByTestId('feed-time').textContent).toBe('0:00 / 0:13')
+
+    // jsdom plays nothing; what the element reports is what is shown.
+    Object.defineProperty(element, 'paused', { value: false, configurable: true })
+    element.currentTime = 102
+    fireEvent.play(element)
+    fireEvent.timeUpdate(element)
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy()
+    expect(screen.getByTestId('feed-time').textContent).toBe('0:04 / 0:13')
+
+    element.currentTime = 108.5
+    fireEvent.seeked(element)
+    expect(screen.getByTestId('feed-time').textContent).toBe('0:10 / 0:13')
+
+    // Past the moment's end it plays the moment again — never the rest of the video.
+    element.currentTime = 111.5
+    fireEvent.timeUpdate(element)
+    expect(element.currentTime).toBe(98)
+
+    Object.defineProperty(element, 'paused', { value: true, configurable: true })
+    fireEvent.pause(element)
+    expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy()
   })
 
   it('does not steal keys from someone typing', async () => {
@@ -313,31 +388,51 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onPublish.mock.calls[0]![0].match.id).toBe('a')
   })
 
-  it('a moment still being cut cannot be published yet, and says so', () => {
+  it('publish can be pressed before any file exists: it keeps the moment, and the publish screens wait for the file', async () => {
     const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
-    render(<MomentFeed moments={moments} {...handlers()} />)
+    const h = handlers()
+    render(<MomentFeed moments={moments} {...h} />)
     const button = screen.getByRole('button', { name: /^Publish/ })
-    expect((button as HTMLButtonElement).disabled).toBe(true)
-    expect(button.getAttribute('title')).toContain('Still cutting')
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+    expect(button.getAttribute('title')).toContain('keep this moment')
+    await userEvent.click(button)
+    expect(h.onPublish).toHaveBeenCalledTimes(1)
+    // Nothing to download: there is no file yet.
+    expect(screen.queryByTestId('feed-download')).toBeNull()
   })
 
-  it('a vertical moment goes out only once its 9:16 file exists — never the landscape cut in its place', () => {
-    // Devin's finding on #76: the landscape cut is ready long before the
-    // vertical one, and it is not what the person is sending.
-    const pending = feedMoments([cutExchange('r1', {}, verticalMedia('pending'))], { ...video, playback: { url: 'https://cdn.test/source.mp4', expiresAt: '' } } as unknown as Video)
+  it('the corner offers Download only once the 9:16 file exists — never the landscape cut in its place', async () => {
+    // Devin's finding on #76 still holds: the landscape cut is ready long
+    // before the vertical one, and it is not what the person is saving.
+    const withPlayback = { ...video, playback: { url: 'https://cdn.test/source.mp4', expiresAt: '' } } as unknown as Video
+    const pending = feedMoments([cutExchange('r1', { feedback: 'approved' }, { ...verticalMedia('pending'), downloadUrl: null })], withPlayback)
     const { rerender } = render(<MomentFeed moments={pending} {...handlers()} />)
-    let button = screen.getByRole('button', { name: /^Publish/ })
-    expect((button as HTMLButtonElement).disabled).toBe(true)
-    expect(button.getAttribute('title')).toContain('Still cutting')
+    // Every moment is decided, so the feed opens on the end card — which
+    // says the moments are still here, and takes you back to them.
+    expect(screen.getByTestId('feed-end').textContent).toContain('still here')
+    await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
+    expect(screen.getByTestId('feed-position').textContent).toContain('01')
+    expect(screen.queryByTestId('feed-download')).toBeNull()
+    expect(screen.getByTestId('feed-decision').textContent).toContain('cutting')
+    expect(screen.getByRole('button', { name: /^Publish/ }).getAttribute('title')).toContain('once the cut is ready')
+    // The source stands in for the file meanwhile.
+    expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('source.mp4')
 
-    rerender(<MomentFeed moments={feedMoments([cutExchange('r1', {}, verticalMedia('failed'))], video)} {...handlers()} />)
-    button = screen.getByRole('button', { name: /^Publish/ })
-    expect((button as HTMLButtonElement).disabled).toBe(true)
-    expect(button.getAttribute('title')).toContain('cut failed')
+    rerender(<MomentFeed moments={feedMoments([cutExchange('r1', { feedback: 'approved' }, { ...verticalMedia('failed'), downloadUrl: null })], video)} {...handlers()} />)
+    expect(screen.queryByTestId('feed-download')).toBeNull()
+    expect(screen.getByTestId('feed-decision').textContent).toContain('cut failed')
+    const publish = screen.getByRole('button', { name: /^Publish/ })
+    expect((publish as HTMLButtonElement).disabled).toBe(false)
+    expect(publish.getAttribute('title')).toContain('makes it again')
 
-    rerender(<MomentFeed moments={feedMoments([cutExchange('r1', {}, verticalMedia('ready'))], video)} {...handlers()} />)
-    button = screen.getByRole('button', { name: /^Publish/ })
-    expect((button as HTMLButtonElement).disabled).toBe(false)
+    rerender(<MomentFeed moments={feedMoments([cutExchange('r1', { feedback: 'approved' }, { ...verticalMedia('ready'), downloadUrl: 'https://cdn.test/clips/v/c-a-vertical.mp4?download=1' })], video)} {...handlers()} />)
+    expect(screen.getByTestId('feed-download').getAttribute('href')).toBe('https://cdn.test/clips/v/c-a-vertical.mp4?download=1')
+    expect(screen.getByTestId('feed-decision').textContent).toBe('Kept')
+    expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('c-a-vertical.mp4')
+
+    // A server that signs nothing for saving offers nothing — not the landscape file.
+    rerender(<MomentFeed moments={feedMoments([cutExchange('r1', { feedback: 'approved' }, verticalMedia('ready'))], video)} {...handlers()} />)
+    expect(screen.queryByTestId('feed-download')).toBeNull()
   })
 
   it('decides nothing while the publish dialog has the screen, and ignores keys pressed inside a dialog', async () => {

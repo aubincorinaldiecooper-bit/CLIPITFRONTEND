@@ -43,6 +43,12 @@ export interface Video {
   hasAudio: boolean | null
   chunkCount: number
   readyForSearch: boolean
+  /**
+   * Whether a question can be sent now. True from the moment the upload has
+   * landed: the answer waits, inside the search, for whatever it still needs.
+   * Older servers do not send it; for them readyForSearch is the gate.
+   */
+  acceptsQuestions?: boolean
   transcript: {
     status: TranscriptStatus
     source: string | null
@@ -284,6 +290,12 @@ export interface ClipRequest {
     chunksCompleted: number
     chunksFailed: number
     message: string
+    /**
+     * Moments found so far while the search is still running. Provisional:
+     * the footage path folds duplicates as it goes, so the finished count
+     * can be lower.
+     */
+    candidatesFound?: number
   }
   failedChunks: Array<{ chunkIndex: number; message: string }>
   /**
@@ -368,6 +380,8 @@ export interface ClipComposition {
 export interface ClipMedia {
   composition: ClipComposition
   url: string | null
+  /** The same file as `url`, served to be saved. Null while there is nothing to save. */
+  downloadUrl?: string | null
   canonicalUrl: string | null
   posterUrl: string | null
   posterTimestampSeconds: number | null

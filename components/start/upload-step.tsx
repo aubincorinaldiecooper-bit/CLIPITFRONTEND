@@ -3,6 +3,7 @@
 import { ArrowRight, Send, Video as VideoIcon } from "lucide-react"
 import { UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
 import type { Video } from "@/lib/types"
+import { askGate } from "./ask-gate"
 import { cn } from "@/lib/utils"
 
 export interface UploadStepProps {
@@ -41,7 +42,11 @@ export function UploadStep({
   searchInstruction,
 }: UploadStepProps) {
   const isSearching = searchInstruction !== undefined
-  const ready = (video?.readyForSearch === true && !disabled) || isSearching
+  // A question can be sent as soon as the upload has landed: the answer
+  // waits, inside the search, for the video to be prepared, and the
+  // dialogue says so. The gate and its words are decided in one place.
+  const gate = askGate(video)
+  const ready = (gate.accepting && !disabled) || isSearching
   /** Preparation failed: nothing here will ever become sendable, so no promise is made. */
   const failed = video?.status === "failed"
   // A file that has been picked is a video that is coming. The row for it
@@ -113,10 +118,8 @@ export function UploadStep({
           </button>
         </form>
 
-        {somethingToAskAbout && !video?.readyForSearch && (
-          <p className="text-center text-xs text-muted-foreground">
-            Your video is still being prepared — you can type now, then send once it&apos;s ready.
-          </p>
+        {somethingToAskAbout && gate.waitingOn && (
+          <p className="text-center text-xs text-muted-foreground">{gate.waitingOn}</p>
         )}
       </div>
     </div>
