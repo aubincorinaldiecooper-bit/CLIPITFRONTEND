@@ -8,7 +8,7 @@ import { ClipComposition, centredComposition } from "@/components/media/clip-com
 import { VerticalFrame } from "@/components/media/vertical-frame"
 import type { Clip, ClipComposition as Composition, ClipMatch, ClipRequest, Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { downloadUrlOf, productionOf, type Production } from "./production"
+import { clipRowFor, downloadUrlOf, productionOf, type Production } from "./production"
 import type { Exchange } from "./types"
 
 /**
@@ -69,11 +69,15 @@ export interface FeedMoment {
   reworking: boolean
 }
 
-/** The clip row recorded for a moment, in whatever state it is in. */
+/**
+ * The clip row recorded for a moment, in whatever state it is in. By the
+ * id the match names; failing that, by the match the row names — a clip
+ * just made on Keep is in the conversation before the match has been
+ * re-read with its id, and an already-finished one never prompts a
+ * re-read at all (Devin's finding on #87).
+ */
 function clipForMatch(match: ClipMatch, clips: Clip[]): Clip | null {
-  const clipId = match.clip?.id
-  if (!clipId) return null
-  return clips.find((clip) => clip.id === clipId) ?? null
+  return clipRowFor(match, clips)
 }
 
 /**
@@ -550,6 +554,8 @@ export interface MomentFeedProps {
   paused?: boolean
   /** Which moment is in front, as the person moves through the feed. */
   onFrontChange?: (index: number) => void
+  /** Moments whose Keep is being written; their Keep waits for it. */
+  keeping?: ReadonlySet<string>
 }
 
 export function MomentFeed({
@@ -563,21 +569,35 @@ export function MomentFeed({
   onPublish,
   onUploadMore,
   onFrontChange,
+  keeping,
 }: MomentFeedProps) {
   const total = moments.length
-  // Where the person is in the feed: opens on the first open decision, and
-  // from there moves only when they move it. Keeping does not move it — the
-  // kept moment stays on screen, saying what is being made of it.
-  const [position, setPosition] = useState(() => feedCursor(moments))
-  const cursor = Math.min(position, total)
+  // Where the person is in the feed, held as the MOMENT in front rather
+  // than a number: the feed is rebuilt on every poll, strongest first
+  // within each question, and a number would point at whatever landed in
+  // that place (Devin's and Codex's finding on #87). Opens on the first
+  // open decision; from there it moves only when they move it. Keeping
+  // does not move it — the kept moment stays on screen, saying what is
+  // being made of it. Null is the end card.
+  const [frontId, setFrontId] = useState<string | null>(() => moments[feedCursor(moments)]?.match.id ?? null)
+  const lastCursor = useRef(feedCursor(moments))
+  const found = frontId === null ? -1 : moments.findIndex((moment) => moment.match.id === frontId)
+  // A moment that has gone from the feed (a conversation rebuilt) leaves
+  // the person at the same place in it rather than at the end.
+  const cursor = frontId === null ? total : found >= 0 ? found : Math.min(lastCursor.current, total)
+  useEffect(() => {
+    lastCursor.current = cursor
+  }, [cursor])
   // Moments that land while the person sits on the end card — or before
   // anything had landed — bring the first new one to the front. Ones that
-  // land while they are mid-feed wait their turn.
-  const seenTotal = useRef(total)
+  // land while they are mid-feed wait their turn. New means an id not seen
+  // before, wherever it sorted.
+  const seen = useRef<Set<string>>(new Set(moments.map((moment) => moment.match.id)))
   useEffect(() => {
-    if (total > seenTotal.current && position >= seenTotal.current) setPosition(seenTotal.current)
-    seenTotal.current = total
-  }, [total, position])
+    const fresh = moments.filter((moment) => !seen.current.has(moment.match.id))
+    for (const moment of fresh) seen.current.add(moment.match.id)
+    if (fresh.length > 0 && frontId === null) setFrontId(fresh[0]!.match.id)
+  }, [moments, frontId])
   useEffect(() => {
     onFrontChange?.(cursor)
   }, [cursor, onFrontChange])
@@ -586,7 +606,12 @@ export function MomentFeed({
   const prev = cursor > 0 ? moments[cursor - 1] : undefined
   const reworking = top?.reworking ?? false
   const free = !busy && !paused
-  const canDecide = top !== undefined && top.decision === null && !reworking && free
+  const writing = top !== undefined && (keeping?.has(top.match.id) ?? false)
+  const canDecide = top !== undefined && top.decision === null && !reworking && free && !writing
+  // A kept moment whose cut failed, or that has nothing made at all, is
+  // kept again — the server makes it (again). Not while a keep is being
+  // written: the card's Keep waits for it.
+  const canRetry = top !== undefined && top.decision === "kept" && (top.production === "failed" || top.production === null) && free && !writing
   const canGoBack = cursor > 0 && free
   const canGoForward = top !== undefined && (top.decision !== null || !reworking) && free
 
@@ -608,27 +633,27 @@ export function MomentFeed({
   }, [total])
 
   const keep = useCallback(() => {
-    if (canDecide && top) onKeep(top)
-  }, [canDecide, top, onKeep])
+    if ((canDecide || canRetry) && top) onKeep(top)
+  }, [canDecide, canRetry, top, onKeep])
   /** Down: past a decided moment, or skipping an undecided one. */
   const forward = useCallback(() => {
     if (!canGoForward || !top) return
     if (top.decision === null) onSkip(top)
-    setPosition(cursor + 1)
-  }, [canGoForward, top, cursor, onSkip])
+    setFrontId(moments[cursor + 1]?.match.id ?? null)
+  }, [canGoForward, top, cursor, onSkip, moments])
   /** Up: back onto the moment before; a skipped one is brought back as it comes into view. */
   const back = useCallback(() => {
     if (!canGoBack || !prev) return
     if (prev.decision === "skipped") onUndoSkip(prev)
-    setPosition(cursor - 1)
-  }, [canGoBack, prev, cursor, onUndoSkip])
+    setFrontId(prev.match.id)
+  }, [canGoBack, prev, onUndoSkip])
   /** A dot: straight to that moment; a skipped one comes back. */
   const goTo = useCallback(
     (index: number) => {
       if (!free) return
       const target = moments[index]
       if (target?.decision === "skipped") onUndoSkip(target)
-      setPosition(index)
+      setFrontId(target?.match.id ?? null)
     },
     [free, moments, onUndoSkip],
   )
@@ -687,9 +712,11 @@ export function MomentFeed({
   // Publish is keep-and-send: it can be pressed before the file exists, and
   // the publish screens wait for the file. A moment whose cut failed can be
   // kept again the same way — the server makes it again.
-  const canPublish = top !== undefined && !reworking && free
+  const canPublish = top !== undefined && !reworking && free && !writing
   const publishTitle = reworking
     ? "Reworking this edit…"
+    : writing
+      ? "Keeping it — publish once the cut has started"
     : top?.production === "failed"
       ? "The cut failed — publishing makes it again, then sends it"
       : top?.production === "producing"
@@ -876,9 +903,9 @@ export function MomentFeed({
           <button
             type="button"
             onClick={keep}
-            disabled={!canDecide}
-            aria-label={decided ? "Kept" : "Keep — make this clip and save it to your library"}
-            title={decided ? "Kept" : "Keep"}
+            disabled={!(canDecide || canRetry)}
+            aria-label={decided ? (canRetry ? "Keep again — make the clip again" : "Kept") : "Keep — make this clip and save it to your library"}
+            title={decided ? (canRetry ? "Keep again" : "Kept") : "Keep"}
             className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background transition hover:bg-foreground/90 disabled:opacity-40"
           >
             <Check aria-hidden size={26} strokeWidth={2.5} />

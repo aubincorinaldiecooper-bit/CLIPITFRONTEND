@@ -47,6 +47,9 @@
    * width above — the app's own root carries them. Applied with Tailwind's
    * custom-property form: z-(--z-header), focus:z-(--z-skip-link).
    */
+  /* The report dock: above the page, below the header and every dialog
+     (components/ui/dialog.tsx sits at z-50), so a modal blocks it too. */
+  --z-dock: 40;
   --z-header: 50;
   --z-skip-link: 60;
 }
