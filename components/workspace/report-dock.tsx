@@ -150,7 +150,7 @@ export function ReportDock() {
       <VStack
         gap={2}
         padding={2}
-        className="fixed bottom-4 left-4 right-4 z-(--z-dock) rounded-2xl bg-foreground shadow-2xl ring-1 ring-foreground/10 sm:left-auto sm:w-full sm:max-w-sm"
+        className="fixed bottom-4 left-4 right-4 z-(--z-dock) rounded-2xl bg-foreground shadow-2xl ring-1 ring-foreground/10 sm:left-auto sm:w-full sm:max-w-md"
         role="region"
         aria-label="Report a problem with Clipit"
         data-testid="report-dock"
@@ -202,7 +202,8 @@ export function ReportDock() {
                 data-testid="report-status"
                 aria-live="polite"
               >
-                <Text as="p" type="supporting" maxLines={1} hasTruncateTooltip={false}>
+                {/* Two lines at most: on a phone the words wrap rather than vanish behind an ellipsis. */}
+                <Text as="p" type="supporting" maxLines={2} hasTruncateTooltip={false}>
                   {STATUS[mode]}
                 </Text>
               </motion.div>
