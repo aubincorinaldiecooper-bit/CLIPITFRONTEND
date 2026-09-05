@@ -554,6 +554,8 @@ export interface MomentFeedProps {
   paused?: boolean
   /** Which moment is in front, as the person moves through the feed. */
   onFrontChange?: (index: number) => void
+  /** Moments whose Keep is being written; their Keep waits for it. */
+  keeping?: ReadonlySet<string>
 }
 
 export function MomentFeed({
@@ -567,6 +569,7 @@ export function MomentFeed({
   onPublish,
   onUploadMore,
   onFrontChange,
+  keeping,
 }: MomentFeedProps) {
   const total = moments.length
   // Where the person is in the feed, held as the MOMENT in front rather
@@ -603,9 +606,12 @@ export function MomentFeed({
   const prev = cursor > 0 ? moments[cursor - 1] : undefined
   const reworking = top?.reworking ?? false
   const free = !busy && !paused
-  const canDecide = top !== undefined && top.decision === null && !reworking && free
-  // A kept moment whose cut failed is kept again — the server makes it again.
-  const canRetry = top !== undefined && top.decision === "kept" && top.production === "failed" && free
+  const writing = top !== undefined && (keeping?.has(top.match.id) ?? false)
+  const canDecide = top !== undefined && top.decision === null && !reworking && free && !writing
+  // A kept moment whose cut failed, or that has nothing made at all, is
+  // kept again — the server makes it (again). Not while a keep is being
+  // written: the card's Keep waits for it.
+  const canRetry = top !== undefined && top.decision === "kept" && (top.production === "failed" || top.production === null) && free && !writing
   const canGoBack = cursor > 0 && free
   const canGoForward = top !== undefined && (top.decision !== null || !reworking) && free
 

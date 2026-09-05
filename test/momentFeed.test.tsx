@@ -329,6 +329,22 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep.mock.calls[0]![0].match.id).toBe('a')
   })
 
+  it('a kept moment with nothing made can be kept again — but not while its keep is being written', async () => {
+    // A rollback that could not reach the server leaves the moment kept
+    // with no clip; Keep again makes it. While a keep is on its way the
+    // card's Keep waits, so the label never changes under the finger.
+    const nothingMade = feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })])], video)
+    const h = handlers()
+    const { rerender } = render(<MomentFeed moments={nothingMade} {...h} keeping={new Set(['a'])} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
+    expect((screen.getByRole('button', { name: 'Kept' }) as HTMLButtonElement).disabled).toBe(true)
+    rerender(<MomentFeed moments={nothingMade} {...h} keeping={new Set()} />)
+    const again = screen.getByRole('button', { name: /^Keep again/ })
+    expect((again as HTMLButtonElement).disabled).toBe(false)
+    await userEvent.click(again)
+    expect(h.onKeep).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a clip made on Keep before the moment has been re-read with its id', () => {
     // Devin's finding on #87: the row names the moment; that is enough.
     const early: Exchange = {

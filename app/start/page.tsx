@@ -13,7 +13,9 @@ import { Wizard } from "@/components/start/wizard"
 import { UploadStep } from "@/components/start/upload-step"
 import { ReviewStep } from "@/components/start/review-step"
 import { PublishDialog } from "@/components/start/publish-dialog"
-import { afterFailedKeep, clipRowFor, needsKeep, publishableFor } from "@/components/start/production"
+import { clipRowFor, needsKeep, publishableFor } from "@/components/start/production"
+import { oneAtATime, runKeep } from "@/components/start/keep-flow"
+import type { FeedMoment } from "@/components/start/moment-feed"
 import { askGate } from "@/components/start/ask-gate"
 import type { Exchange, StartStep } from "@/components/start/types"
 import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
@@ -48,6 +50,15 @@ function ResumeAfterSignIn({ onPublish }: { onPublish: (clipId: string) => void 
 export default function StartPage() {
   const [video, setVideo] = useState<Video | null>(null)
   const [exchanges, setExchanges] = useState<Exchange[]>([])
+  /** The conversation as it is now, for work that waited its turn. */
+  const exchangesRef = useRef(exchanges)
+  exchangesRef.current = exchanges
+  /** Moments whose Keep is being written; their cards' Keep waits. */
+  const [keepingIds, setKeepingIds] = useState<ReadonlySet<string>>(() => new Set())
+  const keepQueue = useRef(new Map<string, Promise<unknown>>())
+  /** The question that owns the moment in front, for a report made from this page. */
+  const [frontRequestId, setFrontRequestId] = useState<string | null>(null)
+  const onFrontMomentChange = useCallback((moment: FeedMoment | undefined) => setFrontRequestId(moment?.requestId ?? null), [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<StartStep>("upload")
@@ -259,10 +270,12 @@ export default function StartPage() {
    */
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
 
-  // What a problem reported from this page is about: the video and the
-  // question on screen. Cleared on the way out.
+  // What a problem reported from this page is about: the video, and the
+  // question that owns the moment on screen — the newest question only
+  // when no moment is in front (Devin's finding on #88). Cleared on the
+  // way out.
   const reportVideoId = video?.id ?? null
-  const reportRequestId = currentRequest?.id ?? null
+  const reportRequestId = frontRequestId ?? currentRequest?.id ?? null
   useEffect(() => {
     setReportContext({ videoId: reportVideoId, clipRequestId: reportRequestId })
     return () => setReportContext({ videoId: null, clipRequestId: null })
@@ -452,59 +465,61 @@ export default function StartPage() {
    * Resolves to the clip the server recorded; null when it refused, with
    * the reason shown.
    */
+  /**
+   * Keep: the moment is approved and its file is started — the cut, the
+   * framing and the 9:16 encode happen from this press, not before it.
+   * Resolves to the clip the server recorded; null when it refused, with
+   * the reason shown. One press at a time per moment: a retry waits for
+   * the press before it, rollback included (Devin's finding on #88), and
+   * the card's Keep waits with it.
+   */
   const keepMatch = useCallback(
-    async (exchangeRequestId: string, matchId: string): Promise<Clip | null> => {
-      setError(null)
-      const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
-      verdictAttempts.current.set(matchId, attempt)
-      const isCurrent = () => verdictAttempts.current.get(matchId) === attempt
-      // What the moment already was, so a failure takes back only what this
-      // press made: a Keep again on a moment whose cut failed leaves it kept.
-      const before = exchanges
-        .find((exchange) => exchange.request.id === exchangeRequestId)
-        ?.request.matches?.find((candidate) => candidate.id === matchId)
-      const previous = { verdict: before?.feedback ?? null, reason: before?.feedbackReason ?? null }
-
-      pendingVerdicts.current.set(matchId, { verdict: "approved", reason: null })
-      showVerdict(exchangeRequestId, matchId, "approved", null)
-
-      try {
-        await api.rateMatch(exchangeRequestId, matchId, "approved", null)
-      } catch (cause) {
-        if (!isCurrent()) return null
-        const back = afterFailedKeep(previous, "approve")
-        pendingVerdicts.current.delete(matchId)
-        showVerdict(exchangeRequestId, matchId, back.verdict, back.reason)
-        fail(cause)
-        return null
-      }
-
-      try {
-        const { clips: created } = await api.generateClips(exchangeRequestId, [matchId])
-        setExchanges((previous) =>
-          previous.map((exchange) => {
-            if (exchange.request.id !== exchangeRequestId) return exchange
-            const merged = new Map(exchange.clips.map((clip) => [clip.id, clip]))
-            for (const clip of created) merged.set(clip.id, clip)
-            return { ...exchange, clips: Array.from(merged.values()) }
-          }),
-        )
-        return created.find((clip) => clip.clipMatchId === matchId) ?? created[0] ?? null
-      } catch (cause) {
-        if (!isCurrent()) return null
-        const back = afterFailedKeep(previous, "produce")
-        if (back.tellServer) {
-          pendingVerdicts.current.set(matchId, { verdict: back.verdict, reason: back.reason })
-          void api.rateMatch(exchangeRequestId, matchId, back.verdict, back.reason).catch(() => undefined)
-        } else {
-          pendingVerdicts.current.delete(matchId)
+    (exchangeRequestId: string, matchId: string): Promise<Clip | null> =>
+      oneAtATime(keepQueue.current, matchId, async () => {
+        setError(null)
+        setKeepingIds((current) => new Set(current).add(matchId))
+        const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
+        verdictAttempts.current.set(matchId, attempt)
+        // What the moment already was, so a failure takes back only what
+        // this press made: a Keep again on a moment whose cut failed leaves
+        // it kept. Read now, after any press before this one has settled.
+        const before = exchangesRef.current
+          .find((exchange) => exchange.request.id === exchangeRequestId)
+          ?.request.matches?.find((candidate) => candidate.id === matchId)
+        const previous = { verdict: before?.feedback ?? null, reason: before?.feedbackReason ?? null }
+        try {
+          return await runKeep(previous, {
+            approve: () => api.rateMatch(exchangeRequestId, matchId, "approved", null).then(() => undefined),
+            produce: async () => {
+              const { clips: created } = await api.generateClips(exchangeRequestId, [matchId])
+              setExchanges((previous) =>
+                previous.map((exchange) => {
+                  if (exchange.request.id !== exchangeRequestId) return exchange
+                  const merged = new Map(exchange.clips.map((clip) => [clip.id, clip]))
+                  for (const clip of created) merged.set(clip.id, clip)
+                  return { ...exchange, clips: Array.from(merged.values()) }
+                }),
+              )
+              return created.find((clip) => clip.clipMatchId === matchId) ?? created[0] ?? null
+            },
+            rollback: (verdict) => api.rateMatch(exchangeRequestId, matchId, verdict.verdict, verdict.reason).then(() => undefined),
+            show: (verdict) => showVerdict(exchangeRequestId, matchId, verdict.verdict, verdict.reason),
+            pending: {
+              set: (verdict) => pendingVerdicts.current.set(matchId, verdict),
+              delete: () => pendingVerdicts.current.delete(matchId),
+            },
+            isCurrent: () => verdictAttempts.current.get(matchId) === attempt,
+            fail,
+          })
+        } finally {
+          setKeepingIds((current) => {
+            const next = new Set(current)
+            next.delete(matchId)
+            return next
+          })
         }
-        showVerdict(exchangeRequestId, matchId, back.verdict, back.reason)
-        fail(cause)
-        return null
-      }
-    },
-    [exchanges, fail, showVerdict],
+      }),
+    [fail, showVerdict],
   )
 
   /**
@@ -652,6 +667,8 @@ export default function StartPage() {
             busy={busy}
             searching={searchRunning}
             publishing={publishing !== null || publishPending}
+            keeping={keepingIds}
+            onFrontMomentChange={onFrontMomentChange}
             onKeep={keepMatch}
             onSkip={(requestId, matchId) => rateMatch(requestId, matchId, "rejected")}
             onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}
