@@ -11,6 +11,7 @@ import { Text } from "@astryxdesign/core/Text"
 import { TextArea } from "@astryxdesign/core/TextArea"
 import { VStack } from "@astryxdesign/core/VStack"
 import { MediaTheme } from "@astryxdesign/core/theme"
+import { characterCount } from "@astryxdesign/core/utils"
 import { Logo } from "@/components/brand/logo"
 import { api } from "@/lib/api"
 import { readReportContext } from "@/lib/report-context"
@@ -83,8 +84,10 @@ export function ReportDock() {
     }
     // Never a prefix: a report longer than the server takes is refused
     // whole, with the words kept, rather than shortened and confirmed as
-    // sent (Devin's finding on #88). The server holds the same line.
-    if (text.length > MAX_LENGTH) {
+    // sent (Devin's finding on #88). Counted the way the box's counter
+    // counts — an emoji is one character, not two — so the counter and
+    // this refusal can never disagree; the server counts the same way.
+    if (characterCount(text) > MAX_LENGTH) {
       setMode("overlong")
       return
     }
@@ -184,7 +187,7 @@ export function ReportDock() {
                   value={message}
                   onChange={(value) => {
                     setMessage(value)
-                    if (mode === "overlong" && value.trim().length <= MAX_LENGTH) setMode("composing")
+                    if (mode === "overlong" && characterCount(value.trim()) <= MAX_LENGTH) setMode("composing")
                   }}
                   maxLength={MAX_LENGTH}
                   rows={3}

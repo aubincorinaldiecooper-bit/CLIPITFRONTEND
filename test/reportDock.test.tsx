@@ -117,6 +117,22 @@ describe('ReportDock', () => {
     expect(sendReport.mock.calls[0]![0].message).toHaveLength(2000)
   })
 
+  it('counts a report the way its counter does: an emoji is one character, not two', async () => {
+    // The box's counter (Astryx's) counts what a person sees. The refusal
+    // must count the same way, or words the counter calls 2,000 would be
+    // refused as over.
+    sendReport.mockResolvedValue({ report: { id: 'r-5', handedOff: false } })
+    render(<ReportDock />)
+    await userEvent.click(screen.getByRole('button', { name: /Report/ }))
+    const box = screen.getByLabelText('What went wrong') as HTMLTextAreaElement
+    const words = `${'x'.repeat(1999)}👍`
+    expect(words).toHaveLength(2001)
+    fireEvent.change(box, { target: { value: words } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(sendReport).toHaveBeenCalledTimes(1))
+    expect(sendReport.mock.calls[0]![0].message).toBe(words)
+  })
+
   it('does not send empty words', async () => {
     render(<ReportDock />)
     await userEvent.click(screen.getByRole('button', { name: /Report/ }))
