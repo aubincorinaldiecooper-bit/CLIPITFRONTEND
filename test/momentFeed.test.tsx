@@ -316,6 +316,49 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onSkip.mock.calls[0]![0].match.id).toBe('b')
   })
 
+  it('a kept moment whose cut failed can be kept again', async () => {
+    // Devin's and Codex's finding on #87: the copy promised a retry and no control gave one.
+    const failed = feedMoments([cutExchange('r1', { feedback: 'approved' }, verticalMedia('failed'))], video)
+    const h = handlers()
+    render(<MomentFeed moments={failed} {...h} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
+    const again = screen.getByRole('button', { name: /^Keep again/ })
+    expect((again as HTMLButtonElement).disabled).toBe(false)
+    await userEvent.click(again)
+    expect(h.onKeep).toHaveBeenCalledTimes(1)
+    expect(h.onKeep.mock.calls[0]![0].match.id).toBe('a')
+  })
+
+  it('shows a clip made on Keep before the moment has been re-read with its id', () => {
+    // Devin's finding on #87: the row names the moment; that is enough.
+    const early: Exchange = {
+      request: request('r1', [match({ id: 'a' })]),
+      clips: [{ id: 'c-a', clipMatchId: 'a', status: 'ready', url: 'https://cdn.test/clips/v/c-a.mp4?sig=1', media: { ...verticalMedia('ready'), downloadUrl: 'https://cdn.test/clips/v/c-a-vertical.mp4?download=1' } } as never],
+    }
+    const [moment] = feedMoments([early], video)
+    expect(moment!.production).toBe('produced')
+    expect(moment!.downloadUrl).toBe('https://cdn.test/clips/v/c-a-vertical.mp4?download=1')
+    render(<MomentFeed moments={feedMoments([early], video)} {...handlers()} />)
+    expect(screen.getByTestId('feed-download')).toBeTruthy()
+  })
+
+  it('keeps the same moment in front when a stronger one lands above it', async () => {
+    // Devin's and Codex's finding on #87: the front card was a number, and a
+    // poll that re-sorted the feed put another moment under it.
+    const h = handlers()
+    const before = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8, description: 'The dunk' })])], video)
+    const { rerender } = render(<MomentFeed moments={before} {...h} />)
+    await userEvent.click(screen.getByRole('button', { name: /^Skip/ }))
+    expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('The dunk')
+    const after = feedMoments(
+      [exchange('r1', [match({ id: 'c', confidence: 0.95, description: 'The stronger one' }), match({ id: 'a', confidence: 0.9, feedback: 'rejected' }), match({ id: 'b', confidence: 0.8, description: 'The dunk' })])],
+      video,
+    )
+    rerender(<MomentFeed moments={after} {...h} />)
+    expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('The dunk')
+    expect(screen.getByTestId('feed-position').textContent).toContain('03')
+  })
+
   it('moments that land while the person sits on the end card come to the front', () => {
     const h = handlers()
     const { rerender } = render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })])], video)} {...h} />)

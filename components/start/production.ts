@@ -33,6 +33,18 @@ export function productionOf(clip: Clip | null | undefined, stub?: ClipMatch["cl
 }
 
 /**
+ * Whether Publish has to keep the moment before it can send it. A moment
+ * not yet kept has nothing made; a kept moment whose cut failed is kept
+ * again, which makes it again (the server produces on Keep for a failed
+ * render). Otherwise its clip already exists (Devin's and Codex's finding
+ * on #87: a failed cut had no working retry).
+ */
+export function needsKeep(match: Pick<ClipMatch, "feedback" | "clip">, clip: Clip | null | undefined): boolean {
+  if (match.feedback !== "approved" || !match.clip?.id) return true
+  return productionOf(clip, match.clip) === "failed"
+}
+
+/**
  * The file to save, once there is one: the same file the card plays. A
  * vertical moment whose 9:16 file has not landed offers nothing rather than
  * the landscape cut; so does a server that does not sign one for saving.

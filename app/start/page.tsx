@@ -13,7 +13,7 @@ import { Wizard } from "@/components/start/wizard"
 import { UploadStep } from "@/components/start/upload-step"
 import { ReviewStep } from "@/components/start/review-step"
 import { PublishDialog } from "@/components/start/publish-dialog"
-import { publishableFor } from "@/components/start/production"
+import { needsKeep, publishableFor } from "@/components/start/production"
 import { askGate } from "@/components/start/ask-gate"
 import type { Exchange, StartStep } from "@/components/start/types"
 import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
@@ -508,14 +508,16 @@ export default function StartPage() {
       // first keep is still being written and swap the clip under an open
       // dialog.
       if (publishInFlight.current || publishing !== null) return
-      const match = exchanges
-        .find((exchange) => exchange.request.id === exchangeRequestId)
-        ?.request.matches?.find((candidate) => candidate.id === matchId)
-      if (!match) return
+      const exchange = exchanges.find((candidate) => candidate.request.id === exchangeRequestId)
+      const match = exchange?.request.matches?.find((candidate) => candidate.id === matchId)
+      if (!exchange || !match) return
       publishInFlight.current = true
       setPublishPending(true)
       try {
-        let clipId = match.feedback === "approved" ? (match.clip?.id ?? null) : null
+        // A moment not yet kept is kept now; one whose cut failed is kept
+        // again, which makes it again. Otherwise its clip already exists.
+        const existing = exchange.clips.find((clip) => clip.id === match.clip?.id) ?? null
+        let clipId = needsKeep(match, existing) ? null : (match.clip?.id ?? null)
         if (!clipId) {
           const kept = await keepMatch(exchangeRequestId, matchId)
           if (!kept) return

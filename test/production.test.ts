@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadUrlOf, productionOf, publishableFor } from '../components/start/production'
+import { downloadUrlOf, needsKeep, productionOf, publishableFor } from '../components/start/production'
 import type { Exchange } from '../components/start/types'
 import type { Clip } from '../lib/types'
 
@@ -49,6 +49,24 @@ describe('productionOf', () => {
 
   it('a clip cut before the always-vertical rule is produced as it is', () => {
     expect(productionOf(clip())).toBe('produced')
+  })
+})
+
+describe('needsKeep — whether Publish must keep the moment first', () => {
+  it('keeps a moment not yet kept, and one kept without a clip', () => {
+    expect(needsKeep({ feedback: null, clip: null }, null)).toBe(true)
+    expect(needsKeep({ feedback: 'approved', clip: null }, null)).toBe(true)
+  })
+
+  it('keeps AGAIN a kept moment whose cut failed, so the server makes it again', () => {
+    // Devin's and Codex's finding on #87: a failed cut had no working retry.
+    expect(needsKeep({ feedback: 'approved', clip: { id: 'c-1', status: 'failed' } as never }, clip({ status: 'failed', url: null }))).toBe(true)
+    expect(needsKeep({ feedback: 'approved', clip: { id: 'c-1', status: 'ready' } as never }, clip({ media: vertical('failed') }))).toBe(true)
+  })
+
+  it('goes straight to publishing when the clip exists or is on its way', () => {
+    expect(needsKeep({ feedback: 'approved', clip: { id: 'c-1', status: 'ready' } as never }, clip({ media: vertical('ready') }))).toBe(false)
+    expect(needsKeep({ feedback: 'approved', clip: { id: 'c-1', status: 'pending' } as never }, clip({ status: 'pending', url: null }))).toBe(false)
   })
 })
 
