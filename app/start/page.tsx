@@ -17,6 +17,7 @@ import { publishableFor } from "@/components/start/production"
 import { askGate } from "@/components/start/ask-gate"
 import type { Exchange, StartStep } from "@/components/start/types"
 import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
+import { setReportContext } from "@/lib/report-context"
 import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { readIntent } from "@/components/sign-in-gate"
 
@@ -257,6 +258,15 @@ export default function StartPage() {
    * routed back to the search in flight instead of starting a second one.
    */
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
+
+  // What a problem reported from this page is about: the video and the
+  // question on screen. Cleared on the way out.
+  const reportVideoId = video?.id ?? null
+  const reportRequestId = currentRequest?.id ?? null
+  useEffect(() => {
+    setReportContext({ videoId: reportVideoId, clipRequestId: reportRequestId })
+    return () => setReportContext({ videoId: null, clipRequestId: null })
+  }, [reportVideoId, reportRequestId])
 
   /**
    * Asks a question of the video. Every question, the first included, is

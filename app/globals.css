@@ -48,6 +48,8 @@
    * custom-property form: z-(--z-header), focus:z-(--z-skip-link).
    */
   --z-header: 50;
+  /* The report dock: above the page and the header, below the skip link. */
+  --z-dock: 55;
   --z-skip-link: 60;
 }
 

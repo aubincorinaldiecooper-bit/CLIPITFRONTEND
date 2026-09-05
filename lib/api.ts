@@ -600,6 +600,22 @@ export const api = {
   },
 
   /**
+   * A problem with Clipit itself, reported from the page it happened on.
+   * The server keeps it with what it knew about the video and the question
+   * at that moment, for whoever fixes it.
+   */
+  async sendReport(input: {
+    message: string
+    page: string
+    videoId?: string | null
+    clipRequestId?: string | null
+    userAgent?: string
+    viewport?: string
+  }): Promise<{ report: { id: string; handedOff: boolean } }> {
+    return request("/api/reports", { method: "POST", body: JSON.stringify(input) })
+  },
+
+  /**
    * Records a verdict on one match, or clears it with `null`. Returns the
    * updated match so the caller can reconcile rather than assume.
    */
