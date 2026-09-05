@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadUrlOf, needsKeep, productionOf, publishableFor } from '../components/start/production'
+import { afterFailedKeep, clipRowFor, downloadUrlOf, needsKeep, productionOf, publishableFor } from '../components/start/production'
 import type { Exchange } from '../components/start/types'
 import type { Clip } from '../lib/types'
 
@@ -64,9 +64,32 @@ describe('needsKeep — whether Publish must keep the moment first', () => {
     expect(needsKeep({ feedback: 'approved', clip: { id: 'c-1', status: 'ready' } as never }, clip({ media: vertical('failed') }))).toBe(true)
   })
 
+  it('goes straight to publishing when the row is known by the moment it names, before the match has its id', () => {
+    // Codex's finding on #88.
+    expect(needsKeep({ feedback: 'approved', clip: null }, clip({ media: vertical('ready') }))).toBe(false)
+    expect(clipRowFor({ id: 'm-1', clip: null }, [clip({ clipMatchId: 'm-1' })])?.id).toBe('c-1')
+    expect(clipRowFor({ id: 'm-1', clip: { id: 'c-2', status: 'ready' } as never }, [clip(), clip({ id: 'c-2', clipMatchId: 'm-1' })])?.id).toBe('c-2')
+  })
+
   it('goes straight to publishing when the clip exists or is on its way', () => {
     expect(needsKeep({ feedback: 'approved', clip: { id: 'c-1', status: 'ready' } as never }, clip({ media: vertical('ready') }))).toBe(false)
     expect(needsKeep({ feedback: 'approved', clip: { id: 'c-1', status: 'pending' } as never }, clip({ status: 'pending', url: null }))).toBe(false)
+  })
+})
+
+describe('afterFailedKeep — a failed press changes nothing it did not make', () => {
+  it('takes back the approval a first Keep recorded when the cut then did not start', () => {
+    expect(afterFailedKeep({ verdict: null, reason: null }, 'produce')).toEqual({ verdict: null, reason: null, tellServer: true })
+  })
+
+  it('leaves a kept moment kept when its Keep again fails, at either step', () => {
+    // Devin's finding on #88: the retry used the first Keep's rollback and made a kept moment undecided.
+    expect(afterFailedKeep({ verdict: 'approved', reason: null }, 'produce')).toEqual({ verdict: 'approved', reason: null, tellServer: false })
+    expect(afterFailedKeep({ verdict: 'approved', reason: null }, 'approve')).toEqual({ verdict: 'approved', reason: null, tellServer: false })
+  })
+
+  it('has nothing to tell the server when the approval itself never recorded', () => {
+    expect(afterFailedKeep({ verdict: null, reason: null }, 'approve')).toEqual({ verdict: null, reason: null, tellServer: false })
   })
 })
 

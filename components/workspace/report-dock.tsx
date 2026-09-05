@@ -76,7 +76,10 @@ export function ReportDock({ className }: { className?: string }) {
   const [message, setMessage] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const shouldReduceMotion = useReducedMotion()
-  const open = mode === "composing" || mode === "failed"
+  // Open through sending too: the box keeps its place while the words are
+  // on their way, and does not collapse and spring back on a failure
+  // (Codex's finding on #88).
+  const open = mode === "composing" || mode === "failed" || mode === "sending"
   const sending = mode === "sending"
 
   const openComposer = useCallback(() => {

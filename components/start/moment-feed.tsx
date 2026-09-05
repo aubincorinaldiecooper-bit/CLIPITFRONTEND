@@ -8,7 +8,7 @@ import { ClipComposition, centredComposition } from "@/components/media/clip-com
 import { VerticalFrame } from "@/components/media/vertical-frame"
 import type { Clip, ClipComposition as Composition, ClipMatch, ClipRequest, Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { downloadUrlOf, productionOf, type Production } from "./production"
+import { clipRowFor, downloadUrlOf, productionOf, type Production } from "./production"
 import type { Exchange } from "./types"
 
 /**
@@ -77,8 +77,7 @@ export interface FeedMoment {
  * re-read at all (Devin's finding on #87).
  */
 function clipForMatch(match: ClipMatch, clips: Clip[]): Clip | null {
-  const clipId = match.clip?.id
-  return clips.find((clip) => (clipId ? clip.id === clipId : clip.clipMatchId === match.id)) ?? null
+  return clipRowFor(match, clips)
 }
 
 /**

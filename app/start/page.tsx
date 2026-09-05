@@ -13,7 +13,7 @@ import { Wizard } from "@/components/start/wizard"
 import { UploadStep } from "@/components/start/upload-step"
 import { ReviewStep } from "@/components/start/review-step"
 import { PublishDialog } from "@/components/start/publish-dialog"
-import { needsKeep, publishableFor } from "@/components/start/production"
+import { afterFailedKeep, clipRowFor, needsKeep, publishableFor } from "@/components/start/production"
 import { askGate } from "@/components/start/ask-gate"
 import type { Exchange, StartStep } from "@/components/start/types"
 import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
@@ -458,6 +458,12 @@ export default function StartPage() {
       const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
       verdictAttempts.current.set(matchId, attempt)
       const isCurrent = () => verdictAttempts.current.get(matchId) === attempt
+      // What the moment already was, so a failure takes back only what this
+      // press made: a Keep again on a moment whose cut failed leaves it kept.
+      const before = exchanges
+        .find((exchange) => exchange.request.id === exchangeRequestId)
+        ?.request.matches?.find((candidate) => candidate.id === matchId)
+      const previous = { verdict: before?.feedback ?? null, reason: before?.feedbackReason ?? null }
 
       pendingVerdicts.current.set(matchId, { verdict: "approved", reason: null })
       showVerdict(exchangeRequestId, matchId, "approved", null)
@@ -466,8 +472,9 @@ export default function StartPage() {
         await api.rateMatch(exchangeRequestId, matchId, "approved", null)
       } catch (cause) {
         if (!isCurrent()) return null
+        const back = afterFailedKeep(previous, "approve")
         pendingVerdicts.current.delete(matchId)
-        showVerdict(exchangeRequestId, matchId, null, null)
+        showVerdict(exchangeRequestId, matchId, back.verdict, back.reason)
         fail(cause)
         return null
       }
@@ -485,14 +492,19 @@ export default function StartPage() {
         return created.find((clip) => clip.clipMatchId === matchId) ?? created[0] ?? null
       } catch (cause) {
         if (!isCurrent()) return null
-        pendingVerdicts.current.set(matchId, { verdict: null, reason: null })
-        showVerdict(exchangeRequestId, matchId, null, null)
-        void api.rateMatch(exchangeRequestId, matchId, null, null).catch(() => undefined)
+        const back = afterFailedKeep(previous, "produce")
+        if (back.tellServer) {
+          pendingVerdicts.current.set(matchId, { verdict: back.verdict, reason: back.reason })
+          void api.rateMatch(exchangeRequestId, matchId, back.verdict, back.reason).catch(() => undefined)
+        } else {
+          pendingVerdicts.current.delete(matchId)
+        }
+        showVerdict(exchangeRequestId, matchId, back.verdict, back.reason)
         fail(cause)
         return null
       }
     },
-    [fail, showVerdict],
+    [exchanges, fail, showVerdict],
   )
 
   /**
@@ -516,8 +528,8 @@ export default function StartPage() {
       try {
         // A moment not yet kept is kept now; one whose cut failed is kept
         // again, which makes it again. Otherwise its clip already exists.
-        const existing = exchange.clips.find((clip) => clip.id === match.clip?.id) ?? null
-        let clipId = needsKeep(match, existing) ? null : (match.clip?.id ?? null)
+        const existing = clipRowFor(match, exchange.clips)
+        let clipId = needsKeep(match, existing) ? null : (existing?.id ?? match.clip?.id ?? null)
         if (!clipId) {
           const kept = await keepMatch(exchangeRequestId, matchId)
           if (!kept) return

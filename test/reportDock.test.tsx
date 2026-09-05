@@ -66,6 +66,21 @@ describe('ReportDock', () => {
     expect((screen.getByLabelText('What went wrong') as HTMLTextAreaElement).value).toBe('')
   })
 
+  it('keeps the box in place while the words are on their way', async () => {
+    let finish: (value: unknown) => void = () => {}
+    sendReport.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    render(<ReportDock />)
+    await userEvent.click(screen.getByRole('button', { name: /Report/ }))
+    await userEvent.type(screen.getByLabelText('What went wrong'), 'the page went blank{enter}')
+    await waitFor(() => expect(status()).toContain('Sending'))
+    // Still open, its controls held, nothing moved.
+    expect(screen.getByLabelText('What went wrong').getAttribute('tabindex')).toBe('0')
+    expect((screen.getByLabelText('What went wrong') as HTMLTextAreaElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /Send/ }) as HTMLButtonElement).disabled).toBe(true)
+    finish({ report: { id: 'r-3', handedOff: false } })
+    await waitFor(() => expect(status()).toContain('Got it'))
+  })
+
   it('keeps the words when the report did not arrive, and says it did not', async () => {
     sendReport.mockRejectedValue(new Error('offline'))
     render(<ReportDock />)
