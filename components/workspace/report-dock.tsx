@@ -38,9 +38,24 @@ import { readReportContext } from "@/lib/report-context"
  * inside a MediaTheme so they read on the dark pill; the pill itself and
  * the collapse are the only things drawn here.
  */
-type DockMode = "idle" | "composing" | "overlong" | "sending" | "sent" | "failed"
+type DockMode = "idle" | "composing" | "overlong" | "oversized" | "sending" | "sent" | "failed"
 
+/**
+ * The most a report may say, counted the way a person counts: an emoji, a
+ * flag or an accented letter is one. The server holds the same line
+ * (CLIPIT's `MAX_MESSAGE_CHARACTERS`), counted the same way.
+ */
 const MAX_LENGTH = 2000
+/**
+ * The server's outer bound on storage (CLIPIT's `MAX_MESSAGE_UNITS`), held
+ * here too so nothing the box lets through is refused there: sixteen units
+ * per character is more than the longest standard emoji sequence takes, so
+ * only a run of combining marks — one "character" of any length — reaches
+ * it, and it is refused with words that do not say "over 2,000 characters".
+ */
+const MAX_UNITS = MAX_LENGTH * 16
+
+const fits = (text: string) => characterCount(text) <= MAX_LENGTH && text.length <= MAX_UNITS
 /** How long "Got it" stays before the dock settles again. */
 const SENT_LINGER_MS = 4000
 const EASE = [0.22, 1, 0.36, 1] as const
@@ -49,6 +64,7 @@ const STATUS: Record<DockMode, string> = {
   idle: "Something not working? Tell us.",
   composing: "What were you doing, and what happened?",
   overlong: "That's over 2,000 characters — trim it a little, then send.",
+  oversized: "That's more than one report can carry — trim it a little, then send.",
   sending: "Sending…",
   sent: "Got it — thanks. We'll look into it.",
   failed: "Couldn't send. Your words are still here — try again.",
@@ -66,11 +82,11 @@ export function ReportDock() {
   const shouldReduceMotion = useReducedMotion()
   // Open through sending too: the box keeps its place while the words are
   // on their way, and does not collapse and spring back on a failure.
-  const open = mode === "composing" || mode === "overlong" || mode === "failed" || mode === "sending"
+  const open = mode === "composing" || mode === "overlong" || mode === "oversized" || mode === "failed" || mode === "sending"
   const sending = mode === "sending"
 
   const openComposer = useCallback(() => {
-    setMode((current) => (current === "sending" || current === "failed" || current === "overlong" ? current : "composing"))
+    setMode((current) => (current === "sending" || current === "failed" || current === "overlong" || current === "oversized" ? current : "composing"))
   }, [])
   const close = useCallback(() => {
     setMode((current) => (current === "sending" ? current : "idle"))
@@ -89,6 +105,10 @@ export function ReportDock() {
     // this refusal can never disagree; the server counts the same way.
     if (characterCount(text) > MAX_LENGTH) {
       setMode("overlong")
+      return
+    }
+    if (text.length > MAX_UNITS) {
+      setMode("oversized")
       return
     }
     setMode("sending")
@@ -187,7 +207,7 @@ export function ReportDock() {
                   value={message}
                   onChange={(value) => {
                     setMessage(value)
-                    if (mode === "overlong" && characterCount(value.trim()) <= MAX_LENGTH) setMode("composing")
+                    if ((mode === "overlong" || mode === "oversized") && fits(value.trim())) setMode("composing")
                   }}
                   maxLength={MAX_LENGTH}
                   rows={3}

@@ -133,6 +133,31 @@ describe('ReportDock', () => {
     expect(sendReport.mock.calls[0]![0].message).toBe(words)
   })
 
+  it('takes two thousand of the longest common emoji, and holds the line only a run of combining marks can reach', async () => {
+    // Devin's finding on #95: an outer bound on storage must not refuse what
+    // the counter calls valid. A family emoji is eleven storage units and one
+    // character; two thousand of them send whole. One letter under a run of
+    // combining marks is one character of any length, and is refused with
+    // words that do not claim it is over 2,000 characters.
+    sendReport.mockResolvedValue({ report: { id: 'r-6', handedOff: false } })
+    render(<ReportDock />)
+    await userEvent.click(screen.getByRole('button', { name: /Report/ }))
+    const box = screen.getByLabelText('What went wrong') as HTMLTextAreaElement
+    const marks = `a${'\u0301'.repeat(40_000)}`
+    fireEvent.change(box, { target: { value: marks } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(status()).toContain('more than one report can carry'))
+    expect(sendReport).not.toHaveBeenCalled()
+    expect(box.value).toBe(marks)
+    const families = '👨‍👩‍👧‍👦'.repeat(2000)
+    expect(families).toHaveLength(22_000)
+    fireEvent.change(box, { target: { value: families } })
+    await waitFor(() => expect(status()).toContain('What were you doing'))
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(sendReport).toHaveBeenCalledTimes(1))
+    expect(sendReport.mock.calls[0]![0].message).toBe(families)
+  })
+
   it('does not send empty words', async () => {
     render(<ReportDock />)
     await userEvent.click(screen.getByRole('button', { name: /Report/ }))
