@@ -24,6 +24,8 @@ export interface KeepEffects {
   pending: { set(verdict: Verdict): void; delete(): void }
   /** Whether this press is still the live one for its moment. */
   isCurrent(): boolean
+  /** Ask the server for its own account of the question, and show that. */
+  reconcile(): Promise<void>
   /** Tell the person. */
   fail(cause: unknown): void
 }
@@ -58,10 +60,16 @@ export async function runKeep(previous: Verdict, effects: KeepEffects): Promise<
       try {
         await effects.rollback({ verdict: back.verdict, reason: back.reason })
       } catch {
-        // The server kept the approval this press recorded. Nothing is left
-        // pending, so the poll shows the server's truth — a kept moment with
-        // nothing made, which Keep again makes.
-        if (effects.isCurrent()) effects.pending.delete()
+        // The server kept the approval this press recorded, so that is what
+        // the card shows: a kept moment with nothing made, which Keep again
+        // makes. Nothing is left pending, and the server is asked for its
+        // own account — no poll would come for a moment with nothing made
+        // (Devin's finding on #88).
+        if (effects.isCurrent()) {
+          effects.pending.delete()
+          effects.show(approved)
+          await effects.reconcile().catch(() => undefined)
+        }
       }
     } else {
       effects.pending.delete()
