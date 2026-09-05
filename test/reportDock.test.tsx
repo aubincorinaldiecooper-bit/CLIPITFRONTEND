@@ -158,6 +158,24 @@ describe('ReportDock', () => {
     expect(sendReport.mock.calls[0]![0].message).toBe(families)
   })
 
+  it('shows the line the words cross now, not the one they crossed before', async () => {
+    // Devin's finding on #88: edited from over one limit to over the other,
+    // the refusal kept the old limit's words.
+    render(<ReportDock />)
+    await userEvent.click(screen.getByRole('button', { name: /Report/ }))
+    const box = screen.getByLabelText('What went wrong') as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: 'x'.repeat(2001) } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(status()).toContain('over 2,000 characters'))
+    fireEvent.change(box, { target: { value: `a${'\u0301'.repeat(40_000)}` } })
+    await waitFor(() => expect(status()).toContain('more than one report can carry'))
+    fireEvent.change(box, { target: { value: 'x'.repeat(2001) } })
+    await waitFor(() => expect(status()).toContain('over 2,000 characters'))
+    fireEvent.change(box, { target: { value: 'short enough' } })
+    await waitFor(() => expect(status()).toContain('What were you doing'))
+    expect(sendReport).not.toHaveBeenCalled()
+  })
+
   it('does not send empty words', async () => {
     render(<ReportDock />)
     await userEvent.click(screen.getByRole('button', { name: /Report/ }))

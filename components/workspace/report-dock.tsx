@@ -55,7 +55,14 @@ const MAX_LENGTH = 2000
  */
 const MAX_UNITS = MAX_LENGTH * 16
 
-const fits = (text: string) => characterCount(text) <= MAX_LENGTH && text.length <= MAX_UNITS
+/**
+ * Which line the words cross, if either — one test, asked on send and on
+ * every edit, so the refusal on screen is always the one the words earn:
+ * edited across the lines, a report cannot keep the other line's words
+ * (Devin's finding on #88).
+ */
+const refusalFor = (text: string): "overlong" | "oversized" | null =>
+  characterCount(text) > MAX_LENGTH ? "overlong" : text.length > MAX_UNITS ? "oversized" : null
 /** How long "Got it" stays before the dock settles again. */
 const SENT_LINGER_MS = 4000
 const EASE = [0.22, 1, 0.36, 1] as const
@@ -103,12 +110,9 @@ export function ReportDock() {
     // sent (Devin's finding on #88). Counted the way the box's counter
     // counts — an emoji is one character, not two — so the counter and
     // this refusal can never disagree; the server counts the same way.
-    if (characterCount(text) > MAX_LENGTH) {
-      setMode("overlong")
-      return
-    }
-    if (text.length > MAX_UNITS) {
-      setMode("oversized")
+    const refusal = refusalFor(text)
+    if (refusal) {
+      setMode(refusal)
       return
     }
     setMode("sending")
@@ -207,7 +211,7 @@ export function ReportDock() {
                   value={message}
                   onChange={(value) => {
                     setMessage(value)
-                    if ((mode === "overlong" || mode === "oversized") && fits(value.trim())) setMode("composing")
+                    if (mode === "overlong" || mode === "oversized") setMode(refusalFor(value.trim()) ?? "composing")
                   }}
                   maxLength={MAX_LENGTH}
                   rows={3}
