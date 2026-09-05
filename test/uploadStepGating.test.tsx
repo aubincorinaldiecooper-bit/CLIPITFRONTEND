@@ -6,10 +6,15 @@ import type { Video } from '../lib/types'
 import type { UploadEntry } from '../components/flow/upload-package'
 
 /**
- * The owner's rule for the ask box: while a video is still being prepared,
+ * The owner's rule for the ask box: while a video is still on its way,
  * people can TYPE — only sending waits. The box used to be disabled outright
  * while the line beneath it promised "you can type now", which is the shape
  * of bug this file exists to keep out.
+ *
+ * Since 2026-09-05 sending waits only for the bytes to land: the server
+ * says when it takes questions, and the answer waits for the rest inside
+ * the search. An older server does not say so, and for it ready-for-search
+ * is still the gate.
  */
 
 const video = (readyForSearch: boolean) =>
@@ -97,7 +102,24 @@ describe('the ask box while a video is still being prepared', () => {
     const input = screen.getByPlaceholderText<HTMLInputElement>('Tell Clipit what to look for...')
     expect(input.disabled).toBe(false)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(true)
-    expect(screen.getByText(/still being prepared/)).toBeTruthy()
+    expect(screen.getByText(/still uploading/)).toBeTruthy()
+  })
+
+  it('sends as soon as the server says it takes questions, even while the video is still being prepared', async () => {
+    const onSubmit = vi.fn()
+    const landed = { id: 'video-1', status: 'preprocessing', readyForSearch: false, acceptsQuestions: true } as unknown as Video
+    renderStep({ video: landed, promptValue: 'find the goal', onSubmit })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(false)
+    expect(screen.queryByText(/still being prepared/)).toBeNull()
+    await userEvent.type(screen.getByPlaceholderText('Tell Clipit what to look for...'), '{Enter}')
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Send off while the server says the bytes have not landed', () => {
+    const uploading = { id: 'video-1', status: 'pending_upload', readyForSearch: false, acceptsQuestions: false } as unknown as Video
+    renderStep({ video: uploading, promptValue: 'find the goal' })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(true)
+    expect(screen.getByText(/still uploading/)).toBeTruthy()
   })
 
   it('promises nothing when the only pick has failed to upload', () => {

@@ -1,10 +1,13 @@
-import type { ClipRequest } from "@/lib/types"
+import type { ClipRequest, Video } from "@/lib/types"
+import type { Production } from "./production"
 
 /**
  * What the dialogue says about a search, out loud. Written the way a person
  * would say it — "segment" and "examine" are ours, not the reader's — and
  * holding the honesty rules the theater held:
  *
+ * - Every line comes from a state the server reports. Nothing here is a
+ *   timer, and no count is spoken as final before the search has finished.
  * - An answer given before the whole video was watched says so in the
  *   answer, and never calls a not-yet-read stretch a failure.
  * - A stretch that could NOT be looked at is named, because its silence is
@@ -26,7 +29,51 @@ export function describeDuration(seconds: number): string {
   return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`
 }
 
-export function answerLine(request: ClipRequest, readThroughSeconds?: number | null): string {
+/** Words that ask for every appearance rather than one. */
+const EVERY = /\b(every|each|all|how many|any ?time|whenever)\b/i
+
+/**
+ * Said the moment a question is taken, before anything has been looked at.
+ * It promises to look — not what will be found.
+ */
+export function acknowledgeLine(instruction: string, followUp: boolean): string {
+  if (EVERY.test(instruction)) return followUp ? "I'll look for every one of those too." : "I'll look for every one of those."
+  return followUp ? "I'll look for that too." : "I'll look for that."
+}
+
+/** The video is between landing and being ready to look through. */
+const PREPARING = new Set<Video["status"]>(["queued", "ingesting", "preprocessing"])
+
+/**
+ * What the search is doing right now, from the states the server reports:
+ * the video still being prepared, its notes still being written, or the
+ * footage being watched part by part.
+ */
+export function progressLine(request: ClipRequest, video: Video | null | undefined): string {
+  const total = request.progress?.chunksTotal ?? 0
+  const done = request.progress?.chunksCompleted ?? 0
+  if (request.status === "searching" && total > 0) {
+    return `Watching the footage — ${Math.min(done, total)} of ${total} parts…`
+  }
+  if (video && PREPARING.has(video.status) && !video.readyForSearch) return "Getting your video ready to look through…"
+  const index = video?.index?.status
+  if (index === "pending" || index === "queued" || index === "running") return "Reading your video first, then I'll look…"
+  return "Looking through your video…"
+}
+
+/**
+ * Moments found so far, while the search is still running. Worded as
+ * provisional on purpose: the footage path folds duplicates as it goes, and
+ * the finished count can be lower than this.
+ */
+export function candidatesLine(request: ClipRequest): string | null {
+  if (request.status !== "pending" && request.status !== "searching") return null
+  const found = request.progress?.candidatesFound ?? 0
+  if (found <= 0) return null
+  return found === 1 ? "1 possible moment so far…" : `${found} possible moments so far…`
+}
+
+export function answerLine(request: ClipRequest, readThroughSeconds?: number | null, followUp = false): string {
   const count = request.matches?.length ?? 0
   // The server's own error text is NOT repeated here. It is written for
   // whoever is reading the logs — a provider's refusal, a timeout, a code —
@@ -58,13 +105,30 @@ export function answerLine(request: ClipRequest, readThroughSeconds?: number | n
     const unsure = request.uncertain?.length ?? 0
     return unsure > 0
       ? `I didn't find a clear match — but there ${unsure === 1 ? "is one" : `are ${unsure}`} I'm unsure about.`
-      : "I couldn't find that. Try describing the moment a different way."
+      : "I couldn't find a clear moment where that happens. Try describing it another way."
   }
 
-  const found = count === 1 ? "Found one moment." : `Found ${count} moments.`
-  return count === 1
-    ? `${found} Keep it, skip it, or have me re-cut it.`
-    : `${found} Keep, skip, or re-cut each one.`
+  // The count is the finished one: what the server shows once the search
+  // has ended, never the running tally. When a number the person wrote
+  // held some back, say so — "the best 3 of the 5" is true; "3 moments"
+  // alone would leave the other two unmentioned.
+  const shown = count === 1 ? "one moment" : `${count} moments`
+  const available = request.deck?.availableCandidateCount ?? null
+  if (available !== null && available > count) return `Here are the best ${count} of the ${available} I found.`
+  // Fewer than were asked for is an answer too, said as one — a tester on
+  // 2026-09-04 asked for five, got four, and was told nothing about it.
+  const requested = request.deck?.requestedResultCount ?? null
+  if (requested !== null && count < requested) return `You asked for ${requested} — I found ${count === 1 ? "one" : count} that ${count === 1 ? "fits" : "fit"}.`
+  return followUp ? `Found ${shown} for that too.` : `Found ${shown}.`
+}
+
+/** What has become of a kept moment's file, from the state the server reports. */
+export function productionLine(description: string, production: Production | null): string {
+  const title = description || "that moment"
+  if (production === "producing") return `Kept. Cutting "${title}" to 9:16 now.`
+  if (production === "produced") return `"${title}" is ready — download it or publish it from the card.`
+  if (production === "failed") return `I couldn't finish cutting "${title}". Keep it again to retry.`
+  return `Kept "${title}".`
 }
 
 /** The stretch that could not be looked at, named. Null when the whole video was. */

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import type { Video } from "@/lib/types"
 import { Dialogue } from "./dialogue"
 import { MomentFeed, feedCursor, feedMoments, type FeedMoment } from "./moment-feed"
@@ -15,8 +15,8 @@ export interface ReviewStepProps {
   searching: boolean
   /** The publish dialog is open over the page: the feed decides nothing until it closes. */
   publishing?: boolean
-  /** Resolves true once the moment is kept; false when the server refused (the page has shown why). */
-  onKeep: (requestId: string, matchId: string) => boolean | void | Promise<boolean | void>
+  /** Keeps the moment and starts its file. Resolves to nothing useful here; the page shows a refusal. */
+  onKeep: (requestId: string, matchId: string) => unknown
   onSkip: (requestId: string, matchId: string) => void | Promise<void>
   onUndoSkip: (requestId: string, matchId: string) => void | Promise<void>
   /** Resolves false when the re-cut did not start (the page has shown why). */
@@ -35,7 +35,11 @@ export interface ReviewStepProps {
  */
 export function ReviewStep({ exchanges, video, busy, searching, publishing = false, onKeep, onSkip, onUndoSkip, onReclip, onAsk, onPublish, onUploadMore }: ReviewStepProps) {
   const moments = useMemo(() => feedMoments(exchanges, video), [exchanges, video])
-  const active: FeedMoment | undefined = moments[feedCursor(moments)]
+  // The card in front, as the feed reports it: what "this one" means in the
+  // dialogue. Kept moments stay in the feed to be looked at again, so the
+  // front card is a position the person moves, not the first open decision.
+  const [front, setFront] = useState<number | null>(null)
+  const active: FeedMoment | undefined = moments[front ?? feedCursor(moments)]
 
   return (
     // Narrow padding on a phone: the card keeps its width there, and the
@@ -45,6 +49,8 @@ export function ReviewStep({ exchanges, video, busy, searching, publishing = fal
         moments={moments}
         busy={busy}
         paused={publishing}
+        searching={searching}
+        onFrontChange={setFront}
         onKeep={(moment) => void onKeep(moment.requestId, moment.match.id)}
         onSkip={(moment) => void onSkip(moment.requestId, moment.match.id)}
         onUndoSkip={(moment) => void onUndoSkip(moment.requestId, moment.match.id)}

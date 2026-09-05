@@ -1,9 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { ClipMatch, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import type { Clip, ClipMatch, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 
 import type { UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
@@ -11,10 +11,10 @@ import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { WorkspaceShell } from "@/components/workspace/shell"
 import { Wizard } from "@/components/start/wizard"
 import { UploadStep } from "@/components/start/upload-step"
-import { WatchStep } from "@/components/start/watch-step"
 import { ReviewStep } from "@/components/start/review-step"
 import { PublishDialog } from "@/components/start/publish-dialog"
-import type { PublishableClip } from "@/components/theater/publish-flow"
+import { publishableFor } from "@/components/start/production"
+import { askGate } from "@/components/start/ask-gate"
 import type { Exchange, StartStep } from "@/components/start/types"
 import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
 import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
@@ -51,8 +51,13 @@ export default function StartPage() {
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<StartStep>("upload")
   const [promptDraft, setPromptDraft] = useState("")
-  /** The kept clip the publish screens are open for, if any. */
-  const [publishing, setPublishing] = useState<PublishableClip | null>(null)
+  /**
+   * The kept clip the publish screens are open for, if any. Only its
+   * identity is held: whether its file is ready is read from the
+   * conversation on every render, so the dialog's "ready" follows the
+   * server rather than a snapshot taken at the press.
+   */
+  const [publishing, setPublishing] = useState<{ id: string; title: string } | null>(null)
   /** A Publish press whose keep is still being written: the feed waits, and a second press is refused. */
   const [publishPending, setPublishPending] = useState(false)
   const publishInFlight = useRef(false)
@@ -254,19 +259,20 @@ export default function StartPage() {
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
 
   /**
-   * Asks a question of the video. The first question goes to the waiting
-   * screen; one asked from the review screen stays there — its moments land
-   * in the feed as they are cut, and the dialogue shows it looking.
+   * Asks a question of the video. Every question, the first included, is
+   * answered on the review screen: the dialogue acknowledges it at once and
+   * says what the search is doing, and its moments land in the feed as they
+   * are found. There is no waiting screen any more.
    */
   const startSearch = useCallback(
-    async (instruction: string, options: { stay?: boolean } = {}): Promise<boolean> => {
+    async (instruction: string): Promise<boolean> => {
       if (!video || busy) return false
       setError(null)
       setBusy(true)
       try {
         const { clipRequest: created } = await api.createClipRequest(video.id, instruction)
         setExchanges((previous) => [...previous, { request: created, clips: [] }])
-        if (!options.stay) setStep("watch")
+        setStep("review")
         return true
       } catch (cause) {
         fail(cause)
@@ -279,32 +285,18 @@ export default function StartPage() {
   )
 
   const handleNext = useCallback(() => {
-    if (step === "upload") {
-      if (searchRunning) {
-        setStep("watch")
-        return
-      }
-      const instruction = promptDraft.trim()
-      if (!instruction || !video?.readyForSearch || busy) return
-      setPromptDraft("")
-      void startSearch(instruction)
-    } else if (step === "watch") {
+    if (step !== "upload") return
+    if (searchRunning) {
       setStep("review")
+      return
     }
+    const instruction = promptDraft.trim()
+    // A question goes as soon as the upload has landed; the answer waits for
+    // the rest inside the search, and the dialogue says what it is waiting on.
+    if (!instruction || !askGate(video).accepting || busy) return
+    setPromptDraft("")
+    void startSearch(instruction)
   }, [step, promptDraft, video, busy, searchRunning, startSearch])
-
-  const handleBack = useCallback(() => {
-    if (step === "watch") setStep("upload")
-  }, [step])
-
-  /** Drops the search that could not finish, but keeps its text so the user can edit and resend. */
-  const retrySearch = useCallback(() => {
-    const instruction = currentRequest?.instruction ?? ""
-    setExchanges((previous) => previous.slice(0, -1))
-    setPromptDraft(instruction)
-    setError(null)
-    setStep("upload")
-  }, [currentRequest?.instruction])
 
   /**
    * Taking a file off the list takes it off the screen too: a video that was
@@ -444,9 +436,14 @@ export default function StartPage() {
     [exchanges, fail, showVerdict],
   )
 
-  /** Resolves true once the moment is approved and its clip recorded; false when the server refused, with the reason shown. */
+  /**
+   * Keep: the moment is approved and its file is started — the cut, the
+   * framing and the 9:16 encode happen from this press, not before it.
+   * Resolves to the clip the server recorded; null when it refused, with
+   * the reason shown.
+   */
   const keepMatch = useCallback(
-    async (exchangeRequestId: string, matchId: string): Promise<boolean> => {
+    async (exchangeRequestId: string, matchId: string): Promise<Clip | null> => {
       setError(null)
       const attempt = (verdictAttempts.current.get(matchId) ?? 0) + 1
       verdictAttempts.current.set(matchId, attempt)
@@ -458,11 +455,11 @@ export default function StartPage() {
       try {
         await api.rateMatch(exchangeRequestId, matchId, "approved", null)
       } catch (cause) {
-        if (!isCurrent()) return false
+        if (!isCurrent()) return null
         pendingVerdicts.current.delete(matchId)
         showVerdict(exchangeRequestId, matchId, null, null)
         fail(cause)
-        return false
+        return null
       }
 
       try {
@@ -475,48 +472,60 @@ export default function StartPage() {
             return { ...exchange, clips: Array.from(merged.values()) }
           }),
         )
-        return true
+        return created.find((clip) => clip.clipMatchId === matchId) ?? created[0] ?? null
       } catch (cause) {
-        if (!isCurrent()) return false
+        if (!isCurrent()) return null
         pendingVerdicts.current.set(matchId, { verdict: null, reason: null })
         showVerdict(exchangeRequestId, matchId, null, null)
         void api.rateMatch(exchangeRequestId, matchId, null, null).catch(() => undefined)
         fail(cause)
-        return false
+        return null
       }
     },
     [fail, showVerdict],
   )
 
   /**
-   * Publish from the feed: the moment is kept (a clip sent out is a clip in
-   * the library), then the publish screens open for its clip. A keep the
+   * Publish from the feed means keep: the moment is approved and its file
+   * started (a clip sent out is a clip in the library), and the publish
+   * screens open for that clip and wait for the file. A moment kept earlier
+   * already has its clip and goes straight to the screens. A keep the
    * server refused opens nothing — the banner says why.
    */
   const publishMoment = useCallback(
     async (exchangeRequestId: string, matchId: string) => {
-      // One publish at a time. The keep advances the feed at once, so a
-      // second press could otherwise land while the first keep is still
-      // being written and swap the clip under an open dialog.
+      // One publish at a time: a second press could otherwise land while the
+      // first keep is still being written and swap the clip under an open
+      // dialog.
       if (publishInFlight.current || publishing !== null) return
       const match = exchanges
         .find((exchange) => exchange.request.id === exchangeRequestId)
         ?.request.matches?.find((candidate) => candidate.id === matchId)
-      const clipId = match?.clip?.id
-      if (!match || !clipId) return
+      if (!match) return
       publishInFlight.current = true
       setPublishPending(true)
       try {
-        const kept = match.feedback === "approved" ? true : await keepMatch(exchangeRequestId, matchId)
-        if (!kept) return
+        let clipId = match.feedback === "approved" ? (match.clip?.id ?? null) : null
+        if (!clipId) {
+          const kept = await keepMatch(exchangeRequestId, matchId)
+          if (!kept) return
+          clipId = kept.id
+        }
+        const id = clipId
         // Never replace a clip already in the dialog: the first press owns it.
-        setPublishing((current) => current ?? { id: clipId, title: match.description || "A moment from your video", ready: true })
+        setPublishing((current) => current ?? { id, title: match.description || "A moment from your video" })
       } finally {
         publishInFlight.current = false
         setPublishPending(false)
       }
     },
     [exchanges, keepMatch, publishing],
+  )
+
+  /** The clip in the dialog, with whether its file is there read fresh from the conversation. */
+  const publishable = useMemo(
+    () => (publishing ? publishableFor(exchanges, publishing.id, publishing.title) : null),
+    [exchanges, publishing],
   )
 
   const reset = useCallback(() => {
@@ -579,13 +588,6 @@ export default function StartPage() {
     void publishMoment(found.requestId, found.matchId)
   }, [resumePublish, busy, exchanges, publishMoment])
 
-  useEffect(() => {
-    if (step !== "watch") return
-    // A search that failed has no moments to review; the waiting screen shows
-    // what went wrong and offers another go.
-    if (currentRequest?.status === "completed") setStep("review")
-  }, [step, currentRequest?.status])
-
   if (!configured) {
     return (
       <main className="shadcn-scope mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center bg-background px-6 py-16 text-foreground">
@@ -613,13 +615,10 @@ export default function StartPage() {
                 onRemove={dropUpload}
                 onRetry={retryUpload}
                 onSubmit={handleNext}
-                onResume={() => setStep("watch")}
+                onResume={() => setStep("review")}
                 disabled={busy}
                 searchInstruction={searchRunning ? currentRequest?.instruction : undefined}
               />
-            )}
-            {step === "watch" && (
-              <WatchStep request={currentRequest} onBack={handleBack} onRetry={retrySearch} />
             )}
           </Wizard>
         ) : (
@@ -633,13 +632,13 @@ export default function StartPage() {
             onSkip={(requestId, matchId) => rateMatch(requestId, matchId, "rejected")}
             onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}
             onReclip={reclipMatch}
-            onAsk={(instruction) => (searchRunning ? false : startSearch(instruction, { stay: true }))}
+            onAsk={(instruction) => (searchRunning ? false : startSearch(instruction))}
             onPublish={publishMoment}
             onUploadMore={reset}
           />
         )}
 
-        <PublishDialog clip={publishing} onClose={() => setPublishing(null)} onSignIn={parkVideoForSignIn} />
+        <PublishDialog clip={publishable} onClose={() => setPublishing(null)} onSignIn={parkVideoForSignIn} />
         <ResumeAfterSignIn onPublish={setResumePublish} />
 
         {error && (

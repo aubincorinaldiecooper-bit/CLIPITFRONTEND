@@ -17,17 +17,24 @@ import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import type { ClipRequest, Video } from "@/lib/types"
-import { answerLine, coverageLine, uncertainLine } from "./answer-words"
+import { acknowledgeLine, answerLine, candidatesLine, coverageLine, productionLine, progressLine, uncertainLine } from "./answer-words"
+import { askGate } from "./ask-gate"
 import type { FeedMoment } from "./moment-feed"
+import { StreamedText } from "./streamed-text"
 import type { Exchange } from "./types"
 
 /**
- * The dialogue beside the feed — the owner's screen of 2026-09-02.
+ * The dialogue beside the feed — the owner's screen of 2026-09-02, and the
+ * conversation of 2026-09-05.
  *
- * Every question asked of this video, and what came of it, in order. A new
- * question is a new search: its moments land in the feed as the server
- * cuts them. Words that ask for the moment ON SCREEN to be reworked —
- * "tighten this one", "re-cut it" — go to Re-clip instead of to a search.
+ * Every question asked of this video, the first included, and what came of
+ * it, in order. A question is acknowledged the moment it is taken; while
+ * the search runs the dialogue says what it is doing, from the states the
+ * server reports — the video still being prepared, the footage being
+ * watched part by part, moments found so far — and its moments land in the
+ * feed when the search has finished with them. Words that ask for the
+ * moment ON SCREEN to be reworked — "tighten this one", "re-cut it" — go
+ * to Re-clip instead of to a search.
  *
  * One honesty rule sits in the middle of that: the system cannot yet follow
  * the WORDS of an edit. A Re-clip re-reads the footage around the moment
@@ -74,6 +81,25 @@ const SEARCH_OPENERS = /^\s*(find|show|search|look for|clip every|every time|whe
 export function isEditRequest(text: string): boolean {
   if (SEARCH_OPENERS.test(text) && !RECLIP_VERBS.test(text)) return false
   return RECLIP_VERBS.test(text) || ((REWORK_WORDS.test(text) || EDIT_WORDS.test(text)) && THIS_ONE.test(text))
+}
+
+/** "video 4", "clip 2", "moment 3", "#2", "the 4th one". */
+const NUMBERED = /\b(?:video|clip|moment|number|no\.?)\s*#?\s*(\d{1,3})\b/i
+const HASHED = /(?:^|\s)#(\d{1,3})\b/
+const ORDINAL = /\b(\d{1,3})(?:st|nd|rd|th)\b/i
+
+/**
+ * Which moment an edit names, counted the way the feed counts — "video 4"
+ * is the fourth card. Null when none is named, in which case the edit is
+ * about the moment on screen. A tester on 2026-09-04 wrote "re-cut video
+ * 4" from the end card and was told there was no moment on screen; there
+ * were four, and she had said which.
+ */
+export function referencedIndex(text: string): number | null {
+  const found = NUMBERED.exec(text) ?? HASHED.exec(text) ?? ORDINAL.exec(text)
+  if (!found) return null
+  const number = Number(found[1])
+  return Number.isInteger(number) && number >= 1 ? number - 1 : null
 }
 
 function DialogueIllustration() {
@@ -138,12 +164,12 @@ function UserLine({ text }: { text: string }) {
  * rather than a coloured slab. Ghost keeps the bubble's alignment and
  * padding without the fill.
  */
-function ModelLine({ text, children }: { text?: string; children?: React.ReactNode }) {
+function ModelLine({ text, streamed = false, children }: { text?: string; streamed?: boolean; children?: React.ReactNode }) {
   return (
     <ChatMessage sender="assistant">
       <ChatMessageBubble variant="ghost">
         <span className="text-sm leading-relaxed text-muted-foreground" data-testid="dialogue-model">
-          {text}
+          {text !== undefined && (streamed ? <StreamedText text={text} /> : text)}
           {children}
         </span>
       </ChatMessageBubble>
@@ -227,59 +253,55 @@ function SearchActivity({ request }: { request: ClipRequest }) {
 }
 
 /**
- * What the system says about one question once it has answered.
- *
- * The FIRST question was asked on the upload step, not here, so it is not
- * conversation: for it, only what must be admitted is said — a stretch that
- * could not be looked at, moments seen but not trusted, nothing found. When
- * that first answer has moments and nothing to admit, nothing is said at
- * all: the cards speak (the owner's rule from the theater), and the
- * dialogue opens on its empty state. That the video is still being read is
- * NOT an admission about the answer and is not said here — the owner's
- * call of 2026-09-02, after a first answer opened with "4 so far — I'm
- * only 11 minutes in. Still watching the rest": the chat is a
- * conversation, not a report of what the reading is doing. A follow-up
- * question, asked here, gets its full answer.
+ * What the system says about one question once it has answered: the count
+ * it finished with, a stretch that could not be looked at, moments seen but
+ * not trusted, nothing found. Every question gets its answer here now — the
+ * first one too, since it is asked in this conversation and acknowledged
+ * in it (the owner's call of 2026-09-05, replacing the rule that the first
+ * answer stayed silent and let the cards speak).
  */
-export function exchangeLines(exchange: Exchange, readThroughSeconds: number | null | undefined, first: boolean): string[] {
+export function exchangeLines(exchange: Exchange, readThroughSeconds: number | null | undefined, followUp: boolean): string[] {
   const { request } = exchange
   if (isSearching(exchange)) return []
-  const count = request.matches?.length ?? 0
-  const answered = !first || request.status === "failed" || count === 0
-  return [answered ? answerLine(request, readThroughSeconds) : null, coverageLine(request), uncertainLine(request)].filter(
+  return [answerLine(request, readThroughSeconds, followUp), coverageLine(request), uncertainLine(request)].filter(
     (line): line is string => typeof line === "string" && line.length > 0,
   )
 }
 
-function ExchangeLines({ exchange, readThroughSeconds, first }: { exchange: Exchange; readThroughSeconds: number | null | undefined; first: boolean }) {
+/**
+ * One question's side of the conversation: the acknowledgement, the
+ * activity row, and then either what the search is doing or what it found.
+ *
+ * Every line while the search runs is read from the request and the video
+ * as the page polls them — the words change when the state does, and not
+ * before. The backend's own progress string is not printed word for word:
+ * it is a log line, not something anyone said (the owner's call,
+ * 2026-09-03), and the exact numbers live in the activity row for anyone
+ * who opens it.
+ */
+function ExchangeLines({ exchange, video, followUp }: { exchange: Exchange; video: Video | null; followUp: boolean }) {
   const { request } = exchange
+  const acknowledgement = <ModelLine text={acknowledgeLine(request.instruction, followUp)} streamed />
   if (isSearching(exchange)) {
+    const candidates = candidatesLine(request)
     return (
       <>
+        {acknowledgement}
         <SearchActivity request={request} />
-        {/*
-          The backend's own progress string used to be printed here word for
-          word — "Reading 1 of 5". It is a log line, not something anyone
-          said, and the owner's call (2026-09-03) is that the chat talks like
-          a person. How far along it is now lives in the activity row above,
-          in our words, for anyone who opens it.
-        */}
         <ModelLine>
-          <TextShimmer as="span">Looking through your video…</TextShimmer>
+          <TextShimmer as="span">{progressLine(request, video)}</TextShimmer>
         </ModelLine>
+        {candidates && <ModelLine text={candidates} streamed />}
       </>
     )
   }
-  const lines = exchangeLines(exchange, readThroughSeconds, first)
-  // Silence stays silence. When the first answer has nothing to admit the
-  // chat says nothing at all and the cards speak — so the activity row does
-  // not appear either, or the empty state would never be reached.
-  if (lines.length === 0) return null
+  const lines = exchangeLines(exchange, video?.index?.readThroughSeconds, followUp)
   return (
     <>
+      {acknowledgement}
       <SearchActivity request={request} />
       {lines.map((line, index) => (
-        <ModelLine key={`${request.id}-${index}`} text={line} />
+        <ModelLine key={`${request.id}-${index}`} text={line} streamed />
       ))}
     </>
   )
@@ -326,7 +348,6 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
   const inputRef = useRef<ChatComposerInputHandle>(null)
-  const readThroughSeconds = video?.index?.readThroughSeconds
 
   const addNote = (role: Note["role"], text: string, reclipOf?: string) =>
     setNotes((previous) => [
@@ -335,45 +356,55 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
     ])
   const noteText = (note: Note) => (note.reclipOf ? reclipNoteText(moments, note.reclipOf, note.text) : note.text)
 
-  // Nothing said yet: no follow-up question, no note, and a first answer
-  // with nothing to admit. That is the empty state — the cards speak.
-  const first = exchanges[0]
-  const firstSpeaks = first !== undefined && (isSearching(first) || exchangeLines(first, readThroughSeconds, true).length > 0)
-  const entryCount = (firstSpeaks ? 1 : 0) + Math.max(0, exchanges.length - 1) + notes.length
+  // What has become of each kept moment, said after the question it came
+  // from and kept current from the moment itself: "cutting", then "ready",
+  // or "couldn't finish". Keep is production, and production is news.
+  const kept = moments.filter((moment) => moment.decision === "kept")
+  const keptAfter = (requestId: string) => kept.filter((moment) => moment.requestId === requestId)
+
+  // Nothing said yet: no question, no note. That is the empty state.
+  const entryCount = exchanges.length + notes.length + kept.length
 
   const handleAsk = async (text: string): Promise<AskOutcome> => {
     if (isEditRequest(text)) {
       addNote("user", text)
-      const title = active?.match.description || "this moment"
-      if (!active) {
-        addNote("model", "There's no moment on screen to re-cut. Ask for one first.")
+      // A moment named by number is that moment; otherwise the one on screen.
+      const referenced = referencedIndex(text)
+      const target = referenced === null ? active : moments[referenced]
+      const title = target?.match.description || "this moment"
+      if (referenced !== null && !target) {
+        addNote("model", `There's no moment ${referenced + 1} here — ${moments.length === 1 ? "there's one" : `there are ${moments.length}`}.`)
         return true
       }
-      if (active.reworking) {
+      if (!target) {
+        addNote("model", "There's no moment on screen to re-cut. Scroll to one, or say which — \"re-cut moment 2\".")
+        return true
+      }
+      if (target.reworking) {
         addNote("model", `Already reworking "${title}".`)
         return true
       }
-      if ((active.match.reclipsRemaining ?? 0) <= 0) {
+      if ((target.match.reclipsRemaining ?? 0) <= 0) {
         addNote("model", `"${title}" has used all its re-cuts.`)
         return true
       }
       // The note follows the result: a re-cut the server refused must not
       // sit in the thread as one that is underway — and one that started
       // keeps following the moment, to "done" or to "didn't work".
-      const started = await onReclip(active)
+      const started = await onReclip(target)
       if (started === false) {
         addNote("model", `"${title}" could not be re-cut just now — nothing changed. The message above says why.`)
       } else {
-        addNote("model", `Re-cut requested for "${title}".`, active.match.id)
+        addNote("model", `Re-cut requested for "${title}".`, target.match.id)
       }
       return true
     }
     return onAsk(text)
   }
 
-  const ready = video?.readyForSearch === true
-  const disabled = searching || !ready
-  const placeholder = searching ? "Still looking…" : ready ? "Ask for a moment…" : "Your video is still being prepared…"
+  const gate = askGate(video)
+  const disabled = searching || !gate.accepting
+  const placeholder = searching ? "Still looking…" : (gate.placeholder ?? "Ask for a moment…")
   const notesAfter = (requestId: string | null) => notes.filter((note) => note.afterRequestId === requestId)
 
   const submit = async (value: string) => {
@@ -440,9 +471,11 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
           {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
           {exchanges.map((exchange, index) => (
             <Fragment key={exchange.request.id}>
-              {/* The first question was asked on the upload step; only its caveats belong here. */}
-              {index > 0 && <UserLine text={exchange.request.instruction} />}
-              <ExchangeLines exchange={exchange} readThroughSeconds={readThroughSeconds} first={index === 0} />
+              <UserLine text={exchange.request.instruction} />
+              <ExchangeLines exchange={exchange} video={video} followUp={index > 0} />
+              {keptAfter(exchange.request.id).map((moment) => (
+                <ModelLine key={`kept-${moment.match.id}`} text={productionLine(moment.match.description, moment.production)} streamed />
+              ))}
               {notesAfter(exchange.request.id).map((note) =>
                 note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
               )}
