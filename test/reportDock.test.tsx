@@ -34,21 +34,22 @@ describe('ReportDock', () => {
       </>,
     )
     expect(status()).toContain('Something not working?')
-    expect(screen.getByLabelText('What went wrong').getAttribute('tabindex')).toBe('-1')
+    expect(screen.queryByLabelText('What went wrong')).toBeNull()
 
     fireEvent.keyDown(screen.getByLabelText('elsewhere'), { key: 'r' })
-    expect(screen.getByLabelText('What went wrong').getAttribute('tabindex')).toBe('-1')
+    expect(screen.queryByLabelText('What went wrong')).toBeNull()
 
     fireEvent.keyDown(window, { key: 'r' })
-    expect(screen.getByLabelText('What went wrong').getAttribute('tabindex')).toBe('0')
+    expect(screen.getByLabelText('What went wrong')).toBeTruthy()
     // The status line changes with a short fade; wait for the new words.
     await waitFor(() => expect(status()).toContain('What were you doing'))
 
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.getByLabelText('What went wrong').getAttribute('tabindex')).toBe('-1')
+    // The box leaves with a short collapse; wait for it to be gone.
+    await waitFor(() => expect(screen.queryByLabelText('What went wrong')).toBeNull())
 
     await userEvent.click(screen.getByRole('button', { name: /Report/ }))
-    expect(screen.getByLabelText('What went wrong').getAttribute('tabindex')).toBe('0')
+    expect(screen.getByLabelText('What went wrong')).toBeTruthy()
   })
 
   it('sends the words with where they were typed and what was on screen, and says so', async () => {
@@ -62,7 +63,9 @@ describe('ReportDock', () => {
       expect.objectContaining({ message: 'I kept video 4 and it never cut', page: '/', videoId: 'v-1', clipRequestId: 'q-1' }),
     )
     await waitFor(() => expect(status()).toContain('Got it'))
-    // The box is empty again, ready for the next one.
+    // The box has gone, and comes back empty for the next one.
+    await waitFor(() => expect(screen.queryByLabelText('What went wrong')).toBeNull())
+    await userEvent.click(screen.getByRole('button', { name: /Report/ }))
     expect((screen.getByLabelText('What went wrong') as HTMLTextAreaElement).value).toBe('')
   })
 
@@ -74,7 +77,6 @@ describe('ReportDock', () => {
     await userEvent.type(screen.getByLabelText('What went wrong'), 'the page went blank{enter}')
     await waitFor(() => expect(status()).toContain('Sending'))
     // Still open, its controls held, nothing moved.
-    expect(screen.getByLabelText('What went wrong').getAttribute('tabindex')).toBe('0')
     expect((screen.getByLabelText('What went wrong') as HTMLTextAreaElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: /Send/ }) as HTMLButtonElement).disabled).toBe(true)
     finish({ report: { id: 'r-3', handedOff: false } })

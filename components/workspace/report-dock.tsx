@@ -1,12 +1,19 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { ArrowUp, MessageSquareWarning, X } from "lucide-react"
+import { Button } from "@astryxdesign/core/Button"
+import { HStack } from "@astryxdesign/core/HStack"
+import { IconButton } from "@astryxdesign/core/IconButton"
+import { Kbd } from "@astryxdesign/core/Kbd"
+import { Text } from "@astryxdesign/core/Text"
+import { TextArea } from "@astryxdesign/core/TextArea"
+import { VStack } from "@astryxdesign/core/VStack"
+import { MediaTheme } from "@astryxdesign/core/theme"
 import { Logo } from "@/components/brand/logo"
 import { api } from "@/lib/api"
 import { readReportContext } from "@/lib/report-context"
-import { cn } from "@/lib/utils"
 
 /**
  * The report dock: a way to say "something is wrong" from any page, in the
@@ -24,6 +31,11 @@ import { cn } from "@/lib/utils"
  * black pill instead of a grey one, one control instead of two (there is
  * no voice), and a shortcut that is real — R opens it, Escape closes it —
  * rather than a chip that names a key nothing listens for.
+ *
+ * Built from Astryx's furniture (Codex's finding on #88): the button, the
+ * key, the box and the text are the components every other screen uses,
+ * inside a MediaTheme so they read on the dark pill; the pill itself and
+ * the collapse are the only things drawn here.
  */
 type DockMode = "idle" | "composing" | "sending" | "sent" | "failed"
 
@@ -40,55 +52,55 @@ const STATUS: Record<DockMode, string> = {
   failed: "Couldn't send. Your words are still here — try again.",
 }
 
-function DockButton({
-  icon,
-  label,
-  shortcut,
-  disabled = false,
-}: {
-  icon: React.ReactNode
-  label: string
-  shortcut: string
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="submit"
-      disabled={disabled}
-      className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-sm font-medium text-background transition hover:bg-background/10 disabled:opacity-60"
-    >
-      <span className="flex size-4 items-center justify-center">{icon}</span>
-      <span>{label}</span>
-      <kbd aria-hidden className="flex h-6 min-w-6 items-center justify-center rounded-md bg-background/15 px-1 text-xs">
-        {shortcut}
-      </kbd>
-    </button>
-  )
-}
-
 const isTyping = (target: EventTarget | null) => {
   const element = target as HTMLElement | null
   return Boolean(element && (element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.isContentEditable))
 }
 
-export function ReportDock({ className }: { className?: string }) {
+export function ReportDock() {
   const [mode, setMode] = useState<DockMode>("idle")
   const [message, setMessage] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const shouldReduceMotion = useReducedMotion()
   // Open through sending too: the box keeps its place while the words are
-  // on their way, and does not collapse and spring back on a failure
-  // (Codex's finding on #88).
+  // on their way, and does not collapse and spring back on a failure.
   const open = mode === "composing" || mode === "failed" || mode === "sending"
   const sending = mode === "sending"
 
   const openComposer = useCallback(() => {
-    setMode((current) => (current === "sending" ? current : current === "failed" ? current : "composing"))
-    window.requestAnimationFrame(() => textareaRef.current?.focus())
+    setMode((current) => (current === "sending" || current === "failed" ? current : "composing"))
   }, [])
   const close = useCallback(() => {
     setMode((current) => (current === "sending" ? current : "idle"))
   }, [])
+
+  const send = useCallback(async () => {
+    const text = message.trim()
+    if (!text) {
+      openComposer()
+      return
+    }
+    setMode("sending")
+    try {
+      await api.sendReport({
+        message: text.slice(0, MAX_LENGTH),
+        page: window.location.pathname,
+        ...readReportContext(),
+        userAgent: navigator.userAgent,
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
+      })
+      setMessage("")
+      setMode("sent")
+    } catch {
+      // The words stay in the box: a report that did not arrive is still
+      // the person's report, and the status says it did not arrive.
+      setMode("failed")
+    }
+  }, [message, openComposer])
+  const latestSend = useRef(send)
+  latestSend.current = send
+  const sendingRef = useRef(sending)
+  sendingRef.current = sending
 
   // R opens it and Escape closes it — never while the person is typing
   // somewhere else, and never from inside a dialog, whose keys are its own.
@@ -113,122 +125,106 @@ export function ReportDock({ className }: { className?: string }) {
     return () => window.removeEventListener("keydown", onKey)
   }, [open, openComposer, close])
 
+  // Enter sends; Shift+Enter is a new line. On the element itself, since
+  // the box is Astryx's and takes no key handler of its own.
+  useEffect(() => {
+    const element = textareaRef.current
+    if (!element) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.shiftKey) return
+      event.preventDefault()
+      if (!sendingRef.current) void latestSend.current()
+    }
+    element.addEventListener("keydown", onKey)
+    return () => element.removeEventListener("keydown", onKey)
+  }, [open])
+
   useEffect(() => {
     if (mode !== "sent") return
     const timer = window.setTimeout(() => setMode("idle"), SENT_LINGER_MS)
     return () => window.clearTimeout(timer)
   }, [mode])
 
-  const send = async () => {
-    const text = message.trim()
-    if (!text) {
-      openComposer()
-      return
-    }
-    setMode("sending")
-    try {
-      await api.sendReport({
-        message: text.slice(0, MAX_LENGTH),
-        page: window.location.pathname,
-        ...readReportContext(),
-        userAgent: navigator.userAgent,
-        viewport: `${window.innerWidth}x${window.innerHeight}`,
-      })
-      setMessage("")
-      setMode("sent")
-    } catch {
-      // The words stay in the box: a report that did not arrive is still
-      // the person's report, and the status says it did not arrive.
-      setMode("failed")
-    }
-  }
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (mode === "sending") return
-    if (open) {
-      void send()
-      return
-    }
-    openComposer()
-  }
-
-  const onTextareaKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey) return
-    event.preventDefault()
-    if (mode !== "sending") void send()
-  }
-
   return (
-    <form
-      onSubmit={handleSubmit}
-      aria-label="Report a problem with Clipit"
-      data-testid="report-dock"
-      className={cn("fixed bottom-4 right-4 z-(--z-dock) w-[calc(100vw-2rem)] max-w-sm", className)}
-    >
-      <div className="flex w-full flex-col-reverse overflow-hidden rounded-2xl bg-foreground p-2 text-background shadow-2xl ring-1 ring-foreground/10">
-        <div className="flex items-center gap-3">
-          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-background/15">
-            <Logo variant="mark" size={18} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium leading-none text-background">Clipit</p>
+    <MediaTheme mode="dark">
+      <VStack
+        gap={2}
+        padding={2}
+        className="fixed bottom-4 left-4 right-4 z-(--z-dock) rounded-2xl bg-foreground shadow-2xl ring-1 ring-foreground/10 sm:left-auto sm:w-full sm:max-w-sm"
+        role="region"
+        aria-label="Report a problem with Clipit"
+        data-testid="report-dock"
+      >
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="editor"
+              initial={shouldReduceMotion ? false : { height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={shouldReduceMotion ? { height: "auto", opacity: 1 } : { height: 0, opacity: 0 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.3, ease: EASE }}
+              className="overflow-hidden"
+            >
+              <VStack gap={1}>
+                <HStack justify="end">
+                  <IconButton label="Close" icon={<X aria-hidden size={14} strokeWidth={2.5} />} variant="ghost" size="sm" onClick={close} isDisabled={sending} />
+                </HStack>
+                <TextArea
+                  ref={textareaRef}
+                  label="What went wrong"
+                  isLabelHidden
+                  value={message}
+                  onChange={(value) => setMessage(value)}
+                  rows={3}
+                  size="sm"
+                  placeholder="What were you doing, and what happened instead?"
+                  isDisabled={sending}
+                  hasAutoFocus
+                />
+              </VStack>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <HStack gap={3} align="center">
+          <Logo variant="mark" size={18} className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-background/15" />
+          <VStack gap={0.5} className="min-w-0 flex-1">
+            <Text as="p" type="label" maxLines={1} hasTruncateTooltip={false}>
+              Clipit
+            </Text>
             <AnimatePresence initial={false} mode="wait">
-              <motion.p
+              <motion.div
                 key={mode}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16, ease: "easeOut" }}
-                className="mt-1 truncate text-xs text-background/70"
                 data-testid="report-status"
                 aria-live="polite"
               >
-                {STATUS[mode]}
-              </motion.p>
+                <Text as="p" type="supporting" maxLines={1} hasTruncateTooltip={false}>
+                  {STATUS[mode]}
+                </Text>
+              </motion.div>
             </AnimatePresence>
-          </div>
-          <div className="flex shrink-0 items-center">
-            {open ? (
-              <DockButton icon={<ArrowUp aria-hidden size={16} strokeWidth={2.5} />} label="Send" shortcut="↵" disabled={sending} />
-            ) : (
-              <DockButton icon={<MessageSquareWarning aria-hidden size={16} />} label="Report" shortcut="R" disabled={sending} />
-            )}
-          </div>
-        </div>
-
-        <motion.div
-          animate={{ height: open ? 120 : 0, opacity: open ? 1 : 0 }}
-          aria-hidden={!open}
-          className="overflow-hidden"
-          initial={false}
-          transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.3, ease: EASE }}
-        >
-          <div className="relative mb-2">
-            <button
+          </VStack>
+          <HStack gap={1} align="center">
+            <Button
               type="button"
-              aria-label="Close"
-              onClick={close}
-              tabIndex={open ? 0 : -1}
-              className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md text-background/70 transition hover:bg-background/10 hover:text-background"
-            >
-              <X aria-hidden size={14} strokeWidth={2.5} />
-            </button>
-            <textarea
-              ref={textareaRef}
-              aria-label="What went wrong"
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={onTextareaKeyDown}
-              placeholder="What were you doing, and what happened instead?"
-              maxLength={MAX_LENGTH}
-              disabled={sending}
-              tabIndex={open ? 0 : -1}
-              className="h-28 w-full resize-none bg-transparent px-2 py-2 pr-9 text-sm leading-6 text-background outline-none placeholder:text-background/50"
+              variant="ghost"
+              size="sm"
+              label={open ? "Send" : "Report"}
+              icon={open ? <ArrowUp aria-hidden size={16} strokeWidth={2.5} /> : <MessageSquareWarning aria-hidden size={16} />}
+              isDisabled={sending}
+              onClick={() => {
+                if (open) void send()
+                else openComposer()
+              }}
             />
-          </div>
-        </motion.div>
-      </div>
-    </form>
+            <Kbd keys={open ? "enter" : "R"} />
+          </HStack>
+        </HStack>
+      </VStack>
+    </MediaTheme>
   )
 }
