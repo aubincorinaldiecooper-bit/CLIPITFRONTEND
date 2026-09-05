@@ -345,6 +345,17 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).toHaveBeenCalledTimes(1)
   })
 
+  it('Publish waits while the moment\'s keep is being written, so it never keeps it twice', async () => {
+    // Devin's finding on #88: a quick Keep then Publish queued a second approval and cut.
+    const moments = feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })])], video)
+    const h = handlers()
+    render(<MomentFeed moments={moments} {...h} keeping={new Set(['a'])} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
+    const publish = screen.getByRole('button', { name: /^Publish/ })
+    expect((publish as HTMLButtonElement).disabled).toBe(true)
+    expect(publish.getAttribute('title')).toContain('Keeping it')
+  })
+
   it('shows a clip made on Keep before the moment has been re-read with its id', () => {
     // Devin's finding on #87: the row names the moment; that is enough.
     const early: Exchange = {

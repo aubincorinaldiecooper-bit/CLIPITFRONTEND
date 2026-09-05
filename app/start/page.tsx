@@ -56,6 +56,8 @@ export default function StartPage() {
   /** Moments whose Keep is being written; their cards' Keep waits. */
   const [keepingIds, setKeepingIds] = useState<ReadonlySet<string>>(() => new Set())
   const keepQueue = useRef(new Map<string, Promise<unknown>>())
+  const keepingRef = useRef(keepingIds)
+  keepingRef.current = keepingIds
   /** The question that owns the moment in front, for a report made from this page. */
   const [frontRequestId, setFrontRequestId] = useState<string | null>(null)
   const onFrontMomentChange = useCallback((moment: FeedMoment | undefined) => setFrontRequestId(moment?.requestId ?? null), [])
@@ -459,12 +461,18 @@ export default function StartPage() {
     [exchanges, fail, showVerdict],
   )
 
-  /**
-   * Keep: the moment is approved and its file is started — the cut, the
-   * framing and the 9:16 encode happen from this press, not before it.
-   * Resolves to the clip the server recorded; null when it refused, with
-   * the reason shown.
-   */
+  /** The server's own account of a question, applied. For when no poll would come. */
+  const refreshRequest = useCallback(
+    async (requestId: string) => {
+      const { clipRequest: latest, clips: latestClips } = await api.getClipRequest(requestId)
+      const reconciled = reconcileVerdicts(latest)
+      setExchanges((previous) =>
+        previous.map((exchange) => (exchange.request.id === reconciled.id ? { request: reconciled, clips: latestClips } : exchange)),
+      )
+    },
+    [reconcileVerdicts],
+  )
+
   /**
    * Keep: the moment is approved and its file is started — the cut, the
    * framing and the 9:16 encode happen from this press, not before it.
@@ -509,6 +517,7 @@ export default function StartPage() {
               delete: () => pendingVerdicts.current.delete(matchId),
             },
             isCurrent: () => verdictAttempts.current.get(matchId) === attempt,
+            reconcile: () => refreshRequest(exchangeRequestId),
             fail,
           })
         } finally {
@@ -519,7 +528,7 @@ export default function StartPage() {
           })
         }
       }),
-    [fail, showVerdict],
+    [fail, showVerdict, refreshRequest],
   )
 
   /**
@@ -535,6 +544,9 @@ export default function StartPage() {
       // first keep is still being written and swap the clip under an open
       // dialog.
       if (publishInFlight.current || publishing !== null) return
+      // A moment whose Keep is being written is not kept again by Publish:
+      // the card holds Publish too, and this holds the line if it did not.
+      if (keepingRef.current.has(matchId)) return
       const exchange = exchanges.find((candidate) => candidate.request.id === exchangeRequestId)
       const match = exchange?.request.matches?.find((candidate) => candidate.id === matchId)
       if (!exchange || !match) return

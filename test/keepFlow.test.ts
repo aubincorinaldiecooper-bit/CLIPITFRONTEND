@@ -17,6 +17,7 @@ const effects = () => ({
   show: vi.fn(),
   pending: { set: vi.fn(), delete: vi.fn() },
   isCurrent: vi.fn(() => true),
+  reconcile: vi.fn(async () => undefined),
   fail: vi.fn(),
 })
 
@@ -56,12 +57,23 @@ describe('runKeep', () => {
     expect(settled).toBe(true)
   })
 
-  it('a rollback that failed pends nothing, so the poll shows what the server holds', async () => {
+  it('a rollback that failed shows the keep the server holds, pends nothing, and asks for the server\'s own account', async () => {
+    // Devin's finding on #88: no poll comes for a moment with nothing made,
+    // so the card would have shown a decision the server did not hold.
     const e = effects()
     e.produce.mockRejectedValueOnce(new Error('queue down'))
     e.rollback.mockRejectedValueOnce(new Error('offline'))
     await expect(runKeep(undecided, e)).resolves.toBeNull()
     expect(e.pending.delete).toHaveBeenCalled()
+    expect(e.show).toHaveBeenLastCalledWith({ verdict: 'approved', reason: null })
+    expect(e.reconcile).toHaveBeenCalledTimes(1)
+  })
+
+  it('a rollback that went through asks for nothing more', async () => {
+    const e = effects()
+    e.produce.mockRejectedValueOnce(new Error('queue down'))
+    await expect(runKeep(undecided, e)).resolves.toBeNull()
+    expect(e.reconcile).not.toHaveBeenCalled()
   })
 
   it('a Keep again on a kept moment rolls nothing back and leaves it kept', async () => {

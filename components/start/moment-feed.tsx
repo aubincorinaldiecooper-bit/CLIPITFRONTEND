@@ -712,9 +712,11 @@ export function MomentFeed({
   // Publish is keep-and-send: it can be pressed before the file exists, and
   // the publish screens wait for the file. A moment whose cut failed can be
   // kept again the same way — the server makes it again.
-  const canPublish = top !== undefined && !reworking && free
+  const canPublish = top !== undefined && !reworking && free && !writing
   const publishTitle = reworking
     ? "Reworking this edit…"
+    : writing
+      ? "Keeping it — publish once the cut has started"
     : top?.production === "failed"
       ? "The cut failed — publishing makes it again, then sends it"
       : top?.production === "producing"
