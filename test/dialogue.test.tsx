@@ -161,6 +161,22 @@ describe('Dialogue', () => {
     expect(said()).toContain('I couldn\'t finish cutting "Harbour skyline". Keep it again to retry.')
   })
 
+  it('says things in the order they happened: a keep, then a re-cut, then a later keep', async () => {
+    // Codex's finding on #87: a Keep made after a re-cut sat above the re-cut.
+    const exchanges: Exchange[] = [{ request: request({ matches: [match({ feedback: 'approved' }), match({ id: 'm2' })] }), clips: [] }]
+    const first = moment({ decision: 'kept', production: 'producing' })
+    const second = moment({ match: match({ id: 'm2', description: 'The dunk' }) })
+    const onReclip = vi.fn()
+    const { rerender } = render(<Dialogue exchanges={exchanges} video={video} moments={[first, second]} active={second} searching={false} onAsk={vi.fn()} onReclip={onReclip} />)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Ask for a moment' }), 're-cut it{enter}')
+    expect(onReclip).toHaveBeenCalledWith(second)
+    const secondKept = moment({ match: match({ id: 'm2', description: 'The dunk' }), decision: 'kept', production: 'producing' })
+    rerender(<Dialogue exchanges={exchanges} video={video} moments={[first, secondKept]} active={secondKept} searching={false} onAsk={vi.fn()} onReclip={onReclip} />)
+    const lines = said()
+    expect(lines.indexOf('Kept. Cutting "Harbour skyline" to 9:16 now.')).toBeLessThan(lines.findIndex((line) => line?.includes('"The dunk" — same moment')))
+    expect(lines.at(-1)).toBe('Kept. Cutting "The dunk" to 9:16 now.')
+  })
+
   it('takes a question as soon as the upload has landed, and says what it is waiting on before then', () => {
     const landed = { ...video, status: 'preprocessing', readyForSearch: false, acceptsQuestions: true } as unknown as Video
     render(<Dialogue exchanges={[]} video={landed} moments={[]} active={undefined} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)

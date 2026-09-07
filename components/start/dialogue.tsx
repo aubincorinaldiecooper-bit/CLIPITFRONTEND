@@ -58,6 +58,8 @@ interface Note {
   afterRequestId: string | null
   role: "user" | "model"
   text: string
+  /** Its place in the one order everything said after a question shares. */
+  seq: number
   /** Set on a note whose words follow a moment's re-cut. */
   reclipOf?: string
 }
@@ -349,17 +351,28 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const [pending, setPending] = useState(false)
   const inputRef = useRef<ChatComposerInputHandle>(null)
 
-  const addNote = (role: Note["role"], text: string, reclipOf?: string) =>
+  // One order for everything said after a question: a note takes its
+  // place when it is written, a kept moment's news when the keep is first
+  // seen. Without it a Keep made after a re-cut sat above the re-cut in
+  // the thread (Codex's finding on #87).
+  const sequence = useRef(0)
+  const keptSeq = useRef(new Map<string, number>())
+  const addNote = (role: Note["role"], text: string, reclipOf?: string) => {
+    const seq = sequence.current++
     setNotes((previous) => [
       ...previous,
-      { id: `note-${previous.length}-${Date.now()}`, afterRequestId: exchanges.at(-1)?.request.id ?? null, role, text, ...(reclipOf ? { reclipOf } : {}) },
+      { id: `note-${previous.length}-${Date.now()}`, afterRequestId: exchanges.at(-1)?.request.id ?? null, role, text, seq, ...(reclipOf ? { reclipOf } : {}) },
     ])
+  }
   const noteText = (note: Note) => (note.reclipOf ? reclipNoteText(moments, note.reclipOf, note.text) : note.text)
 
   // What has become of each kept moment, said after the question it came
   // from and kept current from the moment itself: "cutting", then "ready",
   // or "couldn't finish". Keep is production, and production is news.
   const kept = moments.filter((moment) => moment.decision === "kept")
+  for (const moment of kept) {
+    if (!keptSeq.current.has(moment.match.id)) keptSeq.current.set(moment.match.id, sequence.current++)
+  }
   const keptAfter = (requestId: string) => kept.filter((moment) => moment.requestId === requestId)
 
   // Nothing said yet: no question, no note. That is the empty state.
@@ -406,6 +419,20 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const disabled = searching || !gate.accepting
   const placeholder = searching ? "Still looking…" : (gate.placeholder ?? "Ask for a moment…")
   const notesAfter = (requestId: string | null) => notes.filter((note) => note.afterRequestId === requestId)
+  /** Everything said after a question, in the order it was said. */
+  const saidAfter = (requestId: string) =>
+    [
+      ...keptAfter(requestId).map((moment) => ({
+        seq: keptSeq.current.get(moment.match.id) ?? 0,
+        node: <ModelLine key={`kept-${moment.match.id}`} text={productionLine(moment.match.description, moment.production)} streamed />,
+      })),
+      ...notesAfter(requestId).map((note) => ({
+        seq: note.seq,
+        node: note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
+      })),
+    ]
+      .sort((a, b) => a.seq - b.seq)
+      .map((entry) => entry.node)
 
   const submit = async (value: string) => {
     const trimmed = value.trim()
@@ -473,12 +500,7 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
             <Fragment key={exchange.request.id}>
               <UserLine text={exchange.request.instruction} />
               <ExchangeLines exchange={exchange} video={video} followUp={index > 0} />
-              {keptAfter(exchange.request.id).map((moment) => (
-                <ModelLine key={`kept-${moment.match.id}`} text={productionLine(moment.match.description, moment.production)} streamed />
-              ))}
-              {notesAfter(exchange.request.id).map((note) =>
-                note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />,
-              )}
+              {saidAfter(exchange.request.id)}
             </Fragment>
           ))}
         </ChatMessageList>

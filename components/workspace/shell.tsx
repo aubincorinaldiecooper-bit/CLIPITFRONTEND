@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { Logo } from "@/components/brand/logo"
 import { WorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { ProfileDropdown } from "@/components/workspace/profile-dropdown"
+import { ReportDock } from "@/components/workspace/report-dock"
 import { NotchNav, type NotchItemData } from "@/components/ui/adaptive-notch-navigation-bar"
 
 /**
@@ -105,6 +106,8 @@ export function WorkspaceShell({
             {children}
           </div>
           <Toaster />
+          {/* Bottom right, on every workspace page: a way to say something is wrong. */}
+          <ReportDock />
         </NotchNav>
       </WorkspaceSignInGate>
     </div>

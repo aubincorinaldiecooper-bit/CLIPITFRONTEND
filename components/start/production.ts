@@ -1,5 +1,5 @@
 import type { PublishableClip } from "@/components/theater/publish-flow"
-import type { Clip, ClipMatch } from "@/lib/types"
+import type { Clip, ClipMatch, MatchFeedback, MatchFeedbackReason } from "@/lib/types"
 import type { Exchange } from "./types"
 
 /**
@@ -30,6 +30,54 @@ export function productionOf(clip: Clip | null | undefined, stub?: ClipMatch["cl
     return clip.media.url ? "produced" : "producing"
   }
   return clip.url ? "produced" : "producing"
+}
+
+/**
+ * Whether Publish has to keep the moment before it can send it. A moment
+ * not yet kept has nothing made; a kept moment whose cut failed is kept
+ * again, which makes it again (the server produces on Keep for a failed
+ * render). Otherwise its clip already exists (Devin's and Codex's finding
+ * on #87: a failed cut had no working retry).
+ */
+export function needsKeep(match: Pick<ClipMatch, "feedback" | "clip">, clip: Clip | null | undefined): boolean {
+  if (match.feedback !== "approved") return true
+  // A row the conversation holds counts even before the match has been
+  // re-read with its id (Codex's finding on #88: Publish kept again, and
+  // cut again, a moment whose finished clip was already on screen).
+  if (!clip && !match.clip?.id) return true
+  return productionOf(clip, match.clip) === "failed"
+}
+
+/** The clip row a moment has, by the id the match names or by the moment the row names. */
+export function clipRowFor(match: Pick<ClipMatch, "id" | "clip">, clips: Clip[]): Clip | null {
+  const clipId = match.clip?.id
+  return clips.find((clip) => (clipId ? clip.id === clipId : clip.clipMatchId === match.id)) ?? null
+}
+
+/** What the card shows again after a Keep that failed, and whether the server has to be told. */
+export interface KeepRollback {
+  verdict: MatchFeedback | null
+  reason: MatchFeedbackReason | null
+  /** Only when the failed press had recorded a verdict the moment did not have before. */
+  tellServer: boolean
+}
+
+/**
+ * A press that failed changes nothing it did not make. A first Keep whose
+ * cut then did not start takes its own approval back; a Keep again on a
+ * moment already kept — its cut failed once — leaves the moment kept when
+ * it fails again, at either step (Devin's finding on #88: the retry used
+ * the first Keep's rollback and made a kept moment undecided).
+ */
+export function afterFailedKeep(
+  previous: { verdict: MatchFeedback | null; reason: MatchFeedbackReason | null },
+  failedAt: "approve" | "produce",
+): KeepRollback {
+  return {
+    verdict: previous.verdict,
+    reason: previous.reason,
+    tellServer: failedAt === "produce" && previous.verdict !== "approved",
+  }
 }
 
 /**
