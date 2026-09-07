@@ -251,23 +251,30 @@ export function ReportDock() {
 
       <HStack gap={3} align="center">
           <BugMark />
-          <AnimatePresence initial={false} mode="wait">
-            <motion.div
-              key={mode}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16, ease: "easeOut" }}
-              className="min-w-0 flex-1"
-              data-testid="report-status"
-              aria-live="polite"
-            >
-              {/* Two lines at most: on a phone the words wrap rather than vanish behind an ellipsis. */}
-              <Text as="p" type="supporting" maxLines={2} hasTruncateTooltip={false}>
-                {STATUS[mode]}
-              </Text>
-            </motion.div>
-          </AnimatePresence>
+          {/* Two lines are reserved whatever the words: "Sending…" is one line
+              and "Got it — thanks. We'll look into it." is two on a phone, and
+              the crossfade below has a beat with no words at all. Without the
+              reservation the card, anchored to the bottom, grew upward and its
+              top edge jumped as the request finished (Codex's finding on #89).
+              `lh` is the line's own height, so it is two lines at any size. */}
+          <VStack justify="center" className="min-h-[2lh] min-w-0 flex-1">
+            <AnimatePresence initial={false} mode="wait">
+              <motion.div
+                key={mode}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16, ease: "easeOut" }}
+                data-testid="report-status"
+                aria-live="polite"
+              >
+                {/* Two lines at most: on a phone the words wrap rather than vanish behind an ellipsis. */}
+                <Text as="p" type="supporting" maxLines={2} hasTruncateTooltip={false}>
+                  {STATUS[mode]}
+                </Text>
+              </motion.div>
+            </AnimatePresence>
+          </VStack>
           <HStack gap={1} align="center">
             <Button
               type="button"
