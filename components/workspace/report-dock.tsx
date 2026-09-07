@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { ArrowUp, MessageSquareWarning, X } from "lucide-react"
+import { ArrowUp, Bug, X } from "lucide-react"
 import { Button } from "@astryxdesign/core/Button"
 import { HStack } from "@astryxdesign/core/HStack"
 import { IconButton } from "@astryxdesign/core/IconButton"
@@ -10,9 +10,7 @@ import { Kbd } from "@astryxdesign/core/Kbd"
 import { Text } from "@astryxdesign/core/Text"
 import { TextArea } from "@astryxdesign/core/TextArea"
 import { VStack } from "@astryxdesign/core/VStack"
-import { MediaTheme } from "@astryxdesign/core/theme"
 import { characterCount } from "@astryxdesign/core/utils"
-import { Logo } from "@/components/brand/logo"
 import { api } from "@/lib/api"
 import { readReportContext } from "@/lib/report-context"
 
@@ -28,15 +26,19 @@ import { readReportContext } from "@/lib/report-context"
  * the database and the log always, and an issue where a fix can start when
  * the owner has wired one up.
  *
- * Ours, not the sample's: the mark instead of an avatar, the workspace's
- * black pill instead of a grey one, one control instead of two (there is
- * no voice), and a shortcut that is real — R opens it, Escape closes it —
- * rather than a chip that names a key nothing listens for.
+ * What it looks like (the owner, 2026-09-07: the first cut was a black
+ * card the width of a paragraph, and it read as a notification rather than
+ * a control): at rest, one round black button with a bug on it — the
+ * account control's avatar circle, diagonally opposite it — whose tooltip
+ * says "Got a bug? Tell us." and nothing else. No card, no standing
+ * sentence asking to be read. Pressed, it grows into the box on the same
+ * white card, edge and padding as the pill in the top-right corner, and
+ * the words about what happened live inside that box, so the corner is
+ * quiet again the moment the person is done.
  *
  * Built from Astryx's furniture (Codex's finding on #88): the button, the
- * key, the box and the text are the components every other screen uses,
- * inside a MediaTheme so they read on the dark pill; the pill itself and
- * the collapse are the only things drawn here.
+ * key, the box and the text are the components every other screen uses;
+ * the card itself and the collapse are the only things drawn here.
  */
 type DockMode = "idle" | "composing" | "overlong" | "oversized" | "sending" | "sent" | "failed"
 
@@ -63,12 +65,11 @@ const MAX_UNITS = MAX_LENGTH * 16
  */
 const refusalFor = (text: string): "overlong" | "oversized" | null =>
   characterCount(text) > MAX_LENGTH ? "overlong" : text.length > MAX_UNITS ? "oversized" : null
-/** How long "Got it" stays before the dock settles again. */
+/** How long "Got it" stays in the open box before the corner settles again. */
 const SENT_LINGER_MS = 4000
-const EASE = [0.22, 1, 0.36, 1] as const
 
-const STATUS: Record<DockMode, string> = {
-  idle: "Something not working? Tell us.",
+/** What the box says about the words while it is open. At rest it says nothing. */
+const STATUS: Record<Exclude<DockMode, "idle">, string> = {
   composing: "What were you doing, and what happened?",
   overlong: "That's over 2,000 characters — trim it a little, then send.",
   oversized: "That's more than one report can carry — trim it a little, then send.",
@@ -82,14 +83,26 @@ const isTyping = (target: EventTarget | null) => {
   return Boolean(element && (element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.isContentEditable))
 }
 
+/** The bug in the account control's avatar circle: the same size, the same black. */
+const BugMark = () => (
+  <HStack
+    align="center"
+    justify="center"
+    className="size-9 shrink-0 rounded-full bg-primary text-primary-foreground"
+  >
+    <Bug aria-hidden size={18} />
+  </HStack>
+)
+
 export function ReportDock() {
   const [mode, setMode] = useState<DockMode>("idle")
   const [message, setMessage] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const shouldReduceMotion = useReducedMotion()
-  // Open through sending too: the box keeps its place while the words are
-  // on their way, and does not collapse and spring back on a failure.
-  const open = mode === "composing" || mode === "overlong" || mode === "oversized" || mode === "failed" || mode === "sending"
+  // Open for the whole exchange: while the words are typed, on their way,
+  // refused, or just confirmed. The box does not collapse and spring back
+  // on a failure, and "Got it" is read inside it before it closes.
+  const open = mode !== "idle"
   const sending = mode === "sending"
 
   const openComposer = useCallback(() => {
@@ -180,91 +193,94 @@ export function ReportDock() {
     return () => window.clearTimeout(timer)
   }, [mode])
 
-  return (
-    <MediaTheme mode="dark">
-      <VStack
-        gap={2}
-        padding={2}
-        className="fixed bottom-4 left-4 right-4 z-(--z-dock) rounded-2xl bg-foreground shadow-2xl ring-1 ring-foreground/10 sm:left-auto sm:w-full sm:max-w-md"
-        role="region"
-        aria-label="Report a problem with Clipit"
+  if (!open) {
+    // The account control's avatar circle, alone: black, round, the bug on
+    // it. R opens it too, for anyone who read the tooltip once.
+    return (
+      <IconButton
+        label="Report a bug"
+        tooltip="Got a bug? Tell us."
+        icon={<Bug aria-hidden size={18} />}
+        variant="primary"
+        size="lg"
+        elevation="med"
+        onClick={openComposer}
+        // A circle, like the avatar in the account control: the button's own
+        // horizontal padding would make a lozenge of it, so the square is
+        // stated outright and the padding cleared.
+        className="fixed bottom-4 right-4 z-(--z-dock) !size-14 !min-h-0 !p-0 rounded-full"
         data-testid="report-dock"
-      >
-        <AnimatePresence initial={false}>
-          {open && (
-            <motion.div
-              key="editor"
-              initial={shouldReduceMotion ? false : { height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={shouldReduceMotion ? { height: "auto", opacity: 1 } : { height: 0, opacity: 0 }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.3, ease: EASE }}
-              className="overflow-hidden"
-            >
-              <VStack gap={1}>
-                <HStack justify="end">
-                  <IconButton label="Close" icon={<X aria-hidden size={14} strokeWidth={2.5} />} variant="ghost" size="sm" onClick={close} isDisabled={sending} />
-                </HStack>
-                <TextArea
-                  ref={textareaRef}
-                  label="What went wrong"
-                  isLabelHidden
-                  value={message}
-                  onChange={(value) => {
-                    setMessage(value)
-                    if (mode === "overlong" || mode === "oversized") setMode(refusalFor(value.trim()) ?? "composing")
-                  }}
-                  maxLength={MAX_LENGTH}
-                  rows={3}
-                  size="sm"
-                  placeholder="What were you doing, and what happened instead?"
-                  isDisabled={sending}
-                  hasAutoFocus
-                />
-              </VStack>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      />
+    )
+  }
 
-        <HStack gap={3} align="center">
-          <Logo variant="mark" size={18} className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-background/15" />
-          <VStack gap={0.5} className="min-w-0 flex-1">
-            <Text as="p" type="label" maxLines={1} hasTruncateTooltip={false}>
-              Clipit
-            </Text>
-            <AnimatePresence initial={false} mode="wait">
-              <motion.div
-                key={mode}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16, ease: "easeOut" }}
-                data-testid="report-status"
-                aria-live="polite"
-              >
-                {/* Two lines at most: on a phone the words wrap rather than vanish behind an ellipsis. */}
-                <Text as="p" type="supporting" maxLines={2} hasTruncateTooltip={false}>
-                  {STATUS[mode]}
-                </Text>
-              </motion.div>
-            </AnimatePresence>
-          </VStack>
+  return (
+    <VStack
+      gap={2}
+      padding={2}
+      // The account control's card, edge and padding (profile-dropdown.tsx),
+      // so the two corners match: the phone's whole width, a column on
+      // anything wider.
+      className="fixed bottom-4 left-4 right-4 z-(--z-dock) rounded-2xl border bg-card shadow-lg sm:left-auto sm:w-full sm:max-w-md"
+      role="region"
+      aria-label="Report a problem with Clipit"
+      data-testid="report-dock"
+    >
+      <VStack gap={1}>
+        <HStack justify="end">
+          <IconButton label="Close" icon={<X aria-hidden size={14} strokeWidth={2.5} />} variant="ghost" size="sm" onClick={close} isDisabled={sending} />
+        </HStack>
+        <TextArea
+          ref={textareaRef}
+          label="What went wrong"
+          isLabelHidden
+          value={message}
+          onChange={(value) => {
+            setMessage(value)
+            if (mode === "overlong" || mode === "oversized") setMode(refusalFor(value.trim()) ?? "composing")
+            else if (mode === "sent") setMode("composing")
+          }}
+          maxLength={MAX_LENGTH}
+          rows={3}
+          size="sm"
+          placeholder="What were you doing, and what happened instead?"
+          isDisabled={sending}
+          hasAutoFocus
+        />
+      </VStack>
+
+      <HStack gap={3} align="center">
+          <BugMark />
+          <AnimatePresence initial={false} mode="wait">
+            <motion.div
+              key={mode}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16, ease: "easeOut" }}
+              className="min-w-0 flex-1"
+              data-testid="report-status"
+              aria-live="polite"
+            >
+              {/* Two lines at most: on a phone the words wrap rather than vanish behind an ellipsis. */}
+              <Text as="p" type="supporting" maxLines={2} hasTruncateTooltip={false}>
+                {STATUS[mode]}
+              </Text>
+            </motion.div>
+          </AnimatePresence>
           <HStack gap={1} align="center">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              label={open ? "Send" : "Report"}
-              icon={open ? <ArrowUp aria-hidden size={16} strokeWidth={2.5} /> : <MessageSquareWarning aria-hidden size={16} />}
+              label="Send"
+              icon={<ArrowUp aria-hidden size={16} strokeWidth={2.5} />}
               isDisabled={sending}
-              onClick={() => {
-                if (open) void send()
-                else openComposer()
-              }}
+              onClick={() => void send()}
             />
-            <Kbd keys={open ? "enter" : "R"} />
+            <Kbd keys="enter" />
           </HStack>
         </HStack>
-      </VStack>
-    </MediaTheme>
+    </VStack>
   )
 }
