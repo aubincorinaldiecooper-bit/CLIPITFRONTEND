@@ -33,7 +33,8 @@ describe('ReportDock', () => {
         <ReportDock />
       </>,
     )
-    expect(status()).toContain('Something not working?')
+    // At rest the corner says nothing: the mark, Report and the key, no standing sentence.
+    expect(screen.queryByTestId('report-status')).toBeNull()
     expect(screen.queryByLabelText('What went wrong')).toBeNull()
 
     fireEvent.keyDown(screen.getByLabelText('elsewhere'), { key: 'r' })
@@ -63,9 +64,7 @@ describe('ReportDock', () => {
       expect.objectContaining({ message: 'I kept video 4 and it never cut', page: '/', videoId: 'v-1', clipRequestId: 'q-1' }),
     )
     await waitFor(() => expect(status()).toContain('Got it'))
-    // The box has gone, and comes back empty for the next one.
-    await waitFor(() => expect(screen.queryByLabelText('What went wrong')).toBeNull())
-    await userEvent.click(screen.getByRole('button', { name: /Report/ }))
+    // The box stays open while "Got it" is read, emptied for the next one.
     expect((screen.getByLabelText('What went wrong') as HTMLTextAreaElement).value).toBe('')
   })
 
