@@ -76,18 +76,22 @@ describe('isEditRequest — words about the moment on screen', () => {
 })
 
 describe('Dialogue', () => {
-  it('does not show a creator the search-depth control while it decides nothing', () => {
-    // Devin's finding on #90. The control was drawn for everyone with a
+  it('shows a creator none of the composer parts that are not connected yet', () => {
+    // Devin's finding on #90. The depth control was drawn for everyone with a
     // comment saying it must not reach a creator, which a comment cannot do.
-    // "Deep search" that searches exactly as shallowly as "Search" is a
-    // promise the product does not keep, so it stays behind
-    // NEXT_PUBLIC_SEARCH_DEPTH_CONTROL until the two settings differ.
+    // The same holds for the pictures and the microphone ported from the
+    // owner's draft: "Deep search" that searches exactly as shallowly as
+    // "Search", a picture that is collected and dropped, and a microphone
+    // that records into nothing are all promises the product does not keep.
+    // They stay behind NEXT_PUBLIC_COMPOSER_PREVIEW until they do something.
     //
     // The variable is unset here, which is what a creator's build looks like.
     const exchanges: Exchange[] = [{ request: request({ matches: [match()] }), clips: [] }]
     render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
     expect(screen.queryByText('Deep search')).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: 'How hard to look' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add a picture' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Speak the question' })).toBeNull()
   })
 
   it('the first question is in the conversation: asked, acknowledged, and answered with the count it finished with', () => {

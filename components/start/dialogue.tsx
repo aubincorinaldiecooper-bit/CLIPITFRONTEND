@@ -3,6 +3,7 @@
 import { Fragment, useRef, useState } from "react"
 import {
   ChatComposer,
+  ChatComposerDrawer,
   ChatComposerInput,
   type ChatComposerInputHandle,
   ChatLayout,
@@ -14,6 +15,10 @@ import {
 } from "@astryxdesign/core/Chat"
 import { Heading } from "@astryxdesign/core/Heading"
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Mic01Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
+import { AttachmentTray, useAttachments } from "./composer-attachments"
+import { useVoiceCapture, VoiceLevels } from "./composer-voice"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
@@ -347,15 +352,20 @@ function reclipNoteText(moments: FeedMoment[], matchId: string, fallback: string
 }
 
 /**
- * Whether to draw the search-depth control at all.
+ * Whether to draw the parts of the composer that are designed but not yet
+ * connected to anything: the search-depth choice, pictures, and the
+ * microphone.
  *
- * Off unless a build sets NEXT_PUBLIC_SEARCH_DEPTH_CONTROL=true, so a local
- * or preview build can show the design while production does not. A setting
- * named "Deep search" that searches exactly as shallowly as the other one is
- * a promise the product does not keep, and this is what keeps that promise
- * from being made.
+ * Off unless a build sets NEXT_PUBLIC_COMPOSER_PREVIEW=true, so a local or
+ * preview build can show the design while a creator's build does not. Each
+ * one would otherwise make a promise the product does not keep — "Deep
+ * search" that searches exactly as shallowly as "Search", pictures that are
+ * collected and dropped, a microphone that records into nothing.
  */
-const DEPTH_CONTROL_VISIBLE = process.env.NEXT_PUBLIC_SEARCH_DEPTH_CONTROL === "true"
+const COMPOSER_PREVIEW = process.env.NEXT_PUBLIC_COMPOSER_PREVIEW === "true"
+
+/** What the draft allowed, kept. */
+const MAX_PICTURES = 6
 
 export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip }: DialogueProps) {
   const [notes, setNotes] = useState<Note[]>([])
@@ -381,6 +391,19 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
    * comment can do — Devin's review on #90 caught the gap between the two.
    */
   const [depth, setDepth] = useState("search")
+
+  /**
+   * Pictures and speech, ported from the draft and not yet connected.
+   *
+   * `createClipRequest` posts `{ instruction }` and nothing else, and no route
+   * accepts audio, so neither of these can reach the search today. They are
+   * behind COMPOSER_PREVIEW for that reason. The hooks are real: the pictures
+   * are held and released properly, and the microphone records real audio and
+   * says so when it has nowhere to send it.
+   */
+  const pictures = useAttachments(MAX_PICTURES)
+  const voice = useVoiceCapture()
+  const fileInput = useRef<HTMLInputElement>(null)
 
   // One order for everything said after a question: a note takes its
   // place when it is written, a kept moment's news when the keep is first
@@ -491,6 +514,7 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
         inputRef.current?.focus()
       } else {
         setDraft("")
+        pictures.clear()
       }
     } finally {
       setPending(false)
@@ -498,6 +522,22 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   }
 
   const composer = (
+    <>
+      {/* Kept out of the composer's slots, next to the button that opens it. */}
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        multiple
+        tabIndex={-1}
+        aria-hidden="true"
+        className="hidden"
+        onChange={(event) => {
+          pictures.add(Array.from(event.target.files ?? []))
+          // So picking the same file twice still fires a change.
+          event.target.value = ""
+        }}
+      />
         <ChatComposer
           value={draft}
           onChange={setDraft}
@@ -508,8 +548,20 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
           // itself on submit, and a question the server refused is still the
           // person's question. It leaves the box only when the ask was taken.
           input={<ChatComposerInput label="Ask for a moment" maxRows={4} handleRef={inputRef} />}
+          // The draft's tray, in the slot the composer already had for it.
+          drawer={
+            COMPOSER_PREVIEW && pictures.attachments.length > 0 ? (
+              <ChatComposerDrawer count={pictures.attachments.length} label="Pictures">
+                <AttachmentTray
+                  attachments={pictures.attachments}
+                  onRemove={pictures.remove}
+                  onMeasured={pictures.measure}
+                />
+              </ChatComposerDrawer>
+            ) : undefined
+          }
           footerActions={
-            DEPTH_CONTROL_VISIBLE ? (
+            COMPOSER_PREVIEW ? (
               <SegmentedControl
                 value={depth}
                 onChange={setDepth}
@@ -521,7 +573,42 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
               </SegmentedControl>
             ) : undefined
           }
+          // Left of the send button, where the draft put them.
+          sendActions={
+            COMPOSER_PREVIEW ? (
+              <>
+                <VoiceLevels levels={voice.levels} isRecording={voice.isRecording} />
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => fileInput.current?.click()}
+                  disabled={pictures.attachments.length >= MAX_PICTURES}
+                  className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Add a picture"
+                >
+                  <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => (voice.isRecording ? voice.stop() : void voice.start())}
+                  className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={voice.isRecording ? "Stop recording" : "Speak the question"}
+                >
+                  <HugeiconsIcon icon={Mic01Icon} className="size-3.5" />
+                </button>
+              </>
+            ) : undefined
+          }
+          // The draft turned its send button into a stop while recording; the
+          // composer does that itself.
+          isStopShown={voice.isRecording}
+          onStop={voice.stop}
+          // Where a refused microphone is said out loud, instead of the
+          // draft's console warning nobody reads.
+          status={voice.problem ? { type: "warning", message: voice.problem } : undefined}
         />
+    </>
   )
 
   // Nothing said yet: the landing, with the box in the middle of the column
