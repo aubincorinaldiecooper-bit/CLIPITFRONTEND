@@ -19,20 +19,22 @@ import type { Exchange } from "./types"
  * the one after leans away below, each a step smaller and fainter. The
  * person scrolls, drags the front card, or presses a key to move through
  * them. Moving DOWN past an undecided moment skips it; moving back UP onto
- * a skipped moment un-skips it. ✓ KEEPS the moment, and keeping is
- * production: the cut, the framing and the 9:16 file are made from that
- * press, and the card stays where it is, saying so, until the person moves
- * on — a kept moment remains in the feed to be watched, downloaded and
- * published. The controls on the card's corner: Publish (keep, make the
- * file, and open the owner's "Where do they go?" screens for it) and, once
- * the file exists, Download.
+ * a skipped moment un-skips it.
+ *
+ * NOTHING HERE MAKES A CLIP. Keep, Skip's button and the → shortcut were
+ * removed on 9 September — this MVP finds moments and shows them, and does
+ * not produce files. Publish went with them; it is coming back, so its prop
+ * and the page's wiring were left in place. A moment kept in an earlier
+ * session still shows what it is and still offers Download once its file
+ * exists, because that state arrives from the server and is not made here.
  *
  * A moment is the evidence — a stretch of the source video — and the front
  * card plays exactly that stretch from the source, through the 9:16 frame,
  * with a play/pause control in the middle and the time within the moment
  * beside it. When the file has been made the card plays the file instead.
- * The counter at the left is the position in the feed; the dots at the
- * right are the feed itself, and each one goes to its moment.
+ * The dots at the LEFT are the feed itself, and each one goes to its
+ * moment. They took the place of the position counter, which was removed
+ * with the rest of the chrome.
  *
  * Hand-rolled on purpose, like the theater before it: a feed of footage is
  * not interface furniture, and no Astryx surface is a card fan. The ratio
@@ -573,6 +575,12 @@ export interface MomentFeedProps {
   /** Which moment is in front, as the person moves through the feed. */
   onFrontChange?: (index: number) => void
   /** Moments whose Keep is being written; their Keep waits for it. */
+  /**
+   * Kept for the caller's sake, and unused here since Keep was removed: it
+   * marked the moment whose keep was still being written so the card's Keep
+   * could wait for it. ReviewStep and the page still track it, ready for
+   * the button's return.
+   */
   keeping?: ReadonlySet<string>
 }
 
@@ -586,7 +594,6 @@ export function MomentFeed({
   onUndoSkip,
   onUploadMore,
   onFrontChange,
-  keeping,
 }: MomentFeedProps) {
   const total = moments.length
   // Where the person is in the feed, held as the MOMENT in front rather
@@ -623,12 +630,6 @@ export function MomentFeed({
   const prev = cursor > 0 ? moments[cursor - 1] : undefined
   const reworking = top?.reworking ?? false
   const free = !busy && !paused
-  const writing = top !== undefined && (keeping?.has(top.match.id) ?? false)
-  const canDecide = top !== undefined && top.decision === null && !reworking && free && !writing
-  // A kept moment whose cut failed, or that has nothing made at all, is
-  // kept again — the server makes it (again). Not while a keep is being
-  // written: the card's Keep waits for it.
-  const canRetry = top !== undefined && top.decision === "kept" && (top.production === "failed" || top.production === null) && free && !writing
   const canGoBack = cursor > 0 && free
   const canGoForward = top !== undefined && (top.decision !== null || !reworking) && free
 
@@ -649,9 +650,6 @@ export function MomentFeed({
     return () => window.removeEventListener("resize", measure)
   }, [total])
 
-  const keep = useCallback(() => {
-    if ((canDecide || canRetry) && top) onKeep(top)
-  }, [canDecide, canRetry, top, onKeep])
   /** Down: past a decided moment, or skipping an undecided one. */
   const forward = useCallback(() => {
     if (!canGoForward || !top) return
@@ -678,9 +676,10 @@ export function MomentFeed({
   /**
    * One decision per beat, for the inputs that repeat on their own: a flick
    * of the wheel is many events and a held key repeats, and either could
-   * keep or skip several moments before the person let go — a keep is
-   * final. A button press is a decision in itself and is never held back:
-   * a quick keep and then a skip on the next card are both meant.
+   * skip several moments before the person let go, and a skip is a decision
+   * about a moment. Keep and its button are gone (9 September), so this now
+   * guards moving through the feed alone — which is still enough to discard
+   * a run of moments nobody looked at.
    */
   const oncePerBeat = useCallback((action: () => void) => {
     const now = Date.now()
@@ -693,12 +692,17 @@ export function MomentFeed({
     (direction: 1 | -1) => oncePerBeat(direction > 0 ? forward : back),
     [oncePerBeat, forward, back],
   )
-  const keepOnce = useCallback(() => oncePerBeat(keep), [oncePerBeat, keep])
 
-  // The keyboard: → keep, ← or ↓ onward, ↑ (or Backspace, or u) back —
-  // unless the person is typing somewhere, or a dialog has the screen: a
-  // key pressed on a dialog's button is that dialog's, never a decision
-  // about the moment hidden behind it. A held key is one press.
+  /**
+   * The keyboard: ← or ↓ onward, ↑ (or Backspace, or u) back — unless the
+   * person is typing somewhere, or a dialog has the screen: a key pressed on
+   * a dialog's button is that dialog's, never a decision about the moment
+   * hidden behind it. A held key is one press.
+   *
+   * → used to keep the moment. It went with the Keep button on 9 September:
+   * this MVP makes no clips, and a shortcut that still made one would have
+   * meant the removal was only skin deep.
+   */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (paused) return
@@ -706,15 +710,14 @@ export function MomentFeed({
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return
       if (target?.closest?.('[role="dialog"]')) return
       if (event.repeat) return
-      if (event.key === "ArrowRight") keepOnce()
-      else if (event.key === "ArrowLeft" || event.key === "ArrowDown") navigate(1)
+      if (event.key === "ArrowLeft" || event.key === "ArrowDown") navigate(1)
       else if (event.key === "ArrowUp" || event.key === "Backspace" || event.key === "u") navigate(-1)
       else return
       event.preventDefault()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [keepOnce, navigate, paused])
+  }, [navigate, paused])
 
   const onDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.y < -DRAG_THRESHOLD_PX) navigate(1)
@@ -914,45 +917,6 @@ export function MomentFeed({
         })}
       </div>
 
-      {top && (
-        // Two slots that never move. For an open decision: Skip and Keep.
-        // For a kept moment: onward, and the keep it already has.
-        <div className="mt-6 flex items-center justify-center gap-8" data-testid="feed-controls">
-          {decided ? (
-            <button
-              type="button"
-              onClick={forward}
-              disabled={!canGoForward}
-              aria-label="Next moment"
-              title="Next"
-              className="flex h-14 w-14 items-center justify-center rounded-full border border-border text-foreground transition hover:border-foreground disabled:opacity-40"
-            >
-              <ChevronDown aria-hidden size={22} />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={forward}
-              disabled={!canDecide}
-              aria-label="Skip — not useful, move on"
-              title="Skip"
-              className="flex h-14 w-14 items-center justify-center rounded-full border border-border text-foreground transition hover:border-foreground disabled:opacity-40"
-            >
-              <X aria-hidden size={22} />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={keep}
-            disabled={!(canDecide || canRetry)}
-            aria-label={decided ? (canRetry ? "Keep again — make the clip again" : "Kept") : "Keep — make this clip and save it to your library"}
-            title={decided ? (canRetry ? "Keep again" : "Kept") : "Keep"}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background transition hover:bg-foreground/90 disabled:opacity-40"
-          >
-            <Check aria-hidden size={26} strokeWidth={2.5} />
-          </button>
-        </div>
-      )}
     </div>
   )
 }

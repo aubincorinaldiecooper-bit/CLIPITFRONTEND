@@ -180,28 +180,33 @@ describe('MomentFeed — one moment at a time', () => {
     expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('Harbour skyline')
   })
 
-  it('✓ keeps the moment on screen', async () => {
-    const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
+  it('nothing on this screen keeps a moment — this MVP makes no clips', async () => {
+    // The owner's call, 9 September. Both the buttons and the → shortcut
+    // went: a key that still made a clip would have made the removal skin
+    // deep. Publishing could go because KeptGrid still offers it; keeping
+    // has no other home, which is why it had to be a decision rather than
+    // a tidy-up.
     const h = handlers()
-    render(<MomentFeed moments={moments} {...h} />)
-    await userEvent.click(screen.getByRole('button', { name: /^Keep/ }))
-    await waitFor(() => expect(h.onKeep).toHaveBeenCalledTimes(1))
-    expect(h.onKeep.mock.calls[0]![0].match.id).toBe('a')
-    expect(h.onSkip).not.toHaveBeenCalled()
+    render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' })])], video)} {...h} />)
+    expect(screen.queryByRole('button', { name: /^Keep/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Skip/ })).toBeNull()
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(h.onKeep).not.toHaveBeenCalled()
   })
 
-  it('✕ skips it; the keyboard does the same (→ keep, ← skip)', async () => {
-    const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
+  it('moving on skips the moment you moved past', async () => {
     const h = handlers()
-    render(<MomentFeed moments={moments} {...h} />)
-    await userEvent.click(screen.getByRole('button', { name: /^Skip/ }))
+    render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' })])], video)} {...h} />)
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
     await waitFor(() => expect(h.onSkip).toHaveBeenCalledTimes(1))
+    expect(h.onSkip.mock.calls[0]![0].match.id).toBe('a')
 
     cleanup()
     const again = handlers()
-    render(<MomentFeed moments={moments} {...again} />)
-    fireEvent.keyDown(window, { key: 'ArrowRight' })
-    await waitFor(() => expect(again.onKeep).toHaveBeenCalledTimes(1))
+    render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' })])], video)} {...again} />)
+    fireEvent.keyDown(window, { key: 'ArrowDown' })
+    await waitFor(() => expect(again.onSkip).toHaveBeenCalledTimes(1))
   })
 
   it('scrolling back onto a skipped moment brings it back; a kept one is final', async () => {
@@ -284,33 +289,29 @@ describe('MomentFeed — one moment at a time', () => {
     expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('c-a-9f3c.mp4?sig=3')
   })
 
-  it('a held key is one press, and two quick presses are one keep', async () => {
-    // Codex's finding on #75: key repeat could keep several moments before
-    // the person let go, and a keep is final.
+  it('a held key is one press, and two quick presses are one move', async () => {
+    // Codex's finding on #75, still live: key repeat could run through the
+    // feed before the person let go. It guarded Keep then and guards moving
+    // on now — a skip is recorded for each moment passed, so a held key
+    // would still discard several.
     const moments = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
     const h = handlers()
     render(<MomentFeed moments={moments} {...h} />)
-    fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true })
-    fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true })
-    expect(h.onKeep).not.toHaveBeenCalled()
-    fireEvent.keyDown(window, { key: 'ArrowRight' })
-    fireEvent.keyDown(window, { key: 'ArrowRight' })
-    expect(h.onKeep).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(window, { key: 'ArrowLeft', repeat: true })
+    fireEvent.keyDown(window, { key: 'ArrowLeft', repeat: true })
+    expect(h.onSkip).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(h.onSkip).toHaveBeenCalledTimes(1)
   })
 
-  it('a keep leaves the card on screen, saying its file is being made; onward is the next card, and a skip there is its own decision', async () => {
-    // Keep is production (owner, 2026-09-05): the cut starts from the
-    // press, and the moment stays where it is — to be watched, then
-    // downloaded or published — rather than leaving the screen.
-    // Devin's finding on #75 still holds: the cooldown that tames a held
-    // key or a wheel flick must not swallow a deliberate second press.
+  it('moving past a moment already decided is not a second decision', async () => {
+    // The kept card stays on screen saying its file is being made — that
+    // state arrives from the server now rather than from a press here, so
+    // this builds it directly. Moving past it must not skip it; moving past
+    // the undecided one after it must.
     const h = handlers()
-    const before = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
-    const { rerender } = render(<MomentFeed moments={before} {...h} />)
-    await userEvent.click(screen.getByRole('button', { name: /^Keep/ }))
-    expect(h.onKeep).toHaveBeenCalledTimes(1)
-    // The server records the keep and starts the cut; the card stays.
-    const after = feedMoments(
+    const kept = feedMoments(
       [
         {
           request: request('r1', [match({ id: 'a', confidence: 0.9, feedback: 'approved', clip: { id: 'c-a', status: 'pending' } }), match({ id: 'b', confidence: 0.8 })]),
@@ -319,45 +320,27 @@ describe('MomentFeed — one moment at a time', () => {
       ],
       video,
     )
-    rerender(<MomentFeed moments={after} {...h} />)
-    expect(front()).toBe(1)
-    expect(screen.getByTestId('feed-decision').textContent).toContain('Kept · cutting')
-    expect((screen.getByRole('button', { name: 'Kept' }) as HTMLButtonElement).disabled).toBe(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Next moment' }))
-    expect(h.onSkip).not.toHaveBeenCalled()
+    render(<MomentFeed moments={kept} {...h} />)
+    // The feed opens on the first moment nobody has decided on, so it starts
+    // past the kept one. Going back up onto it is not an undo — only a
+    // SKIPPED moment is brought back that way.
     expect(front()).toBe(2)
-    await userEvent.click(screen.getByRole('button', { name: /^Skip/ }))
-    expect(h.onSkip).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(window, { key: 'ArrowUp' })
+    await waitFor(() => expect(front()).toBe(1))
+    expect(h.onUndoSkip).not.toHaveBeenCalled()
+    expect(screen.getByTestId('feed-decision').textContent).toContain('Kept · cutting')
+
+    // Moving past it again is not a second decision about it.
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    await waitFor(() => expect(front()).toBe(2))
+    expect(h.onSkip).not.toHaveBeenCalled()
+
+    // Moving past the undecided one after it is.
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    await waitFor(() => expect(h.onSkip).toHaveBeenCalledTimes(1))
     expect(h.onSkip.mock.calls[0]![0].match.id).toBe('b')
-  })
-
-  it('a kept moment whose cut failed can be kept again', async () => {
-    // Devin's and Codex's finding on #87: the copy promised a retry and no control gave one.
-    const failed = feedMoments([cutExchange('r1', { feedback: 'approved' }, verticalMedia('failed'))], video)
-    const h = handlers()
-    render(<MomentFeed moments={failed} {...h} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
-    const again = screen.getByRole('button', { name: /^Keep again/ })
-    expect((again as HTMLButtonElement).disabled).toBe(false)
-    await userEvent.click(again)
-    expect(h.onKeep).toHaveBeenCalledTimes(1)
-    expect(h.onKeep.mock.calls[0]![0].match.id).toBe('a')
-  })
-
-  it('a kept moment with nothing made can be kept again — but not while its keep is being written', async () => {
-    // A rollback that could not reach the server leaves the moment kept
-    // with no clip; Keep again makes it. While a keep is on its way the
-    // card's Keep waits, so the label never changes under the finger.
-    const nothingMade = feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })])], video)
-    const h = handlers()
-    const { rerender } = render(<MomentFeed moments={nothingMade} {...h} keeping={new Set(['a'])} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
-    expect((screen.getByRole('button', { name: 'Kept' }) as HTMLButtonElement).disabled).toBe(true)
-    rerender(<MomentFeed moments={nothingMade} {...h} keeping={new Set()} />)
-    const again = screen.getByRole('button', { name: /^Keep again/ })
-    expect((again as HTMLButtonElement).disabled).toBe(false)
-    await userEvent.click(again)
-    expect(h.onKeep).toHaveBeenCalledTimes(1)
   })
 
   it('shows a clip made on Keep before the moment has been re-read with its id', () => {
@@ -379,8 +362,8 @@ describe('MomentFeed — one moment at a time', () => {
     const h = handlers()
     const before = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8, description: 'The dunk' })])], video)
     const { rerender } = render(<MomentFeed moments={before} {...h} />)
-    await userEvent.click(screen.getByRole('button', { name: /^Skip/ }))
-    expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('The dunk')
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    await waitFor(() => expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('The dunk'))
     const after = feedMoments(
       [exchange('r1', [match({ id: 'c', confidence: 0.95, description: 'The stronger one' }), match({ id: 'a', confidence: 0.9, feedback: 'rejected' }), match({ id: 'b', confidence: 0.8, description: 'The dunk' })])],
       video,
@@ -497,11 +480,8 @@ describe('MomentFeed — one moment at a time', () => {
     const moments = feedMoments([cutExchange('r1')], video)
     const h = handlers()
     const { rerender } = render(<MomentFeed moments={moments} {...h} paused />)
-    fireEvent.keyDown(window, { key: 'ArrowRight' })
     fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    expect(h.onKeep).not.toHaveBeenCalled()
     expect(h.onSkip).not.toHaveBeenCalled()
-    expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement).disabled).toBe(true)
 
     rerender(
       <>
@@ -509,16 +489,20 @@ describe('MomentFeed — one moment at a time', () => {
         <MomentFeed moments={moments} {...h} />
       </>,
     )
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Post now' }), { key: 'ArrowRight' })
-    expect(h.onKeep).not.toHaveBeenCalled()
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Post now' }), { key: 'ArrowLeft' })
+    expect(h.onSkip).not.toHaveBeenCalled()
   })
 
   it('while the system reworks the moment, the card is held and says so', () => {
     const reworking = feedMoments([cutExchange('r1', { reclipStatus: 'pending' })], video)
-    render(<MomentFeed moments={reworking} {...handlers()} />)
+    const h = handlers()
+    render(<MomentFeed moments={reworking} {...h} />)
     expect(screen.getByTestId('reworking-overlay').textContent).toContain('Reworking this edit')
-    expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /^Skip/ }) as HTMLButtonElement).disabled).toBe(true)
+    // Held used to mean two disabled buttons. With those gone it means the
+    // feed does not move and nothing is decided while the system works.
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(h.onSkip).not.toHaveBeenCalled()
+    expect(front()).toBe(1)
   })
 
   it('ends with the honest fork once every moment is decided', () => {
