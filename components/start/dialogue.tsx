@@ -624,9 +624,21 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
     // minimum of its own.
     <ChatLayout data-testid="dialogue" className="min-h-80 min-w-64 flex-1" composer={composer}>
       {(
-        // Busy while an answer is still arriving, so a screen reader waits
-        // and reads the finished sentence once instead of each fragment.
-        <ChatMessageList isStreaming={exchanges.some(isSearching)}>
+        /**
+         * Busy while an answer is still arriving, so a screen reader waits
+         * and reads the finished sentence once instead of each fragment.
+         *
+         * `align="top"` because this chat sits BESIDE a moment rather than
+         * filling a page. ChatMessageList defaults to "bottom", which fills
+         * the free space above a short conversation with a spacer so it hugs
+         * the composer — right for a full-page chat, wrong here: the moment
+         * card starts 52px down its column and the first line of the answer
+         * started 320px down its own, so the two halves of the same screen
+         * did not line up. "top" drops the spacer. A conversation long
+         * enough to overflow scrolls identically either way, so nothing about
+         * a real thread changes.
+         */
+        <ChatMessageList align="top" isStreaming={exchanges.some(isSearching)}>
           {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
           {exchanges.map((exchange, index) => (
             <Fragment key={exchange.request.id}>
