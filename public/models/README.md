@@ -10,7 +10,9 @@ shows a broken image.
     composer.svg   Composer 2.5
     glm.svg        GLM 5.2
 
-Square-ish SVGs, drawn edge to edge; they render at 14px. Three of them are
-inverted for the dark ground — see `MODELS` in
-`components/start/composer-controls.tsx` if a mark comes out the wrong way
-round.
+Square-ish SVGs, drawn edge to edge; they render at 14px.
+
+Each is drawn exactly as its file has it, with no recolouring. The strip they
+sit in is on white — the workspace wears the warm paper palette, not the dark
+ground the rest of the site does — so supply marks that read on a light
+background.

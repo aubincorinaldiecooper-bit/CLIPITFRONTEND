@@ -32,17 +32,19 @@ const SPRING = "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
  * plain square when it is not there: dropping the five SVGs into
  * public/models/ is the whole job, with no code change.
  *
- * `invert` is for the marks that are drawn in near-black. Clipit's ground is
- * dark, so those would otherwise be invisible; the coloured ones are left
- * alone. It follows the owner's reference, where three of the five are
- * monochrome.
+ * Each mark is drawn exactly as its file has it. An earlier version flipped
+ * three of them to white "because Clipit's ground is dark", which was simply
+ * wrong about this screen: the workspace wears the warm paper palette
+ * (`shadcn-scope`), and the strip under the box sits on white. Measured at
+ * the picker's button: the ground is rgb(255,255,255) and the flip turned a
+ * near-black mark near-white, which is a logo you cannot see.
  */
 export const MODELS = [
-  { name: "GPT 5.5", mark: "/models/gpt.svg", invert: true },
-  { name: "Opus 4.8", mark: "/models/opus.svg", invert: false },
-  { name: "Gemini 3.5 Flash", mark: "/models/gemini.svg", invert: false },
-  { name: "Composer 2.5", mark: "/models/composer.svg", invert: true },
-  { name: "GLM 5.2", mark: "/models/glm.svg", invert: true },
+  { name: "GPT 5.5", mark: "/models/gpt.svg" },
+  { name: "Opus 4.8", mark: "/models/opus.svg" },
+  { name: "Gemini 3.5 Flash", mark: "/models/gemini.svg" },
+  { name: "Composer 2.5", mark: "/models/composer.svg" },
+  { name: "GLM 5.2", mark: "/models/glm.svg" },
 ] as const
 
 export const MODEL_NAMES = MODELS.map((model) => model.name)
@@ -135,7 +137,7 @@ function ModelMark({ name, className }: { name: string; className?: string }) {
       alt=""
       aria-hidden="true"
       onError={() => setMissing(true)}
-      className={cn("size-3.5 shrink-0 object-contain", model.invert && "invert", className)}
+      className={cn("size-3.5 shrink-0 object-contain", className)}
     />
   )
 }
