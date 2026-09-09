@@ -360,17 +360,6 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).toHaveBeenCalledTimes(1)
   })
 
-  it('Publish waits while the moment\'s keep is being written, so it never keeps it twice', async () => {
-    // Devin's finding on #88: a quick Keep then Publish queued a second approval and cut.
-    const moments = feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })])], video)
-    const h = handlers()
-    render(<MomentFeed moments={moments} {...h} keeping={new Set(['a'])} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
-    const publish = screen.getByRole('button', { name: /^Publish/ })
-    expect((publish as HTMLButtonElement).disabled).toBe(true)
-    expect(publish.getAttribute('title')).toContain('Keeping it')
-  })
-
   it('shows a clip made on Keep before the moment has been re-read with its id', () => {
     // Devin's finding on #87: the row names the moment; that is enough.
     const early: Exchange = {
@@ -425,7 +414,7 @@ describe('MomentFeed — one moment at a time', () => {
     const element = screen.getByTestId('feed-video') as HTMLVideoElement
     expect(element.getAttribute('src')).toContain('#t=98')
     expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy()
-    expect(screen.getByTestId('feed-time').textContent).toBe('0:00 / 0:13')
+    expect(screen.getByTestId('feed-time').textContent).toBe('0:13')
 
     // jsdom plays nothing; what the element reports is what is shown.
     Object.defineProperty(element, 'paused', { value: false, configurable: true })
@@ -433,11 +422,11 @@ describe('MomentFeed — one moment at a time', () => {
     fireEvent.play(element)
     fireEvent.timeUpdate(element)
     expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy()
-    expect(screen.getByTestId('feed-time').textContent).toBe('0:04 / 0:13')
+    expect(screen.getByTestId('feed-time').textContent).toBe('0:09')
 
     element.currentTime = 108.5
     fireEvent.seeked(element)
-    expect(screen.getByTestId('feed-time').textContent).toBe('0:10 / 0:13')
+    expect(screen.getByTestId('feed-time').textContent).toBe('0:02')
 
     // Past the moment's end it plays the moment again — never the rest of the video.
     element.currentTime = 111.5
@@ -463,27 +452,14 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).not.toHaveBeenCalled()
   })
 
-  it('the corner control publishes the moment on screen — the owner\'s call, in place of the re-cut', async () => {
-    const moments = feedMoments([cutExchange('r1')], video)
-    const h = handlers()
-    render(<MomentFeed moments={moments} {...h} />)
+  it('the card offers neither a re-cut nor a publish — both were taken off it', () => {
+    // The re-cut went first (the owner's call); Publish followed on 9 Sept.
+    // Publishing did not go with it: KeptGrid and the publishing screens both
+    // still offer it, which is why this button could be removed and Keep
+    // could not.
+    render(<MomentFeed moments={feedMoments([cutExchange('r1')], video)} {...handlers()} />)
     expect(screen.queryByRole('button', { name: /Re-clip/ })).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: /^Publish/ }))
-    expect(h.onPublish).toHaveBeenCalledTimes(1)
-    expect(h.onPublish.mock.calls[0]![0].match.id).toBe('a')
-  })
-
-  it('publish can be pressed before any file exists: it keeps the moment, and the publish screens wait for the file', async () => {
-    const moments = feedMoments([exchange('r1', [match({ id: 'a' })])], video)
-    const h = handlers()
-    render(<MomentFeed moments={moments} {...h} />)
-    const button = screen.getByRole('button', { name: /^Publish/ })
-    expect((button as HTMLButtonElement).disabled).toBe(false)
-    expect(button.getAttribute('title')).toContain('keep this moment')
-    await userEvent.click(button)
-    expect(h.onPublish).toHaveBeenCalledTimes(1)
-    // Nothing to download: there is no file yet.
-    expect(screen.queryByTestId('feed-download')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Publish/ })).toBeNull()
   })
 
   it('the corner offers Download only once the 9:16 file exists — never the landscape cut in its place', async () => {
@@ -499,16 +475,12 @@ describe('MomentFeed — one moment at a time', () => {
     expect(front()).toBe(1)
     expect(screen.queryByTestId('feed-download')).toBeNull()
     expect(screen.getByTestId('feed-decision').textContent).toContain('cutting')
-    expect(screen.getByRole('button', { name: /^Publish/ }).getAttribute('title')).toContain('once the cut is ready')
     // The source stands in for the file meanwhile.
     expect((screen.getByTestId('feed-video') as HTMLVideoElement).getAttribute('src')).toContain('source.mp4')
 
     rerender(<MomentFeed moments={feedMoments([cutExchange('r1', { feedback: 'approved' }, { ...verticalMedia('failed'), downloadUrl: null })], video)} {...handlers()} />)
     expect(screen.queryByTestId('feed-download')).toBeNull()
     expect(screen.getByTestId('feed-decision').textContent).toContain('cut failed')
-    const publish = screen.getByRole('button', { name: /^Publish/ })
-    expect((publish as HTMLButtonElement).disabled).toBe(false)
-    expect(publish.getAttribute('title')).toContain('makes it again')
 
     rerender(<MomentFeed moments={feedMoments([cutExchange('r1', { feedback: 'approved' }, { ...verticalMedia('ready'), downloadUrl: 'https://cdn.test/clips/v/c-a-vertical.mp4?download=1' })], video)} {...handlers()} />)
     expect(screen.getByTestId('feed-download').getAttribute('href')).toBe('https://cdn.test/clips/v/c-a-vertical.mp4?download=1')
@@ -530,7 +502,6 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).not.toHaveBeenCalled()
     expect(h.onSkip).not.toHaveBeenCalled()
     expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /^Publish/ }) as HTMLButtonElement).disabled).toBe(true)
 
     rerender(
       <>
@@ -548,7 +519,6 @@ describe('MomentFeed — one moment at a time', () => {
     expect(screen.getByTestId('reworking-overlay').textContent).toContain('Reworking this edit')
     expect((screen.getByRole('button', { name: /^Keep/ }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: /^Skip/ }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /^Publish/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('ends with the honest fork once every moment is decided', () => {

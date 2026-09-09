@@ -383,8 +383,19 @@ function FrontMedia({
       >
         {playback.playing ? <Pause aria-hidden size={22} fill="currentColor" /> : <Play aria-hidden size={22} fill="currentColor" className="ml-0.5" />}
       </button>
+      {/*
+        * One number, not two (the owner's call). It is the time LEFT: before
+        * anything plays it reads the same as the moment's length, so it
+        * agrees with the length printed on the cards behind this one, and
+        * then it counts down — which an elapsed figure could not do without
+        * the total beside it.
+        *
+        * `asClock` floors here as it does everywhere, so the last fraction of
+        * a second reads 0:00. One clock for the whole feed is worth more than
+        * a second rounding rule that disagrees with the cards behind.
+        */}
       <p className="pointer-events-none absolute bottom-3 right-3 z-10 text-sm font-medium tabular-nums text-white" data-testid="feed-time">
-        {asClock(playback.current)} / {asClock(playback.total)}
+        {asClock(playback.total - playback.current)}
       </p>
       <button
         type="button"
@@ -548,6 +559,13 @@ export interface MomentFeedProps {
   /** Scrolling back onto a skipped moment, or pressing its dot, brings it back. */
   onUndoSkip: (moment: FeedMoment) => void
   /** Keep the moment, make its file, and send it to socials once the file exists. */
+  /**
+   * Kept for the caller's sake, and unused here since the card's Publish
+   * corner was removed. ReviewStep and the page still wire it, and publishing
+   * still happens from the kept clips and the publishing screens — so this is
+   * a prop waiting for a button, not a dead path through the app. Say the
+   * word and the whole chain comes out.
+   */
   onPublish: (moment: FeedMoment) => void
   onUploadMore: () => void
   /** Something else has the screen — the publish dialog — and no key, wheel or drag decides a moment behind it. */
@@ -566,7 +584,6 @@ export function MomentFeed({
   onKeep,
   onSkip,
   onUndoSkip,
-  onPublish,
   onUploadMore,
   onFrontChange,
   keeping,
@@ -709,21 +726,6 @@ export function MomentFeed({
     if (Math.abs(event.deltaY) > WHEEL_THRESHOLD_PX) navigate(event.deltaY > 0 ? 1 : -1)
   }
 
-  // Publish is keep-and-send: it can be pressed before the file exists, and
-  // the publish screens wait for the file. A moment whose cut failed can be
-  // kept again the same way — the server makes it again.
-  const canPublish = top !== undefined && !reworking && free && !writing
-  const publishTitle = reworking
-    ? "Reworking this edit…"
-    : writing
-      ? "Keeping it — publish once the cut has started"
-    : top?.production === "failed"
-      ? "The cut failed — publishing makes it again, then sends it"
-      : top?.production === "producing"
-        ? "Publish — it goes out once the cut is ready"
-        : top?.production === "produced"
-          ? "Publish — send this moment to your socials"
-          : "Publish — keep this moment, make its clip, and send it to your socials"
 
   if (total === 0) {
     if (searching) {
@@ -757,6 +759,24 @@ export function MomentFeed({
   const cards = [...moments.map((moment) => ({ key: moment.match.id, moment })), { key: "end", moment: null as FeedMoment | null }]
   const decided = top !== undefined && top.decision !== null
 
+  /**
+   * Keep the moment you are on inside the rail once the rail scrolls.
+   *
+   * Devin's finding on #90: one button per moment and no bound, inside a
+   * 560px stage that hides its overflow. Ask enough questions and the ends of
+   * the list were simply cut off — 23 fit for a mouse and only 12 for a
+   * thumb, since a coarse pointer gets the 44px target the guidance asks for.
+   * The rail scrolls now, so the front dot has to be brought along with it.
+   *
+   * `nearest` moves it the least amount that works and does nothing when it
+   * is already visible, so there is no scrolling to see and nothing for the
+   * reduced-motion guard to argue with.
+   */
+  const frontDot = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    frontDot.current?.scrollIntoView?.({ block: "nearest" })
+  }, [cursor])
+
   return (
     <div className="flex w-full max-w-110 shrink-0 flex-col items-center sm:w-110" data-testid="moment-feed">
       <div
@@ -783,7 +803,18 @@ export function MomentFeed({
           * thumb actually needs. `gap` is gone because the targets now sit
           * edge to edge and provide the spacing themselves.
           */}
-        <div className="absolute left-0 top-1/2 flex w-14 -translate-y-1/2 flex-col items-center sm:w-20" data-testid="feed-dots">
+        <div
+          className="absolute inset-y-0 left-0 flex w-14 overflow-y-auto overscroll-contain sm:w-20"
+          data-testid="feed-dots"
+        >
+          {/*
+            * `m-auto` rather than `justify-center`, and it is load-bearing:
+            * a centred flex column that outgrows its scroll box has its first
+            * items cut off above the scroll origin and they cannot be reached
+            * by scrolling at all. An automatic margin centres a short list the
+            * same way and simply stops centring once the list is taller.
+            */}
+          <div className="m-auto flex shrink-0 flex-col items-center py-2">
           {moments.map((moment, index) => {
             const front = index === cursor
             const title = moment.match.description || "a moment"
@@ -791,6 +822,7 @@ export function MomentFeed({
             return (
               <button
                 key={moment.match.id}
+                ref={front ? frontDot : undefined}
                 type="button"
                 disabled={!free || front}
                 onClick={() => goTo(index)}
@@ -809,6 +841,7 @@ export function MomentFeed({
               </button>
             )
           })}
+          </div>
         </div>
 
         {cards.map(({ key, moment }, index) => {
@@ -835,7 +868,15 @@ export function MomentFeed({
                 <CardFace moment={moment} front={front} muted={muted} onToggleMute={() => setMuted((value) => !value)}>
                   {front && (
                     <>
-                      {/* The corner: Download once the file exists, and Publish. Two buttons stacked, so neither moves when the other appears. */}
+                      {/*
+                        * The corner: Download, once the file exists.
+                        *
+                        * Publish sat here and was removed at the owner's
+                        * request. No way to publish was lost with it —
+                        * KeptGrid and the publishing screens both still
+                        * offer it — so unlike Keep this button had somewhere
+                        * else to go.
+                        */}
                       {moment.production === "produced" && moment.downloadUrl && (
                         <a
                           href={moment.downloadUrl}
@@ -848,19 +889,6 @@ export function MomentFeed({
                           <DownloadGlyph />
                         </a>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => onPublish(moment)}
-                        disabled={!canPublish}
-                        aria-label="Publish — send this moment to your socials"
-                        title={publishTitle}
-                        className={cn(
-                          "absolute right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70 disabled:cursor-default disabled:opacity-60",
-                          moment.production === "produced" && moment.downloadUrl ? "top-14" : "top-3",
-                        )}
-                      >
-                        <PublishGlyph />
-                      </button>
                       {reworking && (
                         <div
                           className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 bg-black/60 text-white backdrop-blur-sm"
