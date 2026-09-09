@@ -136,11 +136,25 @@ function DialogueIllustration() {
  */
 function DialogueEmpty({ composer }: { composer: React.ReactNode }) {
   return (
-    // Centred down the page, but NOT across it: a cross-axis centre shrinks
-    // every child to its own content width, which crushes the composer into
-    // a pill with its placeholder wrapping over the send button. Only the
-    // words are centred; the box fills the column.
-    <VStack gap={6} justify="center" height="100%" className="min-h-80 min-w-64 flex-1" data-testid="dialogue-empty">
+    /**
+     * Centred down the page, but NOT across it: a cross-axis centre shrinks
+     * every child to its own content width, which crushes the composer into
+     * a pill with its placeholder wrapping over the send button. Only the
+     * words are centred; the box fills the column.
+     *
+     * The column's height is the row's to decide. An earlier `height="100%"`
+     * here did the opposite of what it looks like: an explicit height cancels
+     * the row's stretch, and the percentage then had nothing to resolve
+     * against, so this side settled at its own content height while the
+     * moments beside it stretched. Both halves centre their content, so they
+     * centred it in boxes of different heights and sat 186px apart.
+     *
+     * Measured at 1440x900, the two columns' content centres:
+     *
+     *   with height="100%"   query 312   moments 498
+     *   without it           query 498   moments 498
+     */
+    <VStack gap={6} justify="center" className="min-h-80 min-w-64 flex-1" data-testid="dialogue-empty">
       <VStack gap={2} align="center">
         <DialogueIllustration />
         <Heading level={3}>Talk to your footage</Heading>
