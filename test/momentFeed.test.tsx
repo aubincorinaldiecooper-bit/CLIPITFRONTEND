@@ -156,12 +156,27 @@ describe('feedMoments — every moment of every question, in order', () => {
   })
 })
 
+/**
+ * Which moment is in front, and how many there are.
+ *
+ * These used to be read off the "01 / 03" counter in the gutter. That was
+ * removed (the owner's call) and the dots moved into its place, so the front
+ * position is read from `aria-current` instead — the signal a screen reader
+ * uses, which makes these assertions test the thing that matters rather than
+ * a decorative label that happened to agree with it.
+ */
+const front = () => {
+  const dots = [...screen.getByTestId('feed-dots').querySelectorAll('button')]
+  return dots.findIndex((dot) => dot.getAttribute('aria-current') === 'true') + 1
+}
+const total = () => screen.getByTestId('feed-dots').querySelectorAll('button').length
+
 describe('MomentFeed — one moment at a time', () => {
   it('shows the position in the feed and the moment on screen', () => {
     const moments = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
     render(<MomentFeed moments={moments} {...handlers()} />)
-    expect(screen.getByTestId('feed-position').textContent).toContain('01')
-    expect(screen.getByTestId('feed-total').textContent).toContain('02')
+    expect(front()).toBe(1)
+    expect(total()).toBe(2)
     expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('Harbour skyline')
   })
 
@@ -225,10 +240,10 @@ describe('MomentFeed — one moment at a time', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Bring back: Harbour skyline' }))
     expect(h.onUndoSkip).toHaveBeenCalledTimes(1)
     expect(h.onUndoSkip.mock.calls[0]![0].match.id).toBe('gone')
-    expect(screen.getByTestId('feed-position').textContent).toContain('02')
+    expect(front()).toBe(2)
     // A kept moment's dot just goes there: it stays kept, and its card says so.
     await userEvent.click(screen.getAllByRole('button', { name: 'Go to: Harbour skyline' })[0]!)
-    expect(screen.getByTestId('feed-position').textContent).toContain('01')
+    expect(front()).toBe(1)
     expect(screen.getByTestId('feed-decision').textContent).toContain('Kept')
     expect(h.onUndoSkip).toHaveBeenCalledTimes(1)
   })
@@ -305,12 +320,12 @@ describe('MomentFeed — one moment at a time', () => {
       video,
     )
     rerender(<MomentFeed moments={after} {...h} />)
-    expect(screen.getByTestId('feed-position').textContent).toContain('01')
+    expect(front()).toBe(1)
     expect(screen.getByTestId('feed-decision').textContent).toContain('Kept · cutting')
     expect((screen.getByRole('button', { name: 'Kept' }) as HTMLButtonElement).disabled).toBe(true)
     await userEvent.click(screen.getByRole('button', { name: 'Next moment' }))
     expect(h.onSkip).not.toHaveBeenCalled()
-    expect(screen.getByTestId('feed-position').textContent).toContain('02')
+    expect(front()).toBe(2)
     await userEvent.click(screen.getByRole('button', { name: /^Skip/ }))
     expect(h.onSkip).toHaveBeenCalledTimes(1)
     expect(h.onSkip.mock.calls[0]![0].match.id).toBe('b')
@@ -383,7 +398,7 @@ describe('MomentFeed — one moment at a time', () => {
     )
     rerender(<MomentFeed moments={after} {...h} />)
     expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('The dunk')
-    expect(screen.getByTestId('feed-position').textContent).toContain('03')
+    expect(front()).toBe(3)
   })
 
   it('moments that land while the person sits on the end card come to the front', () => {
@@ -391,7 +406,7 @@ describe('MomentFeed — one moment at a time', () => {
     const { rerender } = render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })])], video)} {...h} />)
     expect(screen.queryByTestId('feed-controls')).toBeNull()
     rerender(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a', feedback: 'approved' })]), exchange('r2', [match({ id: 'b', description: 'The dunk' })])], video)} {...h} />)
-    expect(screen.getByTestId('feed-position').textContent).toContain('02')
+    expect(front()).toBe(2)
     expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('The dunk')
   })
 
@@ -481,7 +496,7 @@ describe('MomentFeed — one moment at a time', () => {
     // says the moments are still here, and takes you back to them.
     expect(screen.getByTestId('feed-end').textContent).toContain('still here')
     await userEvent.click(screen.getByRole('button', { name: 'Look back over them' }))
-    expect(screen.getByTestId('feed-position').textContent).toContain('01')
+    expect(front()).toBe(1)
     expect(screen.queryByTestId('feed-download')).toBeNull()
     expect(screen.getByTestId('feed-decision').textContent).toContain('cutting')
     expect(screen.getByRole('button', { name: /^Publish/ }).getAttribute('title')).toContain('once the cut is ready')

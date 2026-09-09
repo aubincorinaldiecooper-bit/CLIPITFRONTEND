@@ -765,22 +765,29 @@ export function MomentFeed({
         style={{ perspective: "1200px" }}
         onWheel={onWheel}
       >
-        {/* Position in the feed, in the left gutter. */}
-        <div className="absolute left-0 top-1/2 flex w-14 -translate-y-1/2 flex-col items-center sm:w-20" aria-live="polite">
-          <span className="text-3xl font-light tabular-nums text-foreground sm:text-4xl" data-testid="feed-position">
-            {twoDigits(Math.min(cursor + 1, total))}
-          </span>
-          <span aria-hidden className="my-2 h-px w-8 bg-foreground/20" />
-          <span className="text-sm tabular-nums text-muted-foreground" data-testid="feed-total">
-            {twoDigits(total)}
-          </span>
-        </div>
-
-        {/* The feed itself, in the right gutter: one dot per moment, the front one stretched. Each dot goes to its moment; a skipped moment's brings it back. */}
-        <div className="absolute right-0 top-1/2 flex w-14 -translate-y-1/2 flex-col items-center gap-2 sm:w-20" data-testid="feed-dots">
+        {/*
+          * The feed, in the left gutter: one dot per moment, the front one
+          * stretched. Each dot goes to its moment; a skipped moment's brings
+          * it back.
+          *
+          * The button is NOT the dot. It used to be, and that made every
+          * target 8x8 css px with 16px between centres — which fails WCAG 2.2
+          * SC 2.5.8 (AA) on both of its routes, since that rule wants 24x24
+          * or 24px of clearance and this had neither. Measured before the
+          * change: 8x24, 8x8, 8x8, centres 24px then 16px apart.
+          *
+          * So the dot is a span inside a button sized to the standard. The
+          * mark you see is unchanged; the area you can hit is not. 24px is
+          * the AA floor and keeps the rhythm the design has; a coarse pointer
+          * gets 44px, which is Apple's and Material's guidance and the size a
+          * thumb actually needs. `gap` is gone because the targets now sit
+          * edge to edge and provide the spacing themselves.
+          */}
+        <div className="absolute left-0 top-1/2 flex w-14 -translate-y-1/2 flex-col items-center sm:w-20" data-testid="feed-dots">
           {moments.map((moment, index) => {
             const front = index === cursor
             const title = moment.match.description || "a moment"
+            const interactive = free && !front
             return (
               <button
                 key={moment.match.id}
@@ -789,11 +796,17 @@ export function MomentFeed({
                 onClick={() => goTo(index)}
                 aria-current={front ? "true" : undefined}
                 aria-label={moment.decision === "skipped" ? `Bring back: ${title}` : `Go to: ${title}`}
-                className={cn(
-                  "w-2 rounded-full transition-all duration-300",
-                  front ? "h-6 bg-foreground" : "h-2 bg-foreground/30 hover:bg-foreground/50 disabled:hover:bg-foreground/30",
-                )}
-              />
+                className="group flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:size-11"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "w-2 rounded-full transition-all duration-300",
+                    front ? "h-6 bg-foreground" : "h-2 bg-foreground/30",
+                    interactive && "group-hover:bg-foreground/50",
+                  )}
+                />
+              </button>
             )
           })}
         </div>
