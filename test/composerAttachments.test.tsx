@@ -104,6 +104,22 @@ describe('the pictures attached to a question', () => {
     expect(released).toEqual([first.url])
   })
 
+  it('keeps a measured shape when another picture is added or removed', () => {
+    // Devin's fourth finding on #90. `measure` wrote to the render only, so
+    // the next edit rebuilt from the ref and put the placeholder shape back —
+    // and a viewer open at the time shrank to it.
+    const { result } = renderHook(() => useAttachments(6))
+    act(() => result.current.add([picture('a.png')]))
+    const [first] = result.current.attachments
+    act(() => result.current.measure(first.id, 1920, 1080))
+
+    act(() => result.current.add([picture('b.png')]))
+    expect(result.current.attachments[0]).toMatchObject({ width: 1920, height: 1080 })
+
+    act(() => result.current.remove(result.current.attachments[1].id))
+    expect(result.current.attachments[0]).toMatchObject({ width: 1920, height: 1080 })
+  })
+
   it('ignores anything that is not a picture', () => {
     const { result } = renderHook(() => useAttachments(6))
     const clip = new File(['bytes'], 'harbour.mp4', { type: 'video/mp4', lastModified: 1 })

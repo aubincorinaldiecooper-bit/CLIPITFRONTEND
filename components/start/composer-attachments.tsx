@@ -68,6 +68,21 @@ export function useAttachments(max: number) {
   /** Rises once per picture kept, so two copies of one file differ. */
   const picked = useRef(0)
 
+  /**
+   * The only way the list changes: the ref and the render move together.
+   *
+   * Devin's fourth finding on #90, and the one that says most about the last
+   * three. Making the ref authoritative fixed a family of races and left
+   * `measure` still writing to the render alone, so the next add or remove
+   * rebuilt from the ref and put the placeholder shape back over dimensions
+   * the browser had already reported. One writer of four was wrong, which is
+   * the sort of thing a rule cannot catch and a single door can.
+   */
+  const commit = useCallback((next: Attachment[]) => {
+    live.current = next
+    setAttachments(next)
+  }, [])
+
   useEffect(() => {
     return () => {
       for (const attachment of live.current) URL.revokeObjectURL(attachment.url)
@@ -97,33 +112,31 @@ export function useAttachments(max: number) {
         width: 4,
         height: 3,
       }))
-      live.current = [...live.current, ...made]
-      setAttachments(live.current)
+      commit([...live.current, ...made])
     },
-    [max],
+    [max, commit],
   )
 
   /** The picture decoded, so the viewer can open at its real proportions. */
-  const measure = useCallback((id: string, width: number, height: number) => {
-    setAttachments((previous) =>
-      previous.map((attachment) => (attachment.id === id ? { ...attachment, width, height } : attachment)),
-    )
-  }, [])
+  const measure = useCallback(
+    (id: string, width: number, height: number) => {
+      commit(live.current.map((attachment) => (attachment.id === id ? { ...attachment, width, height } : attachment)))
+    },
+    [commit],
+  )
 
   const remove = useCallback((id: string) => {
     const going = live.current.find((attachment) => attachment.id === id)
     // Already gone. Asking twice does nothing the second time.
     if (!going) return
     URL.revokeObjectURL(going.url)
-    live.current = live.current.filter((attachment) => attachment.id !== id)
-    setAttachments(live.current)
-  }, [])
+    commit(live.current.filter((attachment) => attachment.id !== id))
+  }, [commit])
 
   const clear = useCallback(() => {
     for (const attachment of live.current) URL.revokeObjectURL(attachment.url)
-    live.current = []
-    setAttachments([])
-  }, [])
+    commit([])
+  }, [commit])
 
   return { attachments, add, measure, remove, clear }
 }
