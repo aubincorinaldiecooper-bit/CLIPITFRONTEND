@@ -165,6 +165,24 @@ export function ModelPicker({ value, onChange }: { value: string; onChange: (mod
   /** Which row the highlight sits behind, or null when it should be hidden. */
   const [hovered, setHovered] = useState<number | null>(null)
   const holder = useRef<HTMLSpanElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+
+  /**
+   * Close, without losing the keyboard's place.
+   *
+   * `inert` takes the closing menu out of the document, so an option holding
+   * the focus loses it to nothing and the next Tab starts again from the top
+   * of the page — Devin's finding on #90, and a consequence of the fix that
+   * added `inert`. The focus belongs back on the button that opened the menu.
+   *
+   * Only when it is leaving the menu, though. A click elsewhere keeps the
+   * focus it earns, so that path closes without touching it.
+   */
+  const close = useCallback(() => {
+    const leaving = holder.current?.contains(document.activeElement)
+    setIsOpen(false)
+    if (leaving) trigger.current?.focus()
+  }, [])
 
   // Closing on a click elsewhere, and on Escape, because a menu that can only
   // be closed by choosing something is a trap.
@@ -174,7 +192,7 @@ export function ModelPicker({ value, onChange }: { value: string; onChange: (mod
       if (holder.current && !holder.current.contains(event.target as Node)) setIsOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false)
+      if (event.key === "Escape") close()
     }
     document.addEventListener("mousedown", onDown)
     document.addEventListener("keydown", onKey)
@@ -182,20 +200,21 @@ export function ModelPicker({ value, onChange }: { value: string; onChange: (mod
       document.removeEventListener("mousedown", onDown)
       document.removeEventListener("keydown", onKey)
     }
-  }, [isOpen])
+  }, [isOpen, close])
 
   const choose = useCallback(
     (model: string) => {
       onChange(model)
-      setIsOpen(false)
+      close()
       setHovered(null)
     },
-    [onChange],
+    [close, onChange],
   )
 
   return (
     <span ref={holder} className="relative inline-flex">
       <button
+        ref={trigger}
         type="button"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setIsOpen((open) => !open)}
