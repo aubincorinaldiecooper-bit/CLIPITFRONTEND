@@ -198,6 +198,15 @@ export function ModelPicker({ value, onChange }: { value: string; onChange: (mod
         role="menu"
         aria-label="Model"
         onMouseLeave={() => setHovered(null)}
+        /**
+         * Closed means closed to the keyboard too. `pointer-events-none`
+         * stops a mouse and nothing else, so the five options stayed in the
+         * tab order while invisible and could be reached and chosen by
+         * someone who never saw them — Devin's finding on #90. `inert` takes
+         * them out of the tab order and the accessibility tree while leaving
+         * the closing animation to play.
+         */
+        inert={!isOpen}
         style={{ transformOrigin: "bottom left" }}
         className={cn(
           "absolute bottom-full left-0 z-50 mb-2.5 flex w-44 flex-col gap-0.5 rounded-2xl border border-border bg-card/95 p-1 shadow-xl backdrop-blur-md transition-all duration-300",

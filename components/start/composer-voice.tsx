@@ -180,6 +180,16 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
         // recording is finished and complete whatever started after it.
         if (!mounted.current) return
 
+        /**
+         * A recording can also end without anyone pressing stop — the
+         * microphone unplugged, the permission withdrawn, the track ended by
+         * the browser. `stop()` clears this ref before the event arrives, so
+         * finding it still here means nobody asked: the bars would have gone
+         * on moving over a microphone that had already gone. Tidying up is
+         * this handler's job in that case, and only in that case.
+         */
+        const endedOnItsOwn = recorder.current === capture
+
         const recorded = new Blob(collected, { type: capture.mimeType || "audio/webm" })
         if (onCaptured) {
           onCaptured(recorded)
@@ -188,11 +198,13 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
           // arrived — which is exactly what the draft did here.
           setProblem("Recorded, but Clipit cannot turn speech into words yet. Type the question for now.")
         }
+
+        if (endedOnItsOwn) stop()
       }
       recorder.current = capture
       capture.start()
     }
-  }, [onCaptured])
+  }, [onCaptured, stop])
 
   const dismissProblem = useCallback(() => setProblem(null), [])
 
