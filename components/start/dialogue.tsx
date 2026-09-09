@@ -14,10 +14,10 @@ import {
   type ChatToolCallItem,
 } from "@astryxdesign/core/Chat"
 import { Heading } from "@astryxdesign/core/Heading"
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Mic01Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
 import { AttachmentTray, useAttachments } from "./composer-attachments"
+import { EFFORTS, EffortDial, MODELS, ModelPicker } from "./composer-controls"
 import { useVoiceCapture, VoiceLevels } from "./composer-voice"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
@@ -374,23 +374,15 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const inputRef = useRef<ChatComposerInputHandle>(null)
 
   /**
-   * How hard to look: the control now, the behaviour later — the owner's
-   * instruction (9 September).
+   * Which model, and how hard to look. Both cosmetic, by the owner's
+   * instruction (9 September): the effort levels are static until they decide
+   * what they mean, and connecting the model choice to OpenRouter is theirs.
    *
-   * It is local state on purpose: it is not in `onAsk`, not in the request,
-   * and the server never sees it, so nothing downstream can quietly start
-   * depending on a choice that currently decides nothing. Wiring it means
-   * threading it through `onAsk` and giving the two settings different work
-   * to do — the obvious mapping is the index for "Search" and the full
-   * footage read for "Deep search", which is a cost-for-coverage trade and
-   * so is the owner's call to make, from a measurement.
-   *
-   * Hidden from creators until it does something, by DEPTH_CONTROL_VISIBLE
-   * above. The first version of this drew the control for everyone and said
-   * in this comment that it must not reach a creator, which is not a thing a
-   * comment can do — Devin's review on #90 caught the gap between the two.
+   * Local state, deliberately: neither reaches `onAsk`, so nothing downstream
+   * can start depending on a choice that decides nothing.
    */
-  const [depth, setDepth] = useState("search")
+  const [model, setModel] = useState<string>(MODELS[0])
+  const [effort, setEffort] = useState<string>(EFFORTS[0])
 
   /**
    * Pictures and speech, ported from the draft and not yet connected.
@@ -562,15 +554,10 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
           }
           footerActions={
             COMPOSER_PREVIEW ? (
-              <SegmentedControl
-                value={depth}
-                onChange={setDepth}
-                label="How hard to look"
-                size="sm"
-              >
-                <SegmentedControlItem value="search" label="Search" />
-                <SegmentedControlItem value="deep" label="Deep search" />
-              </SegmentedControl>
+              <>
+                <ModelPicker value={model} onChange={setModel} />
+                <EffortDial value={effort} onChange={setEffort} />
+              </>
             ) : undefined
           }
           // Left of the send button, where the draft put them.

@@ -88,8 +88,8 @@ describe('Dialogue', () => {
     // The variable is unset here, which is what a creator's build looks like.
     const exchanges: Exchange[] = [{ request: request({ matches: [match()] }), clips: [] }]
     render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
-    expect(screen.queryByText('Deep search')).toBeNull()
-    expect(screen.queryByRole('radiogroup', { name: 'How hard to look' })).toBeNull()
+    expect(screen.queryByText('GPT 5.5')).toBeNull()
+    expect(screen.queryByText('Low')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add a picture' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Speak the question' })).toBeNull()
   })
