@@ -17,7 +17,7 @@ import { Heading } from "@astryxdesign/core/Heading"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Mic01Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
 import { AttachmentTray, useAttachments } from "./composer-attachments"
-import { EFFORTS, EffortDial, MODELS, ModelPicker } from "./composer-controls"
+import { EFFORTS, EffortDial, MODEL_NAMES, ModelPicker } from "./composer-controls"
 import { useVoiceCapture, VoiceLevels } from "./composer-voice"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
@@ -381,7 +381,7 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
    * Local state, deliberately: neither reaches `onAsk`, so nothing downstream
    * can start depending on a choice that decides nothing.
    */
-  const [model, setModel] = useState<string>(MODELS[0])
+  const [model, setModel] = useState<string>(MODEL_NAMES[0])
   const [effort, setEffort] = useState<string>(EFFORTS[0])
 
   /**

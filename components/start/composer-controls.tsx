@@ -21,8 +21,31 @@ import { cn } from "@/lib/utils"
 
 const SPRING = "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
 
-/** The owner's list, as drawn in their reference. */
-export const MODELS = ["GPT 5.5", "Opus 4.8", "Gemini 3.5 Flash", "Composer 2.5", "GLM 5.2"] as const
+/**
+ * The owner's list, as drawn in their reference, each with the file its mark
+ * would come from.
+ *
+ * Those files are not in the repository yet. The draft hotlinked them from a
+ * third-party CDN, which is not something to ship and is not reachable from
+ * here anyway, and drawing another company's mark from memory would be
+ * inventing their branding. So each one is tried and quietly falls back to a
+ * plain square when it is not there: dropping the five SVGs into
+ * public/models/ is the whole job, with no code change.
+ *
+ * `invert` is for the marks that are drawn in near-black. Clipit's ground is
+ * dark, so those would otherwise be invisible; the coloured ones are left
+ * alone. It follows the owner's reference, where three of the five are
+ * monochrome.
+ */
+export const MODELS = [
+  { name: "GPT 5.5", mark: "/models/gpt.svg", invert: true },
+  { name: "Opus 4.8", mark: "/models/opus.svg", invert: false },
+  { name: "Gemini 3.5 Flash", mark: "/models/gemini.svg", invert: false },
+  { name: "Composer 2.5", mark: "/models/composer.svg", invert: true },
+  { name: "GLM 5.2", mark: "/models/glm.svg", invert: true },
+] as const
+
+export const MODEL_NAMES = MODELS.map((model) => model.name)
 export const EFFORTS = ["Low", "Medium", "Max Effort"] as const
 
 /** Height of one menu row, and the distance the highlight travels between them. */
@@ -63,15 +86,42 @@ function MorphingLabel({ text }: { text: string }) {
 }
 
 /**
- * A place for each model's mark.
+ * A model's mark, or a plain square while its file is missing.
  *
- * Deliberately blank. The draft hotlinked five vendor logos from a
- * third-party CDN, which is not something to ship — the page would break when
- * that host moved, and the marks are not ours to serve from someone else's
- * bucket. Drop real files into public/models/ and give this a src.
+ * A broken-image glyph would be worse than no mark at all, so a file that
+ * does not load is replaced by the square rather than shown failing.
  */
-function ModelMark({ className }: { className?: string }) {
-  return <span aria-hidden="true" className={cn("size-3.5 shrink-0 rounded-[4px] bg-foreground/20", className)} />
+function ModelMark({ name, className }: { name: string; className?: string }) {
+  const model = MODELS.find((entry) => entry.name === name)
+  const [missing, setMissing] = useState(false)
+  const picture = useRef<HTMLImageElement>(null)
+
+  /**
+   * A file that fails before React has attached its handler never fires one,
+   * and an empty `alt` draws nothing at all — so four missing marks left four
+   * blank gaps rather than four squares. Asking the element directly on mount
+   * covers the load that already finished.
+   */
+  useEffect(() => {
+    const element = picture.current
+    if (element && element.complete && element.naturalWidth === 0) setMissing(true)
+  }, [])
+
+  if (!model || missing) {
+    return <span aria-hidden="true" className={cn("size-3.5 shrink-0 rounded-[4px] bg-foreground/20", className)} />
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={picture}
+      src={model.mark}
+      alt=""
+      aria-hidden="true"
+      onError={() => setMissing(true)}
+      className={cn("size-3.5 shrink-0 object-contain", model.invert && "invert", className)}
+    />
+  )
 }
 
 /** Three bars, filling as the effort rises. The draft's icon, kept. */
@@ -138,7 +188,7 @@ export function ModelPicker({ value, onChange }: { value: string; onChange: (mod
         aria-expanded={isOpen}
         aria-label={`Model: ${value}`}
       >
-        <ModelMark className="opacity-70 transition-opacity group-hover:opacity-100" />
+        <ModelMark name={value} className="opacity-70 transition-opacity group-hover:opacity-100" />
         <span className="whitespace-nowrap text-xs font-semibold select-none">
           <MorphingLabel text={value} />
         </span>
@@ -169,19 +219,19 @@ export function ModelPicker({ value, onChange }: { value: string; onChange: (mod
           />
           {MODELS.map((model, index) => (
             <button
-              key={model}
+              key={model.name}
               type="button"
               role="menuitemradio"
-              aria-checked={model === value}
+              aria-checked={model.name === value}
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setHovered(index)}
               onFocus={() => setHovered(index)}
-              onClick={() => choose(model)}
+              onClick={() => choose(model.name)}
               className="relative flex h-8 w-full items-center rounded-xl px-2.5 text-left text-xs font-medium text-foreground/80 outline-none transition-transform active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="flex items-center gap-2 whitespace-nowrap">
-                <ModelMark className="opacity-85" />
-                {model}
+                <ModelMark name={model.name} className="opacity-85" />
+                {model.name}
               </span>
             </button>
           ))}
