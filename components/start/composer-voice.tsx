@@ -173,8 +173,11 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
         if (event.data.size > 0) collected.push(event.data)
       }
       capture.onstop = () => {
-        // Superseded by a newer recording, or the screen is gone.
-        if (recorder.current !== null && recorder.current !== capture) return
+        // Only the screen being gone stops this reporting. An earlier guard
+        // also dropped anything superseded by a newer recording, which threw
+        // away speech the person had actually given — Devin's finding on #90.
+        // Nothing needs guarding now that each session owns its sound: this
+        // recording is finished and complete whatever started after it.
         if (!mounted.current) return
 
         const recorded = new Blob(collected, { type: capture.mimeType || "audio/webm" })

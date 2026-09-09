@@ -86,6 +86,24 @@ describe('the pictures attached to a question', () => {
     expect(result.current.attachments.map((a) => a.name)).toEqual(['b.png'])
   })
 
+  it('takes no notice of the same picture being removed twice', () => {
+    // Devin's third finding on #90. Both calls used to find the picture,
+    // because the list only caught up on render, so the room it freed was
+    // counted twice and the next pick could break the limit.
+    const { result } = renderHook(() => useAttachments(2))
+    act(() => result.current.add([picture('a.png'), picture('b.png')]))
+    const [first] = result.current.attachments
+
+    act(() => {
+      result.current.remove(first.id)
+      result.current.remove(first.id)
+    })
+    act(() => result.current.add([picture('c.png'), picture('d.png')]))
+
+    expect(result.current.attachments).toHaveLength(2)
+    expect(released).toEqual([first.url])
+  })
+
   it('ignores anything that is not a picture', () => {
     const { result } = renderHook(() => useAttachments(6))
     const clip = new File(['bytes'], 'harbour.mp4', { type: 'video/mp4', lastModified: 1 })

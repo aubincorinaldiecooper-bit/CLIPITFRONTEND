@@ -55,19 +55,18 @@ const SPRING = "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
  */
 export function useAttachments(max: number) {
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  /**
+   * The list itself, kept here and updated the moment anything changes.
+   *
+   * This used to be a copy of the rendered state, which made every operation
+   * depend on React having caught up: two picks in one tick both saw the same
+   * room left, and removing the same picture twice counted it gone twice.
+   * Holding the real list here instead makes each of those a no-op the second
+   * time — Devin's findings on #90, three rounds of them, all the same shape.
+   */
   const live = useRef<Attachment[]>([])
-  live.current = attachments
   /** Rises once per picture kept, so two copies of one file differ. */
   const picked = useRef(0)
-  /**
-   * How many are spoken for, counted the moment they are taken.
-   *
-   * Devin's second finding on #90: measuring the room left from the rendered
-   * list meant two picks in the same tick both saw the same emptiness and
-   * both filled it, so more pictures were held than the limit allows. This
-   * moves with every add and every remove, not with rendering.
-   */
-  const held = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -80,10 +79,9 @@ export function useAttachments(max: number) {
       const pictures = files.filter((file) => file.type.startsWith("image/"))
       if (pictures.length === 0) return
 
-      const room = Math.max(0, max - held.current)
+      const room = Math.max(0, max - live.current.length)
       const taken = pictures.slice(0, room)
       if (taken.length === 0) return
-      held.current += taken.length
 
       const made = taken.map((file) => ({
         // A counter, not the file's own details. Devin's finding on #90: the
@@ -99,7 +97,8 @@ export function useAttachments(max: number) {
         width: 4,
         height: 3,
       }))
-      setAttachments((previous) => [...previous, ...made])
+      live.current = [...live.current, ...made]
+      setAttachments(live.current)
     },
     [max],
   )
@@ -113,15 +112,16 @@ export function useAttachments(max: number) {
 
   const remove = useCallback((id: string) => {
     const going = live.current.find((attachment) => attachment.id === id)
+    // Already gone. Asking twice does nothing the second time.
     if (!going) return
     URL.revokeObjectURL(going.url)
-    held.current -= 1
-    setAttachments((previous) => previous.filter((attachment) => attachment.id !== id))
+    live.current = live.current.filter((attachment) => attachment.id !== id)
+    setAttachments(live.current)
   }, [])
 
   const clear = useCallback(() => {
     for (const attachment of live.current) URL.revokeObjectURL(attachment.url)
-    held.current = 0
+    live.current = []
     setAttachments([])
   }, [])
 
