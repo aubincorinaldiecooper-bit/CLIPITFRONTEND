@@ -59,6 +59,15 @@ export function useAttachments(max: number) {
   live.current = attachments
   /** Rises once per picture kept, so two copies of one file differ. */
   const picked = useRef(0)
+  /**
+   * How many are spoken for, counted the moment they are taken.
+   *
+   * Devin's second finding on #90: measuring the room left from the rendered
+   * list meant two picks in the same tick both saw the same emptiness and
+   * both filled it, so more pictures were held than the limit allows. This
+   * moves with every add and every remove, not with rendering.
+   */
+  const held = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -71,9 +80,10 @@ export function useAttachments(max: number) {
       const pictures = files.filter((file) => file.type.startsWith("image/"))
       if (pictures.length === 0) return
 
-      const room = Math.max(0, max - live.current.length)
+      const room = Math.max(0, max - held.current)
       const taken = pictures.slice(0, room)
       if (taken.length === 0) return
+      held.current += taken.length
 
       const made = taken.map((file) => ({
         // A counter, not the file's own details. Devin's finding on #90: the
@@ -102,18 +112,17 @@ export function useAttachments(max: number) {
   }, [])
 
   const remove = useCallback((id: string) => {
-    setAttachments((previous) => {
-      const going = previous.find((attachment) => attachment.id === id)
-      if (going) URL.revokeObjectURL(going.url)
-      return previous.filter((attachment) => attachment.id !== id)
-    })
+    const going = live.current.find((attachment) => attachment.id === id)
+    if (!going) return
+    URL.revokeObjectURL(going.url)
+    held.current -= 1
+    setAttachments((previous) => previous.filter((attachment) => attachment.id !== id))
   }, [])
 
   const clear = useCallback(() => {
-    setAttachments((previous) => {
-      for (const attachment of previous) URL.revokeObjectURL(attachment.url)
-      return []
-    })
+    for (const attachment of live.current) URL.revokeObjectURL(attachment.url)
+    held.current = 0
+    setAttachments([])
   }, [])
 
   return { attachments, add, measure, remove, clear }

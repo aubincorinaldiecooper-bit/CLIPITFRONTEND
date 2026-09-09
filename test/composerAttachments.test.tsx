@@ -64,6 +64,28 @@ describe('the pictures attached to a question', () => {
     expect(handed).toBe(2)
   })
 
+  it('holds the limit when two picks land in the same breath', () => {
+    // Devin's second finding on #90. Both picks used to measure the room left
+    // from the rendered list, which had not caught up, so both filled it.
+    const { result } = renderHook(() => useAttachments(2))
+    act(() => {
+      result.current.add([picture('a.png')])
+      result.current.add([picture('b.png'), picture('c.png')])
+    })
+
+    expect(result.current.attachments).toHaveLength(2)
+    expect(handed).toBe(2)
+  })
+
+  it('frees the room again when a picture is removed', () => {
+    const { result } = renderHook(() => useAttachments(1))
+    act(() => result.current.add([picture('a.png')]))
+    act(() => result.current.remove(result.current.attachments[0].id))
+    act(() => result.current.add([picture('b.png')]))
+
+    expect(result.current.attachments.map((a) => a.name)).toEqual(['b.png'])
+  })
+
   it('ignores anything that is not a picture', () => {
     const { result } = renderHook(() => useAttachments(6))
     const clip = new File(['bytes'], 'harbour.mp4', { type: 'video/mp4', lastModified: 1 })

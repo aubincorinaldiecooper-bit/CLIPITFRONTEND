@@ -60,7 +60,6 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
   const audio = useRef<AudioContext | null>(null)
   const frame = useRef<number | null>(null)
   const recorder = useRef<MediaRecorder | null>(null)
-  const chunks = useRef<Blob[]>([])
 
   const teardown = useCallback(() => {
     // Anything still being acquired belongs to a run that is over.
@@ -160,13 +159,25 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
 
     if (typeof MediaRecorder !== "undefined") {
       const capture = new MediaRecorder(opened)
-      chunks.current = []
+      /**
+       * This session's own sound, in its own array.
+       *
+       * Devin's second finding on #90: one shared array meant a quick stop
+       * and start had two recorders writing into it. `stop()` finishes
+       * asynchronously, so the old recorder's handler could run after the new
+       * one had begun — and hand back, or throw away, the recording that was
+       * still being made.
+       */
+      const collected: Blob[] = []
       capture.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.current.push(event.data)
+        if (event.data.size > 0) collected.push(event.data)
       }
       capture.onstop = () => {
-        const recorded = new Blob(chunks.current, { type: capture.mimeType || "audio/webm" })
-        chunks.current = []
+        // Superseded by a newer recording, or the screen is gone.
+        if (recorder.current !== null && recorder.current !== capture) return
+        if (!mounted.current) return
+
+        const recorded = new Blob(collected, { type: capture.mimeType || "audio/webm" })
         if (onCaptured) {
           onCaptured(recorded)
         } else {
