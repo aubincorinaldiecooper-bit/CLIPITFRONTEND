@@ -94,18 +94,34 @@ function MorphingLabel({ text }: { text: string }) {
 function ModelMark({ name, className }: { name: string; className?: string }) {
   const model = MODELS.find((entry) => entry.name === name)
   const [missing, setMissing] = useState(false)
+  const [drawn, setDrawn] = useState(name)
   const picture = useRef<HTMLImageElement>(null)
+
+  /**
+   * Whose mark this is has changed, so what happened to the last one says
+   * nothing about this one.
+   *
+   * Devin's finding on #90: the picker's button keeps one of these and only
+   * changes its name, so a model with no file left `missing` set and every
+   * model chosen afterwards showed the square, file or not. Resetting on the
+   * way past is better than asking callers to remember a key, which is a
+   * thing a caller can forget.
+   */
+  if (drawn !== name) {
+    setDrawn(name)
+    setMissing(false)
+  }
 
   /**
    * A file that fails before React has attached its handler never fires one,
    * and an empty `alt` draws nothing at all — so four missing marks left four
-   * blank gaps rather than four squares. Asking the element directly on mount
-   * covers the load that already finished.
+   * blank gaps rather than four squares. Asking the element directly covers
+   * the load that already finished, for each model this draws.
    */
   useEffect(() => {
     const element = picture.current
     if (element && element.complete && element.naturalWidth === 0) setMissing(true)
-  }, [])
+  }, [name])
 
   if (!model || missing) {
     return <span aria-hidden="true" className={cn("size-3.5 shrink-0 rounded-[4px] bg-foreground/20", className)} />
