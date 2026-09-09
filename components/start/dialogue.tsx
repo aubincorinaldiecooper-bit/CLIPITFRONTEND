@@ -13,6 +13,7 @@ import {
   type ChatToolCallItem,
 } from "@astryxdesign/core/Chat"
 import { Heading } from "@astryxdesign/core/Heading"
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
@@ -351,6 +352,24 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const [pending, setPending] = useState(false)
   const inputRef = useRef<ChatComposerInputHandle>(null)
 
+  /**
+   * How hard to look. NOT WIRED YET, and deliberately so — the owner asked
+   * for the control now and the behaviour later (9 September).
+   *
+   * It is local state on purpose: it is not in `onAsk`, not in the request,
+   * and the server never sees it, so nothing downstream can quietly start
+   * depending on a choice that currently decides nothing. Wiring it means
+   * threading it through `onAsk` and giving the two settings different work
+   * to do — the obvious mapping is the index for "Search" and the full
+   * footage read for "Deep search", which is a cost-for-coverage trade and
+   * so is the owner's call to make, from a measurement.
+   *
+   * Until then it must not reach a creator: a control named "Deep search"
+   * that searches exactly as shallowly as the other one is a promise the
+   * product does not keep.
+   */
+  const [depth, setDepth] = useState("search")
+
   // One order for everything said after a question: a note takes its
   // place when it is written, a kept moment's news when the keep is first
   // seen. Without it a Keep made after a re-cut sat above the re-cut in
@@ -477,6 +496,17 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
           // itself on submit, and a question the server refused is still the
           // person's question. It leaves the box only when the ask was taken.
           input={<ChatComposerInput label="Ask for a moment" maxRows={4} handleRef={inputRef} />}
+          footerActions={
+            <SegmentedControl
+              value={depth}
+              onChange={setDepth}
+              label="How hard to look"
+              size="sm"
+            >
+              <SegmentedControlItem value="search" label="Search" />
+              <SegmentedControlItem value="deep" label="Deep search" />
+            </SegmentedControl>
+          }
         />
   )
 
