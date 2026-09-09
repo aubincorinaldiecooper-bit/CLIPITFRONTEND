@@ -76,6 +76,20 @@ describe('isEditRequest — words about the moment on screen', () => {
 })
 
 describe('Dialogue', () => {
+  it('does not show a creator the search-depth control while it decides nothing', () => {
+    // Devin's finding on #90. The control was drawn for everyone with a
+    // comment saying it must not reach a creator, which a comment cannot do.
+    // "Deep search" that searches exactly as shallowly as "Search" is a
+    // promise the product does not keep, so it stays behind
+    // NEXT_PUBLIC_SEARCH_DEPTH_CONTROL until the two settings differ.
+    //
+    // The variable is unset here, which is what a creator's build looks like.
+    const exchanges: Exchange[] = [{ request: request({ matches: [match()] }), clips: [] }]
+    render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    expect(screen.queryByText('Deep search')).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'How hard to look' })).toBeNull()
+  })
+
   it('the first question is in the conversation: asked, acknowledged, and answered with the count it finished with', () => {
     // The owner's call of 2026-09-05: the first question used to be asked
     // on the upload step and answered by the cards alone, and the chat

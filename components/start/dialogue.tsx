@@ -346,6 +346,17 @@ function reclipNoteText(moments: FeedMoment[], matchId: string, fallback: string
   return `Re-cut "${title}" — same moment, new cut. It's on the card now.`
 }
 
+/**
+ * Whether to draw the search-depth control at all.
+ *
+ * Off unless a build sets NEXT_PUBLIC_SEARCH_DEPTH_CONTROL=true, so a local
+ * or preview build can show the design while production does not. A setting
+ * named "Deep search" that searches exactly as shallowly as the other one is
+ * a promise the product does not keep, and this is what keeps that promise
+ * from being made.
+ */
+const DEPTH_CONTROL_VISIBLE = process.env.NEXT_PUBLIC_SEARCH_DEPTH_CONTROL === "true"
+
 export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip }: DialogueProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const [draft, setDraft] = useState("")
@@ -353,8 +364,8 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   const inputRef = useRef<ChatComposerInputHandle>(null)
 
   /**
-   * How hard to look. NOT WIRED YET, and deliberately so — the owner asked
-   * for the control now and the behaviour later (9 September).
+   * How hard to look: the control now, the behaviour later — the owner's
+   * instruction (9 September).
    *
    * It is local state on purpose: it is not in `onAsk`, not in the request,
    * and the server never sees it, so nothing downstream can quietly start
@@ -364,9 +375,10 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
    * footage read for "Deep search", which is a cost-for-coverage trade and
    * so is the owner's call to make, from a measurement.
    *
-   * Until then it must not reach a creator: a control named "Deep search"
-   * that searches exactly as shallowly as the other one is a promise the
-   * product does not keep.
+   * Hidden from creators until it does something, by DEPTH_CONTROL_VISIBLE
+   * above. The first version of this drew the control for everyone and said
+   * in this comment that it must not reach a creator, which is not a thing a
+   * comment can do — Devin's review on #90 caught the gap between the two.
    */
   const [depth, setDepth] = useState("search")
 
@@ -497,15 +509,17 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
           // person's question. It leaves the box only when the ask was taken.
           input={<ChatComposerInput label="Ask for a moment" maxRows={4} handleRef={inputRef} />}
           footerActions={
-            <SegmentedControl
-              value={depth}
-              onChange={setDepth}
-              label="How hard to look"
-              size="sm"
-            >
-              <SegmentedControlItem value="search" label="Search" />
-              <SegmentedControlItem value="deep" label="Deep search" />
-            </SegmentedControl>
+            DEPTH_CONTROL_VISIBLE ? (
+              <SegmentedControl
+                value={depth}
+                onChange={setDepth}
+                label="How hard to look"
+                size="sm"
+              >
+                <SegmentedControlItem value="search" label="Search" />
+                <SegmentedControlItem value="deep" label="Deep search" />
+              </SegmentedControl>
+            ) : undefined
           }
         />
   )
