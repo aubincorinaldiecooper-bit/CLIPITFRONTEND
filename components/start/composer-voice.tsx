@@ -43,6 +43,19 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
   const [levels, setLevels] = useState<number[]>(() => new Array(BANDS).fill(0))
   const [problem, setProblem] = useState<string | null>(null)
 
+  /**
+   * A start can be abandoned while the permission prompt is still open.
+   *
+   * Devin's finding on #90, and it was the serious one: the screen closes, the
+   * cleanup runs, and THEN getUserMedia resolves and hands over a live stream
+   * that nothing is left to stop. The microphone stays on with the screen
+   * gone. `generation` is bumped by every teardown, so a start that comes back
+   * to a stale generation stops the tracks it was given and leaves.
+   */
+  const mounted = useRef(true)
+  const generation = useRef(0)
+  const starting = useRef(false)
+
   const stream = useRef<MediaStream | null>(null)
   const audio = useRef<AudioContext | null>(null)
   const frame = useRef<number | null>(null)
@@ -50,6 +63,9 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
   const chunks = useRef<Blob[]>([])
 
   const teardown = useCallback(() => {
+    // Anything still being acquired belongs to a run that is over.
+    generation.current += 1
+    starting.current = false
     if (frame.current !== null) {
       cancelAnimationFrame(frame.current)
       frame.current = null
@@ -68,7 +84,13 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
   }, [])
 
   // The microphone must not outlive the screen.
-  useEffect(() => teardown, [teardown])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      teardown()
+    }
+  }, [teardown])
 
   const stop = useCallback(() => {
     setIsRecording(false)
@@ -76,6 +98,8 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
   }, [teardown])
 
   const start = useCallback(async () => {
+    // One prompt at a time: tapping twice must not open two microphones.
+    if (starting.current || stream.current) return
     setProblem(null)
 
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -83,11 +107,27 @@ export function useVoiceCapture(onCaptured?: (audio: Blob) => void): VoiceCaptur
       return
     }
 
+    const mine = generation.current
+    starting.current = true
+
     let opened: MediaStream
     try {
       opened = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch {
-      setProblem("Clipit could not reach your microphone. Check the browser's permission, or type the question instead.")
+      starting.current = false
+      if (mounted.current && generation.current === mine) {
+        setProblem("Clipit could not reach your microphone. Check the browser's permission, or type the question instead.")
+      }
+      return
+    }
+
+    starting.current = false
+
+    // Gone, stopped, or superseded while the prompt was open. Whoever asked
+    // for this is no longer listening, so end it here rather than leave a
+    // microphone running behind a screen nobody is on.
+    if (!mounted.current || generation.current !== mine) {
+      for (const track of opened.getTracks()) track.stop()
       return
     }
 

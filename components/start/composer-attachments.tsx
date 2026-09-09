@@ -57,6 +57,8 @@ export function useAttachments(max: number) {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const live = useRef<Attachment[]>([])
   live.current = attachments
+  /** Rises once per picture kept, so two copies of one file differ. */
+  const picked = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -68,21 +70,26 @@ export function useAttachments(max: number) {
     (files: File[]) => {
       const pictures = files.filter((file) => file.type.startsWith("image/"))
       if (pictures.length === 0) return
-      setAttachments((previous) => {
-        const room = Math.max(0, max - previous.length)
-        const taken = pictures.slice(0, room)
-        const made = taken.map((file) => ({
-          id: `${file.name}-${file.lastModified}-${file.size}`,
-          file,
-          url: URL.createObjectURL(file),
-          name: file.name,
-          // Replaced once the picture reports its own size; the viewer needs a
-          // shape to open into before the bytes have decoded.
-          width: 4,
-          height: 3,
-        }))
-        return [...previous, ...made]
-      })
+
+      const room = Math.max(0, max - live.current.length)
+      const taken = pictures.slice(0, room)
+      if (taken.length === 0) return
+
+      const made = taken.map((file) => ({
+        // A counter, not the file's own details. Devin's finding on #90: the
+        // picker deliberately allows the same file twice, and keying on
+        // name + date + size gave both copies one id — duplicate React keys,
+        // removing either removed both, and one object URL was left behind.
+        id: `picture-${(picked.current += 1)}`,
+        file,
+        url: URL.createObjectURL(file),
+        name: file.name,
+        // Replaced once the picture reports its own size; the viewer needs a
+        // shape to open into before the bytes have decoded.
+        width: 4,
+        height: 3,
+      }))
+      setAttachments((previous) => [...previous, ...made])
     },
     [max],
   )
@@ -200,6 +207,9 @@ function AttachmentViewer({
   const [target, setTarget] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
   const closed = useRef(false)
 
+  // Recomputed whenever the picture's real shape arrives, so one opened
+  // before it had decoded grows to the right size rather than staying at the
+  // placeholder's.
   useEffect(() => {
     const widest = Math.min(window.innerWidth * 0.86, 560)
     const tallest = Math.min(window.innerHeight * 0.78, 720)
@@ -207,12 +217,39 @@ function AttachmentViewer({
     const width = attachment.width * scale
     const height = attachment.height * scale
     setTarget({ top: (window.innerHeight - height) / 2, left: (window.innerWidth - width) / 2, width, height })
+  }, [attachment.width, attachment.height])
 
+  useEffect(() => {
     const frame = requestAnimationFrame(() => setPhase("open"))
     return () => cancelAnimationFrame(frame)
-  }, [attachment])
+  }, [])
 
-  const startClosing = useCallback(() => setPhase("closing"), [])
+  const finish = useCallback(() => {
+    if (closed.current) return
+    closed.current = true
+    onClose()
+  }, [onClose])
+
+  /**
+   * Devin's finding on #90: closing before the opening frame had run left the
+   * geometry untouched, so no transition ever ended and the viewer sat over
+   * the screen for ever. Nothing has moved yet at that point, so there is
+   * nothing to play backwards — it just goes.
+   */
+  const startClosing = useCallback(() => {
+    if (phase === "opening") {
+      finish()
+      return
+    }
+    setPhase("closing")
+  }, [phase, finish])
+
+  // And a floor under the animation, in case no transition reports back.
+  useEffect(() => {
+    if (phase !== "closing") return
+    const timer = setTimeout(finish, 400)
+    return () => clearTimeout(timer)
+  }, [phase, finish])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -248,10 +285,9 @@ function AttachmentViewer({
         onClick={(event) => event.stopPropagation()}
         onTransitionEnd={(event) => {
           // Fires once per property — five of them here. Only the last leg of
-          // a close should unmount, and only once.
-          if (phase !== "closing" || closed.current || event.propertyName !== "width") return
-          closed.current = true
-          onClose()
+          // a close should unmount, and `finish` makes sure that is once.
+          if (phase !== "closing" || event.propertyName !== "width") return
+          finish()
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -284,12 +320,23 @@ export function AttachmentTray({
   onRemove: (id: string) => void
   onMeasured: (id: string, width: number, height: number) => void
 }) {
-  const [viewing, setViewing] = useState<{ attachment: Attachment; from: DOMRect } | null>(null)
+  /**
+   * Which picture is open, by id — not a copy of it.
+   *
+   * Devin's finding on #90: holding a copy froze whatever the attachment
+   * looked like at the moment of the click. Open one before the browser had
+   * decoded it and the copy still carried the 4x3 placeholder, so it grew to
+   * about six pixels across and the real dimensions, measured a moment later,
+   * never reached it. Reading it out of the list each render means the viewer
+   * sees the picture as it is now.
+   */
+  const [viewing, setViewing] = useState<{ id: string; from: DOMRect } | null>(null)
+  const shown = viewing ? (attachments.find((attachment) => attachment.id === viewing.id) ?? null) : null
 
   // A picture removed while open should not leave the viewer drawing a URL
   // that has been revoked.
   useEffect(() => {
-    if (viewing && !attachments.some((attachment) => attachment.id === viewing.attachment.id)) setViewing(null)
+    if (viewing && !attachments.some((attachment) => attachment.id === viewing.id)) setViewing(null)
   }, [attachments, viewing])
 
   return (
@@ -302,12 +349,12 @@ export function AttachmentTray({
             index={index}
             onRemove={onRemove}
             onMeasured={onMeasured}
-            onOpen={(picked, from) => setViewing({ attachment: picked, from })}
+            onOpen={(opened, from) => setViewing({ id: opened.id, from })}
           />
         ))}
       </span>
-      {viewing ? (
-        <AttachmentViewer attachment={viewing.attachment} from={viewing.from} onClose={() => setViewing(null)} />
+      {shown && viewing ? (
+        <AttachmentViewer attachment={shown} from={viewing.from} onClose={() => setViewing(null)} />
       ) : null}
     </>
   )
