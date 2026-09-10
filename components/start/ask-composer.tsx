@@ -8,7 +8,7 @@ import {
   ChatSendButton,
 } from "@astryxdesign/core/Chat"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Mic01Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
+import { PlusSignIcon } from "@hugeicons/core-free-icons"
 import { EFFORTS, EffortDial, MODEL_NAMES, ModelPicker } from "./composer-controls"
 import { useVoiceCapture, VoiceLevels } from "./composer-voice"
 
@@ -156,17 +156,6 @@ export function AskComposer({
                   aria-label={attach.label}
                 >
                   <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
-                </button>
-              )}
-              {COMPOSER_PREVIEW && (
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => (voice.isRecording ? voice.stop() : void voice.start())}
-                  className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={voice.isRecording ? "Stop recording" : "Speak the question"}
-                >
-                  <HugeiconsIcon icon={Mic01Icon} className="size-3.5" />
                 </button>
               )}
             </>
