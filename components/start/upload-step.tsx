@@ -1,11 +1,9 @@
 "use client"
 
-import { useRef } from "react"
-import { ArrowRight, Paperclip, Send, Video as VideoIcon } from "lucide-react"
 import { formatBytes, VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
 import type { Video } from "@/lib/types"
+import { AskComposer } from "./ask-composer"
 import { askGate } from "./ask-gate"
-import { cn } from "@/lib/utils"
 
 export interface UploadStepProps {
   entries: UploadEntry[]
@@ -29,14 +27,21 @@ const percent = (entry: UploadEntry) => Math.round((entry.progress ?? 0) * 100)
  * Home: one box, and nothing else.
  *
  * The owner's call of 2026-09-10 — "the ONLY thing present on our home
- * screen is the same search input bar". The drop container that used to
- * stand above it is gone.
+ * screen is the same search input bar i shared". Two things had to change
+ * for that sentence to be true, and the first attempt only did one of them:
  *
- * **Uploading did not go with it.** The bar takes video files itself, by the
- * owner's words in the same message: "the bar can hold video files so
- * 'upload' still exists, we're just removing the container". The paperclip
- * opens the same picker the container had and hands the files to the same
- * uploader.
+ *   1. **the drop container above the box is gone.** It was.
+ *   2. **the box is the owner's box.** It was not. Home had a bar of its
+ *      own — an outlined pill with a video glyph and a paper-plane — that
+ *      predates the reference they shared, and stripping the container off
+ *      it left the wrong bar looking tidier. It renders `AskComposer` now,
+ *      the same component the moments screen asks in.
+ *
+ * **Uploading did not go with the container.** The bar takes video files
+ * itself, by the owner's words in the same message: "the bar can hold video
+ * files so 'upload' still exists, we're just removing the container". The
+ * plus opens the same picker the container had and hands the files to the
+ * same uploader.
  *
  * What the container WAS carrying had to move here rather than disappear:
  *
@@ -64,7 +69,6 @@ export function UploadStep({
   disabled,
   searchInstruction,
 }: UploadStepProps) {
-  const picker = useRef<HTMLInputElement>(null)
   const isSearching = searchInstruction !== undefined
   // A question can be sent as soon as the upload has landed: the answer
   // waits, inside the search, for the video to be prepared, and the
@@ -79,133 +83,74 @@ export function UploadStep({
   // FAILED is not coming: it needs a retry or removal, and promising that it
   // will be ready is the same false promise a failed video makes.
   const somethingToAskAbout = !failed && (video != null || entries.some((entry) => entry.phase !== "failed"))
-  const trimmed = promptValue.trim()
-  const displayValue = isSearching ? searchInstruction : promptValue
   const broken = entries.filter((entry) => entry.phase === "failed")
   const arriving = entries.find((entry) => entry.phase === "uploading" || entry.phase === "queued")
 
   return (
-    <div className="w-full max-w-md">
-      <div className="flex flex-col gap-3">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (isSearching) {
-              onResume?.()
-              return
-            }
-            if (ready && trimmed) onSubmit?.()
-          }}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-full border-2 border-foreground bg-card px-4 py-3.5",
-            !ready && "opacity-70",
-          )}
-        >
-          {/*
-            Decoration, and it stands down on a phone. With the container
-            gone the placeholder is the ONLY instruction on an empty home
-            screen — there is no line under the box until there is a video
-            — and at 390px the glyph and its rule took 33 of the 166px the
-            words had, cutting "Add a video, then ask" to "Add a video, th".
-            Both carry aria-hidden, so nothing is lost but the ornament.
-          */}
-          <VideoIcon aria-hidden size={20} className="hidden shrink-0 text-foreground sm:block" />
-          <span aria-hidden className="hidden h-6 w-px shrink-0 bg-border sm:block" />
-          <input
-            value={displayValue}
-            onChange={(event) => onPromptChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && ready && (trimmed || isSearching)) {
-                event.preventDefault()
-                if (isSearching) onResume?.()
-                else onSubmit?.()
-              }
-            }}
-            // Typing is allowed the moment there is a video, even while it is
-            // still uploading or being read. Only SENDING waits for ready — the
-            // line below the box has promised exactly that, and the field used
-            // to contradict it.
-            disabled={!somethingToAskAbout || disabled || isSearching}
-            // The old words were "Upload a video first…", which named a
-            // container that is no longer on the screen. These name the
-            // paperclip beside them instead — and they are SHORT, because
-            // the box is now the whole screen and the whole screen is
-            // sometimes 390px wide: the first wording ran to "Add a video,
-            // ther" on a phone, which tells nobody anything.
-            placeholder={somethingToAskAbout ? "Tell Clipit what to look for..." : "Add a video, then ask"}
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed"
-          />
-          <input
-            ref={picker}
-            type="file"
-            accept={VIDEO_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])]
-              // Cleared so picking the SAME file twice still fires change —
-              // a retry after a failure is exactly that.
-              event.target.value = ""
-              if (files.length > 0) onAdd(files)
-            }}
-          />
+    <div className="flex w-full max-w-xl flex-col gap-3">
+      <AskComposer
+        value={isSearching ? searchInstruction : promptValue}
+        onChange={onPromptChange}
+        onSubmit={() => {
+          if (isSearching) {
+            onResume?.()
+            return
+          }
+          if (ready) onSubmit?.()
+        }}
+        // Typing is allowed the moment there is a video, even while it is
+        // still uploading or being read. Only SENDING waits for ready — the
+        // line below the box has promised exactly that, and the field used
+        // to contradict it.
+        isDisabled={!somethingToAskAbout || disabled || isSearching}
+        // Typing and sending are two different gates here, and always were.
+        canSend={ready}
+        // The old words were "Upload a video first…", which named a
+        // container that is no longer on the screen. They name the plus
+        // beside them now.
+        placeholder={somethingToAskAbout ? "Tell Clipit what to look for..." : "Add a video, then ask"}
+        label="Search your footage"
+        attach={{
+          label: "Add a video",
+          accept: VIDEO_ACCEPT,
+          isDisabled: disabled || isSearching,
+          onPick: onAdd,
+        }}
+      />
+
+      {arriving && (
+        <p className="truncate text-center text-xs text-muted-foreground" data-testid="upload-progress">
+          {arriving.phase === "queued"
+            ? `${arriving.file.name} — waiting to upload`
+            : `${arriving.file.name} — ${percent(arriving)}%${formatBytes(arriving.file.size) ? ` of ${formatBytes(arriving.file.size)}` : ""}`}
+        </p>
+      )}
+
+      {broken.map((entry) => (
+        <p key={entry.id} className="text-center text-xs text-destructive" data-testid="upload-failure">
+          <span className="mr-2">
+            {entry.file.name} — {entry.error ?? "Upload failed"}
+          </span>
           <button
             type="button"
-            onClick={() => picker.current?.click()}
-            disabled={disabled || isSearching}
-            aria-label="Add a video"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+            onClick={() => onRetry(entry.id)}
+            className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Paperclip size={17} />
+            Try again
           </button>
           <button
-            type="submit"
-            disabled={!ready || (trimmed === "" && !isSearching)}
-            aria-label={isSearching ? "Resume search" : "Search"}
-            className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center rounded-xl transition active:scale-95",
-              ready && (trimmed !== "" || isSearching)
-                ? "bg-foreground text-background hover:bg-foreground/90"
-                : "bg-muted text-muted-foreground",
-            )}
+            type="button"
+            onClick={() => onRemove(entry.id)}
+            className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {isSearching ? <ArrowRight size={17} /> : <Send size={17} />}
+            Remove
           </button>
-        </form>
+        </p>
+      ))}
 
-        {arriving && (
-          <p className="truncate text-center text-xs text-muted-foreground" data-testid="upload-progress">
-            {arriving.phase === "queued"
-              ? `${arriving.file.name} — waiting to upload`
-              : `${arriving.file.name} — ${percent(arriving)}%${formatBytes(arriving.file.size) ? ` of ${formatBytes(arriving.file.size)}` : ""}`}
-          </p>
-        )}
-
-        {broken.map((entry) => (
-          <p key={entry.id} className="text-center text-xs text-destructive" data-testid="upload-failure">
-            <span className="mr-2">
-              {entry.file.name} — {entry.error ?? "Upload failed"}
-            </span>
-            <button
-              type="button"
-              onClick={() => onRetry(entry.id)}
-              className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Try again
-            </button>
-            <button
-              type="button"
-              onClick={() => onRemove(entry.id)}
-              className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Remove
-            </button>
-          </p>
-        ))}
-
-        {somethingToAskAbout && gate.waitingOn && (
-          <p className="text-center text-xs text-muted-foreground">{gate.waitingOn}</p>
-        )}
-      </div>
+      {somethingToAskAbout && gate.waitingOn && (
+        <p className="text-center text-xs text-muted-foreground">{gate.waitingOn}</p>
+      )}
     </div>
   )
 }

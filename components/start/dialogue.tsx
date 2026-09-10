@@ -17,6 +17,7 @@ import { Heading } from "@astryxdesign/core/Heading"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Mic01Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
 import { AnswerRating } from "./answer-rating"
+import { AskComposer, COMPOSER_PREVIEW } from "./ask-composer"
 import { AttachmentTray, useAttachments } from "./composer-attachments"
 import { EFFORTS, EffortDial, MODEL_NAMES, ModelPicker } from "./composer-controls"
 import { useVoiceCapture, VoiceLevels } from "./composer-voice"
@@ -414,19 +415,6 @@ function reclipNoteText(moments: FeedMoment[], matchId: string, fallback: string
   return `Re-cut "${title}" — same moment, new cut. It's on the card now.`
 }
 
-/**
- * Whether to draw the parts of the composer that are designed but not yet
- * connected to anything: the search-depth choice, pictures, and the
- * microphone.
- *
- * Off unless a build sets NEXT_PUBLIC_COMPOSER_PREVIEW=true, so a local or
- * preview build can show the design while a creator's build does not. Each
- * one would otherwise make a promise the product does not keep — "Deep
- * search" that searches exactly as shallowly as "Search", pictures that are
- * collected and dropped, a microphone that records into nothing.
- */
-const COMPOSER_PREVIEW = process.env.NEXT_PUBLIC_COMPOSER_PREVIEW === "true"
-
 /** What the draft allowed, kept. */
 const MAX_PICTURES = 6
 
@@ -577,92 +565,45 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   }
 
   const composer = (
-    <>
-      {/* Kept out of the composer's slots, next to the button that opens it. */}
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/*"
-        multiple
-        tabIndex={-1}
-        aria-hidden="true"
-        className="hidden"
-        onChange={(event) => {
-          pictures.add(Array.from(event.target.files ?? []))
-          // So picking the same file twice still fires a change.
-          event.target.value = ""
-        }}
-      />
-        <ChatComposer
-          value={draft}
-          onChange={setDraft}
-          onSubmit={(value) => void submit(value)}
-          placeholder={placeholder}
-          isDisabled={disabled || pending}
-          // Controlled from here, not from the composer: the composer clears
-          // itself on submit, and a question the server refused is still the
-          // person's question. It leaves the box only when the ask was taken.
-          input={<ChatComposerInput label="Ask for a moment" maxRows={4} handleRef={inputRef} />}
-          // The draft's tray, in the slot the composer already had for it.
-          drawer={
-            COMPOSER_PREVIEW && pictures.attachments.length > 0 ? (
-              <ChatComposerDrawer count={pictures.attachments.length} label="Pictures">
-                <AttachmentTray
-                  attachments={pictures.attachments}
-                  onRemove={pictures.remove}
-                  onMeasured={pictures.measure}
-                />
-              </ChatComposerDrawer>
-            ) : undefined
-          }
-          footerActions={
-            COMPOSER_PREVIEW ? (
-              <>
-                <ModelPicker value={model} onChange={setModel} />
-                <EffortDial value={effort} onChange={setEffort} />
-              </>
-            ) : undefined
-          }
-          // Left of the send button, where the draft put them.
-          sendActions={
-            COMPOSER_PREVIEW ? (
-              <>
-                <VoiceLevels levels={voice.levels} isRecording={voice.isRecording} />
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => fileInput.current?.click()}
-                  disabled={pictures.attachments.length >= MAX_PICTURES}
-                  className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-                  aria-label="Add a picture"
-                >
-                  <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => (voice.isRecording ? voice.stop() : void voice.start())}
-                  className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={voice.isRecording ? "Stop recording" : "Speak the question"}
-                >
-                  <HugeiconsIcon icon={Mic01Icon} className="size-3.5" />
-                </button>
-              </>
-            ) : undefined
-          }
-          // The draft turned its send button into a stop while recording; the
-          // composer does that itself.
-          isStopShown={voice.isRecording}
-          onStop={voice.stop}
-          // Where a refused microphone is said out loud, instead of the
-          // draft's console warning nobody reads.
-          status={voice.problem ? { type: "warning", message: voice.problem } : undefined}
-        />
-    </>
+    <AskComposer
+      value={draft}
+      onChange={setDraft}
+      onSubmit={(value) => void submit(value)}
+      placeholder={placeholder}
+      isDisabled={disabled || pending}
+      // Controlled from here, not from the composer: the composer clears
+      // itself on submit, and a question the server refused is still the
+      // person's question. It leaves the box only when the ask was taken.
+      label="Ask for a moment"
+      handleRef={inputRef}
+      // Only in a preview build: a picture here is still collected and
+      // dropped. Home's attachment is real, so home passes its own always.
+      attach={
+        COMPOSER_PREVIEW
+          ? {
+              label: "Add a picture",
+              accept: "image/*",
+              multiple: true,
+              isDisabled: pictures.attachments.length >= MAX_PICTURES,
+              onPick: (files: File[]) => pictures.add(files),
+            }
+          : undefined
+      }
+      // The draft's tray, in the slot the composer already had for it.
+      drawer={
+        pictures.attachments.length > 0 ? (
+          <ChatComposerDrawer count={pictures.attachments.length} label="Pictures">
+            <AttachmentTray
+              attachments={pictures.attachments}
+              onRemove={pictures.remove}
+              onMeasured={pictures.measure}
+            />
+          </ChatComposerDrawer>
+        ) : undefined
+      }
+    />
   )
 
-  // Nothing said yet: the landing, with the box in the middle of the column
-  // rather than docked under an empty thread.
   if (entryCount === 0) return <DialogueEmpty composer={composer} />
 
   return (

@@ -60,24 +60,38 @@ Object.defineProperty(window, 'matchMedia', {
 
 afterEach(cleanup)
 
+/**
+ * The box on home is Astryx's composer now, not the outlined pill it used to
+ * be — the owner's call of 2026-09-10, "the same search input bar i shared".
+ * The bar changed; the RULE it has to keep did not, which is what this file
+ * is for. So these read the new box rather than the old one:
+ *
+ *   - the field is a contenteditable, not an <input>. It says whether it
+ *     will take typing with `contenteditable`, where the old one used
+ *     `disabled`.
+ *   - the action is called Send, and it was called Search.
+ */
+const box = () => screen.getByRole('textbox', { name: 'Search your footage' })
+const takesTyping = () => box().getAttribute('contenteditable') === 'true'
+const send = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Send' })
+
 describe('the ask box while a video is still being prepared', () => {
   it('lets people type, and keeps Send off', async () => {
     const onPromptChange = vi.fn()
     renderStep({ video: video(false), onPromptChange })
 
-    const input = screen.getByPlaceholderText<HTMLInputElement>('Tell Clipit what to look for...')
-    expect(input.disabled).toBe(false)
-    await userEvent.type(input, 'f')
+    expect(takesTyping()).toBe(true)
+    await userEvent.type(box(), 'f')
     expect(onPromptChange).toHaveBeenCalledWith('f')
 
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(true)
+    expect(send().disabled).toBe(true)
   })
 
   it('does not send on Enter either', async () => {
     const onSubmit = vi.fn()
     renderStep({ video: video(false), promptValue: 'find the goal', onSubmit })
 
-    await userEvent.type(screen.getByPlaceholderText('Tell Clipit what to look for...'), '{Enter}')
+    await userEvent.type(box(), '{Enter}')
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
@@ -85,23 +99,23 @@ describe('the ask box while a video is still being prepared', () => {
     const onSubmit = vi.fn()
     renderStep({ video: video(true), promptValue: 'find the goal', onSubmit })
 
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(false)
-    await userEvent.type(screen.getByPlaceholderText('Tell Clipit what to look for...'), '{Enter}')
+    expect(send().disabled).toBe(false)
+    await userEvent.type(box(), '{Enter}')
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
   it('stays off with nothing to ask about', () => {
     renderStep({ video: null })
-    expect(screen.getByPlaceholderText<HTMLInputElement>('Add a video, then ask').disabled).toBe(true)
+    expect(takesTyping()).toBe(false)
+    expect(screen.getByText('Add a video, then ask')).toBeTruthy()
   })
 
   it('opens the moment a file is picked, before its bytes have landed', () => {
     // The video row only exists once the upload completes — minutes, for a
     // long film — and those minutes are when a person wants to type.
     renderStep({ video: null, entries: [uploading()] })
-    const input = screen.getByPlaceholderText<HTMLInputElement>('Tell Clipit what to look for...')
-    expect(input.disabled).toBe(false)
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(true)
+    expect(takesTyping()).toBe(true)
+    expect(send().disabled).toBe(true)
     expect(screen.getByText(/still uploading/)).toBeTruthy()
   })
 
@@ -109,16 +123,16 @@ describe('the ask box while a video is still being prepared', () => {
     const onSubmit = vi.fn()
     const landed = { id: 'video-1', status: 'preprocessing', readyForSearch: false, acceptsQuestions: true } as unknown as Video
     renderStep({ video: landed, promptValue: 'find the goal', onSubmit })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(false)
+    expect(send().disabled).toBe(false)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
-    await userEvent.type(screen.getByPlaceholderText('Tell Clipit what to look for...'), '{Enter}')
+    await userEvent.type(box(), '{Enter}')
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
   it('keeps Send off while the server says the bytes have not landed', () => {
     const uploading = { id: 'video-1', status: 'pending_upload', readyForSearch: false, acceptsQuestions: false } as unknown as Video
     renderStep({ video: uploading, promptValue: 'find the goal' })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Search' }).disabled).toBe(true)
+    expect(send().disabled).toBe(true)
     expect(screen.getByText(/still uploading/)).toBeTruthy()
   })
 
@@ -126,14 +140,14 @@ describe('the ask box while a video is still being prepared', () => {
     // A refused file (too large, say) stays in the list with its reason; it
     // is not "still being prepared".
     renderStep({ video: null, entries: [{ ...uploading(), phase: 'failed', error: 'Too large' }] })
-    expect(screen.getByPlaceholderText<HTMLInputElement>('Add a video, then ask').disabled).toBe(true)
+    expect(takesTyping()).toBe(false)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
   })
 
   it('promises nothing for a video whose preparation failed', () => {
     const failed = { id: 'video-1', status: 'failed', readyForSearch: false } as unknown as Video
     renderStep({ video: failed })
-    expect(screen.getByPlaceholderText<HTMLInputElement>('Add a video, then ask').disabled).toBe(true)
+    expect(takesTyping()).toBe(false)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
   })
 })
