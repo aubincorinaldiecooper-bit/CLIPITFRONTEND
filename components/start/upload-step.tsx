@@ -105,7 +105,17 @@ export function UploadStep({
         }}
         drawer={
           entries.length > 0 ? (
-            <ChatComposerDrawer count={entries.length} label={entries.length === 1 ? "Video" : "Videos"}>
+            <ChatComposerDrawer
+              count={entries.length}
+              label={entries.length === 1 ? "Video" : "Videos"}
+              // Astryx draws this white on the workspace's warm off-white
+              // ground, with a border colour set and a border WIDTH of zero —
+              // measured. So it read as a faint slab rather than a panel: the
+              // owner's word for it was "almost invisible". The border it
+              // already declares is drawn, and the fill steps off the page
+              // instead of matching the card below it.
+              className="rounded-t-[28px] border border-b-0 border-border bg-muted"
+            >
               <UploadTray entries={entries} onRemove={onRemove} onRetry={onRetry} />
             </ChatComposerDrawer>
           ) : undefined
