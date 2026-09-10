@@ -1,16 +1,21 @@
-"use client"
+"use client";
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react";
 import {
   ChatComposer,
   ChatComposerInput,
   type ChatComposerInputHandle,
   ChatSendButton,
-} from "@astryxdesign/core/Chat"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { PlusSignIcon } from "@hugeicons/core-free-icons"
-import { EFFORTS, EffortDial, MODEL_NAMES, ModelPicker } from "./composer-controls"
-import { useVoiceCapture, VoiceLevels } from "./composer-voice"
+} from "@astryxdesign/core/Chat";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { PlusSignIcon } from "@hugeicons/core-free-icons";
+import {
+  EFFORTS,
+  EffortDial,
+  MODEL_NAMES,
+  ModelPicker,
+} from "./composer-controls";
+import { useVoiceCapture, VoiceLevels } from "./composer-voice";
 
 /**
  * The owner's box, in one place.
@@ -30,16 +35,17 @@ import { useVoiceCapture, VoiceLevels } from "./composer-voice"
  * hides them from a creator's build until they do something — the same gate
  * they have always been behind, applied on both screens rather than one.
  */
-export const COMPOSER_PREVIEW = process.env.NEXT_PUBLIC_COMPOSER_PREVIEW === "true"
+export const COMPOSER_PREVIEW =
+  process.env.NEXT_PUBLIC_COMPOSER_PREVIEW === "true";
 
 export interface AskComposerProps {
-  value: string
-  onChange: (value: string) => void
+  value: string;
+  onChange: (value: string) => void;
   /** Called with the trimmed question. The box is controlled, so the caller decides whether the words leave it. */
-  onSubmit: (value: string) => void
-  placeholder: string
+  onSubmit: (value: string) => void;
+  placeholder: string;
   /** Nothing here can be typed OR sent. */
-  isDisabled?: boolean
+  isDisabled?: boolean;
   /**
    * Whether SENDING is allowed, separately from typing.
    *
@@ -52,10 +58,12 @@ export interface AskComposerProps {
    * Leave it out to let the composer decide for itself, which is "is there
    * anything written".
    */
-  canSend?: boolean
+  canSend?: boolean;
   /** The input's accessible name — what a screen reader calls the box. */
-  label: string
-  handleRef?: React.Ref<ChatComposerInputHandle>
+  label: string;
+  /** Fold an empty landing-page composer down to its one-line prompt. */
+  isCollapsible?: boolean;
+  handleRef?: React.Ref<ChatComposerInputHandle>;
   /**
    * What the plus picks up here. Absent means no plus.
    *
@@ -68,15 +76,15 @@ export interface AskComposerProps {
    * dialogue passes this only in a preview build.
    */
   attach?: {
-    label: string
+    label: string;
     /** An `accept` list for the file picker — videos on home, pictures beside the moments. */
-    accept: string
-    multiple?: boolean
-    isDisabled?: boolean
-    onPick: (files: File[]) => void
-  }
+    accept: string;
+    multiple?: boolean;
+    isDisabled?: boolean;
+    onPick: (files: File[]) => void;
+  };
   /** Anything the composer should open below itself, such as a tray of picked pictures. */
-  drawer?: React.ReactNode
+  drawer?: React.ReactNode;
 }
 
 export function AskComposer({
@@ -87,16 +95,54 @@ export function AskComposer({
   isDisabled = false,
   canSend,
   label,
+  isCollapsible = false,
   handleRef,
   attach,
   drawer,
 }: AskComposerProps) {
   // Both are strings on purpose: the pickers hand back a plain string, and
   // neither value goes anywhere but back into its own control.
-  const [model, setModel] = useState<string>(MODEL_NAMES[0])
-  const [effort, setEffort] = useState<string>(EFFORTS[0])
-  const picker = useRef<HTMLInputElement>(null)
-  const voice = useVoiceCapture()
+  const [model, setModel] = useState<string>(MODEL_NAMES[0]);
+  const [effort, setEffort] = useState<string>(EFFORTS[0]);
+  const picker = useRef<HTMLInputElement>(null);
+  const shell = useRef<HTMLElement>(null);
+  const voice = useVoiceCapture();
+  const [expanded, setExpanded] = useState(
+    () => !isCollapsible || value.trim().length > 0,
+  );
+
+  // A draft arriving from outside (including a restored failed question)
+  // must never be hidden behind the closed prompt. Recording also needs the
+  // full box because its stop control lives in the composer footer.
+  useEffect(() => {
+    if (value.trim().length > 0 || drawer || voice.isRecording)
+      setExpanded(true);
+  }, [drawer, value, voice.isRecording]);
+
+  // The compact form replaces the full editor, so opening it briefly moves
+  // focus through the document body while the two swap. Listen for the next
+  // real focus target as well as React's blur event; this also covers Tab and
+  // assistive-technology navigation away from the empty composer.
+  useEffect(() => {
+    if (!isCollapsible || !expanded) return;
+    const onFocus = (event: FocusEvent) => {
+      if (
+        !shell.current?.contains(event.target as Node) &&
+        value.trim() === "" &&
+        !drawer &&
+        !voice.isRecording
+      ) {
+        setExpanded(false);
+      }
+    };
+    document.addEventListener("focusin", onFocus);
+    return () => document.removeEventListener("focusin", onFocus);
+  }, [drawer, expanded, isCollapsible, value, voice.isRecording]);
+
+  const submit = (nextValue: string) => {
+    if (isDisabled || canSend === false) return;
+    onSubmit(nextValue);
+  };
 
   return (
     <>
@@ -111,64 +157,136 @@ export function AskComposer({
           aria-hidden="true"
           className="hidden"
           onChange={(event) => {
-            const files = Array.from(event.target.files ?? [])
+            const files = Array.from(event.target.files ?? []);
             // So picking the same file twice still fires a change — a retry
             // after a failed upload is exactly that.
-            event.target.value = ""
-            if (files.length > 0) attach.onPick(files)
+            event.target.value = "";
+            if (files.length > 0) attach.onPick(files);
           }}
         />
       )}
-      <ChatComposer
-        value={value}
-        onChange={onChange}
-        onSubmit={onSubmit}
-        placeholder={placeholder}
-        isDisabled={isDisabled}
-        input={<ChatComposerInput label={label} maxRows={4} handleRef={handleRef} />}
-        // Astryx's own send button, with one gate added. Passing `undefined`
-        // hands the decision back to the composer, which asks whether
-        // anything has been written.
-        sendButton={<ChatSendButton isDisabled={canSend === false || undefined} />}
-        drawer={COMPOSER_PREVIEW ? drawer : undefined}
-        footerActions={
-          COMPOSER_PREVIEW ? (
-            <>
-              <ModelPicker value={model} onChange={setModel} />
-              <EffortDial value={effort} onChange={setEffort} />
-            </>
-          ) : undefined
-        }
-        // Left of the send button, where the draft put them. The row exists
-        // for a working attachment even in a creator's build; only the
-        // microphone waits on the flag.
-        sendActions={
-          COMPOSER_PREVIEW || attach ? (
-            <>
-              {COMPOSER_PREVIEW && <VoiceLevels levels={voice.levels} isRecording={voice.isRecording} />}
-              {attach && (
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => picker.current?.click()}
-                  disabled={attach.isDisabled}
-                  className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-                  aria-label={attach.label}
-                >
-                  <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
-                </button>
-              )}
-            </>
-          ) : undefined
-        }
-        // The draft turned its send button into a stop while recording; the
-        // composer does that itself.
-        isStopShown={COMPOSER_PREVIEW && voice.isRecording}
-        onStop={voice.stop}
-        // Where a refused microphone is said out loud, instead of the draft's
-        // console warning nobody reads.
-        status={COMPOSER_PREVIEW && voice.problem ? { type: "warning", message: voice.problem } : undefined}
-      />
+      <section
+        ref={shell}
+        aria-label={`${label} composer`}
+        className={`relative w-full transition-[max-width] duration-300 ${expanded ? "max-w-lg" : "max-w-xs"}`}
+        onFocusCapture={() => setExpanded(true)}
+        onBlurCapture={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+          if (
+            isCollapsible &&
+            value.trim() === "" &&
+            !drawer &&
+            !voice.isRecording
+          )
+            setExpanded(false);
+        }}
+      >
+        {!expanded && (
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(true);
+              window.setTimeout(() => {
+                shell.current
+                  ?.querySelector<HTMLElement>('[role="textbox"]')
+                  ?.focus();
+              }, 0);
+            }}
+            disabled={isDisabled && !attach}
+            aria-label={`Open ${label.toLowerCase()}`}
+            aria-expanded="false"
+            className="flex h-12 w-full items-center rounded-full border border-border bg-card px-4 pr-12 text-left text-sm font-medium text-foreground/60 shadow-sm outline-none transition-[border-color,box-shadow] hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          >
+            <span className="truncate">{placeholder}</span>
+          </button>
+        )}
+        {!expanded && attach && (
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => picker.current?.click()}
+            disabled={attach.isDisabled}
+            className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full text-foreground/60 outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+            aria-label={attach.label}
+          >
+            <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
+          </button>
+        )}
+        <span className={expanded ? "block" : "hidden"} aria-hidden={!expanded}>
+          <ChatComposer
+            value={value}
+            onChange={onChange}
+            onSubmit={submit}
+            placeholder={placeholder}
+            // Keep the shell live so its working attachment button remains
+            // reachable when home has no video yet. Only the editor is disabled.
+            isDisabled={false}
+            input={
+              <ChatComposerInput
+                label={label}
+                maxRows={4}
+                handleRef={handleRef}
+                isDisabled={isDisabled}
+              />
+            }
+            // Astryx's own send button, with one gate added. Passing `undefined`
+            // hands the decision back to the composer, which asks whether
+            // anything has been written.
+            sendButton={
+              <ChatSendButton
+                isDisabled={isDisabled || canSend === false || undefined}
+              />
+            }
+            drawer={COMPOSER_PREVIEW ? drawer : undefined}
+            footerActions={
+              COMPOSER_PREVIEW ? (
+                <>
+                  <ModelPicker value={model} onChange={setModel} />
+                  <EffortDial value={effort} onChange={setEffort} />
+                </>
+              ) : undefined
+            }
+            // Left of the send button, where the draft put them. The row exists
+            // for a working attachment even in a creator's build; only the
+            // microphone waits on the flag.
+            sendActions={
+              COMPOSER_PREVIEW || attach ? (
+                <>
+                  {COMPOSER_PREVIEW && (
+                    <VoiceLevels
+                      levels={voice.levels}
+                      isRecording={voice.isRecording}
+                    />
+                  )}
+                  {attach && (
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => picker.current?.click()}
+                      disabled={attach.isDisabled}
+                      className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                      aria-label={attach.label}
+                    >
+                      <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
+                    </button>
+                  )}
+                </>
+              ) : undefined
+            }
+            // The draft turned its send button into a stop while recording; the
+            // composer does that itself.
+            isStopShown={COMPOSER_PREVIEW && voice.isRecording}
+            onStop={voice.stop}
+            // Where a refused microphone is said out loud, instead of the draft's
+            // console warning nobody reads.
+            status={
+              COMPOSER_PREVIEW && voice.problem
+                ? { type: "warning", message: voice.problem }
+                : undefined
+            }
+          />
+        </span>
+      </section>
     </>
-  )
+  );
 }

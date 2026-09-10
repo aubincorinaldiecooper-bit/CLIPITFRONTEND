@@ -110,6 +110,7 @@ export function UploadStep({
         // beside them now.
         placeholder={somethingToAskAbout ? "Tell Clipit what to look for..." : "Add a video, then ask"}
         label="Search your footage"
+        isCollapsible
         attach={{
           label: "Add a video",
           accept: VIDEO_ACCEPT,
