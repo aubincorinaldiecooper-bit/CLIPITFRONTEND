@@ -114,7 +114,7 @@ function readyCount(entries: UploadEntry[]): number {
   return entries.filter((entry) => entry.phase === "ready").length
 }
 
-const VIDEO_ACCEPT = ["video/*", ".mp4", ".mov", ".mkv", ".webm"].join(",")
+export const VIDEO_ACCEPT = ["video/*", ".mp4", ".mov", ".mkv", ".webm"].join(",")
 
 const VIDEO_FILE_TYPES = [
   { label: "MP4", icon: FileVideo },

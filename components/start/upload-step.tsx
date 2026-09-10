@@ -1,10 +1,9 @@
 "use client"
 
-import { ArrowRight, Send, Video as VideoIcon } from "lucide-react"
-import { UploadPackage, type UploadEntry } from "@/components/flow/upload-package"
+import { formatBytes, VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
 import type { Video } from "@/lib/types"
+import { AskComposer } from "./ask-composer"
 import { askGate } from "./ask-gate"
-import { cn } from "@/lib/utils"
 
 export interface UploadStepProps {
   entries: UploadEntry[]
@@ -21,12 +20,41 @@ export interface UploadStepProps {
   searchInstruction?: string
 }
 
+/** How far along, as a percentage, for the line under the box. */
+const percent = (entry: UploadEntry) => Math.round((entry.progress ?? 0) * 100)
+
 /**
- * Step 01: upload a video and ask for moments. The upload container shows a
- * preview of the video once it lands; the prompt input sits below it and stays
- * inactive until the video is ready for search. Nothing else: the owner's
- * call (2026-09-02) is a clean landing page — no suggested questions under
- * the box, no step rail above it.
+ * Home: one box, and nothing else.
+ *
+ * The owner's call of 2026-09-10 — "the ONLY thing present on our home
+ * screen is the same search input bar i shared". Two things had to change
+ * for that sentence to be true, and the first attempt only did one of them:
+ *
+ *   1. **the drop container above the box is gone.** It was.
+ *   2. **the box is the owner's box.** It was not. Home had a bar of its
+ *      own — an outlined pill with a video glyph and a paper-plane — that
+ *      predates the reference they shared, and stripping the container off
+ *      it left the wrong bar looking tidier. It renders `AskComposer` now,
+ *      the same component the moments screen asks in.
+ *
+ * **Uploading did not go with the container.** The bar takes video files
+ * itself, by the owner's words in the same message: "the bar can hold video
+ * files so 'upload' still exists, we're just removing the container". The
+ * plus opens the same picker the container had and hands the files to the
+ * same uploader.
+ *
+ * What the container WAS carrying had to move here rather than disappear:
+ *
+ *   - **a file on its way.** The container drew a progress bar. Without one,
+ *     picking a two-gigabyte film looked like pressing a button that did
+ *     nothing, so the line under the box names the file and its percentage.
+ *   - **a file that failed.** The container's row said why and offered to
+ *     try again. A failure with nowhere to appear is the worse half of this:
+ *     the person is left waiting for an upload that stopped. It gets the
+ *     line under the box, with Try again and Remove.
+ *
+ * Both are one line, not a card. The owner asked for the box alone, and a
+ * transient line under it is not a second container.
  */
 export function UploadStep({
   entries,
@@ -55,73 +83,74 @@ export function UploadStep({
   // FAILED is not coming: it needs a retry or removal, and promising that it
   // will be ready is the same false promise a failed video makes.
   const somethingToAskAbout = !failed && (video != null || entries.some((entry) => entry.phase !== "failed"))
-  const trimmed = promptValue.trim()
-  const displayValue = isSearching ? searchInstruction : promptValue
+  const broken = entries.filter((entry) => entry.phase === "failed")
+  const arriving = entries.find((entry) => entry.phase === "uploading" || entry.phase === "queued")
 
   return (
-    <div className="w-full max-w-md">
-      <UploadPackage
-        entries={entries}
-        onAdd={onAdd}
-        onRemove={onRemove}
-        onRetry={onRetry}
-        single
+    <div className="flex w-full max-w-xl flex-col gap-3">
+      <AskComposer
+        value={isSearching ? searchInstruction : promptValue}
+        onChange={onPromptChange}
+        onSubmit={() => {
+          if (isSearching) {
+            onResume?.()
+            return
+          }
+          if (ready) onSubmit?.()
+        }}
+        // Typing is allowed the moment there is a video, even while it is
+        // still uploading or being read. Only SENDING waits for ready — the
+        // line below the box has promised exactly that, and the field used
+        // to contradict it.
+        isDisabled={!somethingToAskAbout || disabled || isSearching}
+        // Typing and sending are two different gates here, and always were.
+        canSend={ready}
+        // The old words were "Upload a video first…", which named a
+        // container that is no longer on the screen. They name the plus
+        // beside them now.
+        placeholder={somethingToAskAbout ? "Tell Clipit what to look for..." : "Add a video, then ask"}
+        label="Search your footage"
+        attach={{
+          label: "Add a video",
+          accept: VIDEO_ACCEPT,
+          isDisabled: disabled || isSearching,
+          onPick: onAdd,
+        }}
       />
 
-      <div className="mt-6 flex flex-col gap-3">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (isSearching) {
-              onResume?.()
-              return
-            }
-            if (ready && trimmed) onSubmit?.()
-          }}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-full border-2 border-foreground bg-card px-4 py-3.5",
-            !ready && "opacity-70",
-          )}
-        >
-          <VideoIcon aria-hidden size={20} className="shrink-0 text-foreground" />
-          <span aria-hidden className="h-6 w-px shrink-0 bg-border" />
-          <input
-            value={displayValue}
-            onChange={(event) => onPromptChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && ready && (trimmed || isSearching)) {
-                event.preventDefault()
-                if (isSearching) onResume?.()
-                else onSubmit?.()
-              }
-            }}
-            // Typing is allowed the moment there is a video, even while it is
-            // still uploading or being read. Only SENDING waits for ready — the
-            // line below the box has promised exactly that, and the field used
-            // to contradict it.
-            disabled={!somethingToAskAbout || disabled || isSearching}
-            placeholder={somethingToAskAbout ? "Tell Clipit what to look for..." : "Upload a video first..."}
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed"
-          />
-          <button
-            type="submit"
-            disabled={!ready || (trimmed === "" && !isSearching)}
-            aria-label={isSearching ? "Resume search" : "Search"}
-            className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center rounded-xl transition active:scale-95",
-              ready && (trimmed !== "" || isSearching)
-                ? "bg-foreground text-background hover:bg-foreground/90"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
-            {isSearching ? <ArrowRight size={17} /> : <Send size={17} />}
-          </button>
-        </form>
+      {arriving && (
+        <p className="truncate text-center text-xs text-muted-foreground" data-testid="upload-progress">
+          {arriving.phase === "queued"
+            ? `${arriving.file.name} — waiting to upload`
+            : `${arriving.file.name} — ${percent(arriving)}%${formatBytes(arriving.file.size) ? ` of ${formatBytes(arriving.file.size)}` : ""}`}
+        </p>
+      )}
 
-        {somethingToAskAbout && gate.waitingOn && (
-          <p className="text-center text-xs text-muted-foreground">{gate.waitingOn}</p>
-        )}
-      </div>
+      {broken.map((entry) => (
+        <p key={entry.id} className="text-center text-xs text-destructive" data-testid="upload-failure">
+          <span className="mr-2">
+            {entry.file.name} — {entry.error ?? "Upload failed"}
+          </span>
+          <button
+            type="button"
+            onClick={() => onRetry(entry.id)}
+            className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(entry.id)}
+            className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Remove
+          </button>
+        </p>
+      ))}
+
+      {somethingToAskAbout && gate.waitingOn && (
+        <p className="text-center text-xs text-muted-foreground">{gate.waitingOn}</p>
+      )}
     </div>
   )
 }

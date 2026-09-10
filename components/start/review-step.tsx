@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import type { Video } from "@/lib/types"
+import type { ChatSignal, Video } from "@/lib/types"
 import { Dialogue } from "./dialogue"
 import { MomentFeed, feedCursor, feedMoments, type FeedMoment } from "./moment-feed"
 import type { Exchange } from "./types"
@@ -27,6 +27,8 @@ export interface ReviewStepProps {
   onReclip: (requestId: string, matchId: string) => boolean | void | Promise<boolean | void>
   /** Resolves false when the question could not be sent (the page has shown why). */
   onAsk: (instruction: string) => boolean | void | Promise<boolean | void>
+  /** Records what someone thought of an answer. Rejecting means it was not stored. */
+  onRateAnswer?: (requestId: string, event: ChatSignal) => Promise<unknown>
   /** Keep the moment and open publishing for its clip. */
   onPublish: (requestId: string, matchId: string) => void | Promise<void>
   onUploadMore: () => void
@@ -50,6 +52,7 @@ export function ReviewStep({
   onUndoSkip,
   onReclip,
   onAsk,
+  onRateAnswer,
   onPublish,
   onUploadMore,
 }: ReviewStepProps) {
@@ -89,6 +92,7 @@ export function ReviewStep({
         searching={searching}
         onAsk={onAsk}
         onReclip={(moment) => onReclip(moment.requestId, moment.match.id)}
+        onRateAnswer={onRateAnswer}
       />
     </div>
   )

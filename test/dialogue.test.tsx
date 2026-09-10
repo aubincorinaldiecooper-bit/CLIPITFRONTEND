@@ -76,6 +76,24 @@ describe('isEditRequest — words about the moment on screen', () => {
 })
 
 describe('Dialogue', () => {
+  it('shows a creator none of the composer parts that are not connected yet', () => {
+    // Devin's finding on #90. The depth control was drawn for everyone with a
+    // comment saying it must not reach a creator, which a comment cannot do.
+    // The same holds for the pictures and the microphone ported from the
+    // owner's draft: "Deep search" that searches exactly as shallowly as
+    // "Search", a picture that is collected and dropped, and a microphone
+    // that records into nothing are all promises the product does not keep.
+    // They stay behind NEXT_PUBLIC_COMPOSER_PREVIEW until they do something.
+    //
+    // The variable is unset here, which is what a creator's build looks like.
+    const exchanges: Exchange[] = [{ request: request({ matches: [match()] }), clips: [] }]
+    render(<Dialogue exchanges={exchanges} video={video} moments={[moment()]} active={moment()} searching={false} onAsk={vi.fn()} onReclip={vi.fn()} />)
+    expect(screen.queryByText('GPT 5.5')).toBeNull()
+    expect(screen.queryByText('Low')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add a picture' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Speak the question' })).toBeNull()
+  })
+
   it('the first question is in the conversation: asked, acknowledged, and answered with the count it finished with', () => {
     // The owner's call of 2026-09-05: the first question used to be asked
     // on the upload step and answered by the cards alone, and the chat
@@ -344,5 +362,132 @@ describe('Dialogue', () => {
     await userEvent.type(screen.getByRole('textbox', { name: 'Ask for a moment' }), 're-cut it{enter}')
     expect(onReclip).not.toHaveBeenCalled()
     expect(screen.getByTestId('dialogue-model').textContent).toContain('has used all its re-cuts')
+  })
+})
+
+/**
+ * Two thumbs under an answer — the owner's ask of 2026-09-10.
+ *
+ * They rate the ANSWER and decide nothing. This is not the Keep and Skip
+ * that came off the moment card in this same branch: those chose what
+ * happened to a moment, and a thumb here changes nothing on screen and
+ * nothing in the search. It is a note about whether the answer was any good.
+ *
+ * The server keeps these as a log — one row per press, no way to withdraw
+ * one — so what the control must never do is offer an erase it cannot
+ * deliver, or draw a rating the server never took.
+ */
+describe('Rating an answer', () => {
+  const good = () => screen.queryByRole('button', { name: /^Good answer/ })
+  const bad = () => screen.queryByRole('button', { name: /^Not what I was after/ })
+  /** The thumb that has been sent, by its own words. */
+  const sent = () =>
+    screen.queryByTestId('answer-rating')?.querySelector('button[aria-label$="— sent"]')?.getAttribute('aria-label') ?? null
+
+  const show = (overrides: Partial<ClipRequest>, onRateAnswer?: (requestId: string, event: string) => Promise<unknown>) =>
+    render(
+      <Dialogue
+        exchanges={[{ request: request(overrides), clips: [] }]}
+        video={video}
+        moments={[moment()]}
+        active={moment()}
+        searching={false}
+        onAsk={vi.fn()}
+        onReclip={vi.fn()}
+        onRateAnswer={onRateAnswer as never}
+      />,
+    )
+
+  it('offers the thumbs once an answer has arrived', () => {
+    show({ matches: [match()] }, vi.fn().mockResolvedValue({}))
+    // One answer, one pair — not a pair under every line of it.
+    expect(screen.getAllByTestId('answer-rating')).toHaveLength(1)
+    expect(good()).not.toBeNull()
+    expect(bad()).not.toBeNull()
+  })
+
+  it('offers nothing to rate while the search is still running', () => {
+    show({ status: 'searching', matches: [] }, vi.fn().mockResolvedValue({}))
+    expect(screen.queryByTestId('answer-rating')).toBeNull()
+  })
+
+  it('offers nothing to rate on a search that failed', () => {
+    // "That search didn't finish" is not an answer. Asking whether it was a
+    // good one is asking about something nobody wrote.
+    show({ status: 'failed', error: 'the provider refused', matches: [] }, vi.fn().mockResolvedValue({}))
+    expect(screen.queryByTestId('answer-rating')).toBeNull()
+  })
+
+  it('shows no thumbs at all when there is nowhere to send a rating', () => {
+    // A rating control with no handler is a button that pretends.
+    show({ matches: [match()] })
+    expect(screen.queryByTestId('answer-rating')).toBeNull()
+  })
+
+  it('sends the press, naming the answer it is about', async () => {
+    const onRate = vi.fn().mockResolvedValue({})
+    show({ id: 'r1', matches: [match()] }, onRate)
+    await userEvent.click(good()!)
+    await waitFor(() => expect(onRate).toHaveBeenCalledWith('r1', 'answer_helpful'))
+  })
+
+  it('counts a second press of the same thumb as nothing, because it is', async () => {
+    // The log is evidence. The same opinion pressed twice must not read as
+    // two people liking the answer.
+    const onRate = vi.fn().mockResolvedValue({})
+    show({ matches: [match()] }, onRate)
+    await userEvent.click(good()!)
+    await waitFor(() => expect(sent()).toBe('Good answer — sent'))
+    await userEvent.click(good()!)
+    expect(onRate).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not draw the thumb you chose fainter than the one you did not', async () => {
+    // This went wrong once and is worth a test. Marking the chosen thumb
+    // disabled had Astryx dim it to half opacity, so the one you picked came
+    // out FAINTER than the one you passed over — which reads as
+    // unavailable, the opposite of chosen.
+    const onRate = vi.fn().mockResolvedValue({})
+    show({ matches: [match()] }, onRate)
+    await userEvent.click(good()!)
+    await waitFor(() => expect(sent()).toBe('Good answer — sent'))
+    expect(good()!.getAttribute('aria-disabled')).toBeNull()
+    // And it is still the filled one: the icon carries a fill, the other does not.
+    expect(good()!.querySelector('svg')!.getAttribute('fill')).toBe('currentColor')
+    expect(bad()!.querySelector('svg')!.getAttribute('fill')).toBe('none')
+  })
+
+  it('sends the other thumb when someone changes their mind, and does not claim the first was undone', async () => {
+    const onRate = vi.fn().mockResolvedValue({})
+    show({ matches: [match()] }, onRate)
+    await userEvent.click(good()!)
+    await waitFor(() => expect(sent()).toBe('Good answer — sent'))
+    await userEvent.click(bad()!)
+    await waitFor(() => expect(sent()).toBe('Not what I was after — sent'))
+    // Both presses reached the log, in the order they happened. Nothing
+    // pretended to withdraw the first.
+    expect(onRate.mock.calls).toEqual([
+      ['r1', 'answer_helpful'],
+      ['r1', 'answer_incorrect'],
+    ])
+    // And only one is filled: the record has both, the screen shows where
+    // they landed.
+    expect(bad()!.querySelector('svg')!.getAttribute('fill')).toBe('currentColor')
+    expect(good()!.querySelector('svg')!.getAttribute('fill')).toBe('none')
+  })
+
+  it('draws no rating the server did not take', async () => {
+    // A filled thumb standing for a rating nobody has is the lie this
+    // control is most likely to tell. The send fails, so it empties again
+    // and can be pressed once more.
+    const onRate = vi.fn().mockRejectedValue(new Error('offline'))
+    show({ matches: [match()] }, onRate)
+    await userEvent.click(good()!)
+    await waitFor(() => expect(onRate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(sent()).toBeNull())
+    expect(good()!.getAttribute('aria-label')).toBe('Good answer')
+    expect(good()!.querySelector('svg')!.getAttribute('fill')).toBe('none')
+    await userEvent.click(good()!)
+    expect(onRate).toHaveBeenCalledTimes(2)
   })
 })

@@ -3,6 +3,7 @@
 import { Fragment, useRef, useState } from "react"
 import {
   ChatComposer,
+  ChatComposerDrawer,
   ChatComposerInput,
   type ChatComposerInputHandle,
   ChatLayout,
@@ -13,10 +14,17 @@ import {
   type ChatToolCallItem,
 } from "@astryxdesign/core/Chat"
 import { Heading } from "@astryxdesign/core/Heading"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Mic01Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
+import { AnswerRating } from "./answer-rating"
+import { AskComposer, COMPOSER_PREVIEW } from "./ask-composer"
+import { AttachmentTray, useAttachments } from "./composer-attachments"
+import { EFFORTS, EffortDial, MODEL_NAMES, ModelPicker } from "./composer-controls"
+import { useVoiceCapture, VoiceLevels } from "./composer-voice"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import type { ClipRequest, Video } from "@/lib/types"
+import type { ChatSignal, ClipRequest, Video } from "@/lib/types"
 import { acknowledgeLine, answerLine, candidatesLine, coverageLine, productionLine, progressLine, uncertainLine } from "./answer-words"
 import { askGate } from "./ask-gate"
 import type { FeedMoment } from "./moment-feed"
@@ -130,11 +138,25 @@ function DialogueIllustration() {
  */
 function DialogueEmpty({ composer }: { composer: React.ReactNode }) {
   return (
-    // Centred down the page, but NOT across it: a cross-axis centre shrinks
-    // every child to its own content width, which crushes the composer into
-    // a pill with its placeholder wrapping over the send button. Only the
-    // words are centred; the box fills the column.
-    <VStack gap={6} justify="center" height="100%" className="min-h-80 min-w-64 flex-1" data-testid="dialogue-empty">
+    /**
+     * Centred down the page, but NOT across it: a cross-axis centre shrinks
+     * every child to its own content width, which crushes the composer into
+     * a pill with its placeholder wrapping over the send button. Only the
+     * words are centred; the box fills the column.
+     *
+     * The column's height is the row's to decide. An earlier `height="100%"`
+     * here did the opposite of what it looks like: an explicit height cancels
+     * the row's stretch, and the percentage then had nothing to resolve
+     * against, so this side settled at its own content height while the
+     * moments beside it stretched. Both halves centre their content, so they
+     * centred it in boxes of different heights and sat 186px apart.
+     *
+     * Measured at 1440x900, the two columns' content centres:
+     *
+     *   with height="100%"   query 312   moments 498
+     *   without it           query 498   moments 498
+     */
+    <VStack gap={6} justify="center" className="min-h-80 min-w-64 flex-1" data-testid="dialogue-empty">
       <VStack gap={2} align="center">
         <DialogueIllustration />
         <Heading level={3}>Talk to your footage</Heading>
@@ -166,10 +188,21 @@ function UserLine({ text }: { text: string }) {
  * rather than a coloured slab. Ghost keeps the bubble's alignment and
  * padding without the fill.
  */
-function ModelLine({ text, streamed = false, children }: { text?: string; streamed?: boolean; children?: React.ReactNode }) {
+function ModelLine({
+  text,
+  streamed = false,
+  children,
+  metadata,
+}: {
+  text?: string
+  streamed?: boolean
+  children?: React.ReactNode
+  /** Rendered under the bubble, aligned to its text. Astryx's slot for a footer row. */
+  metadata?: React.ReactNode
+}) {
   return (
     <ChatMessage sender="assistant">
-      <ChatMessageBubble variant="ghost">
+      <ChatMessageBubble variant="ghost" metadata={metadata}>
         <span className="text-sm leading-relaxed text-muted-foreground" data-testid="dialogue-model">
           {text !== undefined && (streamed ? <StreamedText text={text} /> : text)}
           {children}
@@ -281,7 +314,17 @@ export function exchangeLines(exchange: Exchange, readThroughSeconds: number | n
  * 2026-09-03), and the exact numbers live in the activity row for anyone
  * who opens it.
  */
-function ExchangeLines({ exchange, video, followUp }: { exchange: Exchange; video: Video | null; followUp: boolean }) {
+function ExchangeLines({
+  exchange,
+  video,
+  followUp,
+  onRateAnswer,
+}: {
+  exchange: Exchange
+  video: Video | null
+  followUp: boolean
+  onRateAnswer?: (requestId: string, event: ChatSignal) => Promise<unknown>
+}) {
   const { request } = exchange
   const acknowledgement = <ModelLine text={acknowledgeLine(request.instruction, followUp)} streamed />
   if (isSearching(exchange)) {
@@ -298,12 +341,31 @@ function ExchangeLines({ exchange, video, followUp }: { exchange: Exchange; vide
     )
   }
   const lines = exchangeLines(exchange, video?.index?.readThroughSeconds, followUp)
+  /**
+   * The thumbs go under the LAST line, because that is where the answer
+   * ends — Astryx puts a bubble's metadata below it, so hanging them off an
+   * earlier line would drop them into the middle of the answer.
+   *
+   * Only on an answer that arrived. A search that FAILED said "that search
+   * didn't finish"; asking whether that was a good answer is asking about
+   * something nobody wrote. There is nothing to rate until there is.
+   */
+  const ratable = onRateAnswer !== undefined && request.status === "completed" && lines.length > 0
   return (
     <>
       {acknowledgement}
       <SearchActivity request={request} />
       {lines.map((line, index) => (
-        <ModelLine key={`${request.id}-${index}`} text={line} streamed />
+        <ModelLine
+          key={`${request.id}-${index}`}
+          text={line}
+          streamed
+          metadata={
+            ratable && index === lines.length - 1 ? (
+              <AnswerRating requestId={request.id} onRate={onRateAnswer} />
+            ) : undefined
+          }
+        />
       ))}
     </>
   )
@@ -329,6 +391,14 @@ export interface DialogueProps {
   onAsk: (instruction: string) => AskOutcome | Promise<AskOutcome>
   /** Returns false when the re-cut did not start; the dialogue says so instead of claiming it did. */
   onReclip: (moment: FeedMoment) => boolean | void | Promise<boolean | void>
+  /**
+   * Records what someone thought of an answer. Rejecting means it was not
+   * stored, and the thumb goes back to empty.
+   *
+   * Optional, and the thumbs are absent without it: a rating control with
+   * nowhere to send a rating is a button that pretends.
+   */
+  onRateAnswer?: (requestId: string, event: ChatSignal) => Promise<unknown>
 }
 
 /** What a re-cut note says right now, from the moment itself. */
@@ -345,11 +415,38 @@ function reclipNoteText(moments: FeedMoment[], matchId: string, fallback: string
   return `Re-cut "${title}" — same moment, new cut. It's on the card now.`
 }
 
-export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip }: DialogueProps) {
+/** What the draft allowed, kept. */
+const MAX_PICTURES = 6
+
+export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip, onRateAnswer }: DialogueProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
   const inputRef = useRef<ChatComposerInputHandle>(null)
+
+  /**
+   * Which model, and how hard to look. Both cosmetic, by the owner's
+   * instruction (9 September): the effort levels are static until they decide
+   * what they mean, and connecting the model choice to OpenRouter is theirs.
+   *
+   * Local state, deliberately: neither reaches `onAsk`, so nothing downstream
+   * can start depending on a choice that decides nothing.
+   */
+  const [model, setModel] = useState<string>(MODEL_NAMES[0])
+  const [effort, setEffort] = useState<string>(EFFORTS[0])
+
+  /**
+   * Pictures and speech, ported from the draft and not yet connected.
+   *
+   * `createClipRequest` posts `{ instruction }` and nothing else, and no route
+   * accepts audio, so neither of these can reach the search today. They are
+   * behind COMPOSER_PREVIEW for that reason. The hooks are real: the pictures
+   * are held and released properly, and the microphone records real audio and
+   * says so when it has nowhere to send it.
+   */
+  const pictures = useAttachments(MAX_PICTURES)
+  const voice = useVoiceCapture()
+  const fileInput = useRef<HTMLInputElement>(null)
 
   // One order for everything said after a question: a note takes its
   // place when it is written, a kept moment's news when the keep is first
@@ -460,6 +557,7 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
         inputRef.current?.focus()
       } else {
         setDraft("")
+        pictures.clear()
       }
     } finally {
       setPending(false)
@@ -467,21 +565,45 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
   }
 
   const composer = (
-        <ChatComposer
-          value={draft}
-          onChange={setDraft}
-          onSubmit={(value) => void submit(value)}
-          placeholder={placeholder}
-          isDisabled={disabled || pending}
-          // Controlled from here, not from the composer: the composer clears
-          // itself on submit, and a question the server refused is still the
-          // person's question. It leaves the box only when the ask was taken.
-          input={<ChatComposerInput label="Ask for a moment" maxRows={4} handleRef={inputRef} />}
-        />
+    <AskComposer
+      value={draft}
+      onChange={setDraft}
+      onSubmit={(value) => void submit(value)}
+      placeholder={placeholder}
+      isDisabled={disabled || pending}
+      // Controlled from here, not from the composer: the composer clears
+      // itself on submit, and a question the server refused is still the
+      // person's question. It leaves the box only when the ask was taken.
+      label="Ask for a moment"
+      handleRef={inputRef}
+      // Only in a preview build: a picture here is still collected and
+      // dropped. Home's attachment is real, so home passes its own always.
+      attach={
+        COMPOSER_PREVIEW
+          ? {
+              label: "Add a picture",
+              accept: "image/*",
+              multiple: true,
+              isDisabled: pictures.attachments.length >= MAX_PICTURES,
+              onPick: (files: File[]) => pictures.add(files),
+            }
+          : undefined
+      }
+      // The draft's tray, in the slot the composer already had for it.
+      drawer={
+        pictures.attachments.length > 0 ? (
+          <ChatComposerDrawer count={pictures.attachments.length} label="Pictures">
+            <AttachmentTray
+              attachments={pictures.attachments}
+              onRemove={pictures.remove}
+              onMeasured={pictures.measure}
+            />
+          </ChatComposerDrawer>
+        ) : undefined
+      }
+    />
   )
 
-  // Nothing said yet: the landing, with the box in the middle of the column
-  // rather than docked under an empty thread.
   if (entryCount === 0) return <DialogueEmpty composer={composer} />
 
   return (
@@ -492,14 +614,26 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
     // minimum of its own.
     <ChatLayout data-testid="dialogue" className="min-h-80 min-w-64 flex-1" composer={composer}>
       {(
-        // Busy while an answer is still arriving, so a screen reader waits
-        // and reads the finished sentence once instead of each fragment.
-        <ChatMessageList isStreaming={exchanges.some(isSearching)}>
+        /**
+         * Busy while an answer is still arriving, so a screen reader waits
+         * and reads the finished sentence once instead of each fragment.
+         *
+         * `align="top"` because this chat sits BESIDE a moment rather than
+         * filling a page. ChatMessageList defaults to "bottom", which fills
+         * the free space above a short conversation with a spacer so it hugs
+         * the composer — right for a full-page chat, wrong here: the moment
+         * card starts 52px down its column and the first line of the answer
+         * started 320px down its own, so the two halves of the same screen
+         * did not line up. "top" drops the spacer. A conversation long
+         * enough to overflow scrolls identically either way, so nothing about
+         * a real thread changes.
+         */
+        <ChatMessageList align="top" isStreaming={exchanges.some(isSearching)}>
           {notesAfter(null).map((note) => (note.role === "user" ? <UserLine key={note.id} text={note.text} /> : <ModelLine key={note.id} text={noteText(note)} />))}
           {exchanges.map((exchange, index) => (
             <Fragment key={exchange.request.id}>
               <UserLine text={exchange.request.instruction} />
-              <ExchangeLines exchange={exchange} video={video} followUp={index > 0} />
+              <ExchangeLines exchange={exchange} video={video} followUp={index > 0} onRateAnswer={onRateAnswer} />
               {saidAfter(exchange.request.id)}
             </Fragment>
           ))}

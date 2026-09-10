@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { Clip, ClipMatch, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import type { ChatSignal, Clip, ClipMatch, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 
 import type { UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
@@ -421,6 +421,23 @@ export default function StartPage() {
     [],
   )
 
+  /**
+   * Records what someone thought of an ANSWER — the model's words, not a
+   * moment. It is a note about whether the search was any good; nothing in
+   * the app reads it back, and nothing on screen changes because of it.
+   *
+   * Deliberately NOT wrapped in the page's error banner. A rating that fails
+   * to send is not the person's problem to solve and does not stop what they
+   * were doing; the thumb un-fills and says so where it was pressed. Putting
+   * it in the banner would push the moment card down the screen over a note
+   * nobody asked for.
+   */
+  const rateAnswer = useCallback(
+    (requestId: string, event: ChatSignal) =>
+      api.recordChatSignal(requestId, event, { clientEventId: crypto.randomUUID() }),
+    [],
+  )
+
   const rateMatch = useCallback(
     async (
       exchangeRequestId: string,
@@ -686,6 +703,7 @@ export default function StartPage() {
             onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}
             onReclip={reclipMatch}
             onAsk={(instruction) => (searchRunning ? false : startSearch(instruction))}
+            onRateAnswer={rateAnswer}
             onPublish={publishMoment}
             onUploadMore={reset}
           />
