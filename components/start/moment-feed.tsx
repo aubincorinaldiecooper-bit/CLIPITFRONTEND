@@ -18,12 +18,11 @@ import type { Exchange } from "./types"
  * A fan of 9:16 cards, one in front: the moment before leans away above it,
  * the one after leans away below, each a step smaller and fainter. The
  * person scrolls, drags the front card, or presses a key to move through
- * them. Moving DOWN past an undecided moment skips it; moving back UP onto
- * a skipped moment un-skips it.
+ * them. Moving through them decides nothing.
  *
- * NOTHING HERE MAKES A CLIP. Keep, Skip's button and the → shortcut were
- * removed on 9 September — this MVP finds moments and shows them, and does
- * not produce files. Publish went with them; it is coming back, so its prop
+ * NOTHING HERE DECIDES ANYTHING. Keep, Skip and the → shortcut went on
+ * 9 September, and skipping-by-scrolling with them: this MVP has no
+ * keeping, no skipping and no liking. It finds moments and shows them. Publish went with them; it is coming back, so its prop
  * and the page's wiring were left in place. A moment kept in an earlier
  * session still shows what it is and still offers Download once its file
  * exists, because that state arrives from the server and is not made here.
@@ -557,8 +556,13 @@ export interface MomentFeedProps {
   searching?: boolean
   /** Keep the moment and make its file. */
   onKeep: (moment: FeedMoment) => void
+  /**
+   * Kept for the caller's sake, and unused here since skipping was removed:
+   * moving past a moment used to discard it. ReviewStep and the page still
+   * wire it, ready for its return.
+   */
   onSkip: (moment: FeedMoment) => void
-  /** Scrolling back onto a skipped moment, or pressing its dot, brings it back. */
+  /** As onSkip — unused here now that nothing is skipped to bring back. */
   onUndoSkip: (moment: FeedMoment) => void
   /** Keep the moment, make its file, and send it to socials once the file exists. */
   /**
@@ -590,8 +594,6 @@ export function MomentFeed({
   searching = false,
   paused = false,
   onKeep,
-  onSkip,
-  onUndoSkip,
   onUploadMore,
   onFrontChange,
 }: MomentFeedProps) {
@@ -650,27 +652,29 @@ export function MomentFeed({
     return () => window.removeEventListener("resize", measure)
   }, [total])
 
-  /** Down: past a decided moment, or skipping an undecided one. */
+  /**
+   * Moving through the feed decides nothing.
+   *
+   * Down used to skip the moment you passed, and up used to bring a skipped
+   * one back. Both went with Keep on 9 September: this MVP has no keeping,
+   * no skipping and no liking, so scrolling is only scrolling — a person
+   * looking through their moments is not voting on them.
+   */
   const forward = useCallback(() => {
     if (!canGoForward || !top) return
-    if (top.decision === null) onSkip(top)
     setFrontId(moments[cursor + 1]?.match.id ?? null)
-  }, [canGoForward, top, cursor, onSkip, moments])
-  /** Up: back onto the moment before; a skipped one is brought back as it comes into view. */
+  }, [canGoForward, top, cursor, moments])
   const back = useCallback(() => {
     if (!canGoBack || !prev) return
-    if (prev.decision === "skipped") onUndoSkip(prev)
     setFrontId(prev.match.id)
-  }, [canGoBack, prev, onUndoSkip])
-  /** A dot: straight to that moment; a skipped one comes back. */
+  }, [canGoBack, prev])
+  /** A dot: straight to that moment. */
   const goTo = useCallback(
     (index: number) => {
       if (!free) return
-      const target = moments[index]
-      if (target?.decision === "skipped") onUndoSkip(target)
-      setFrontId(target?.match.id ?? null)
+      setFrontId(moments[index]?.match.id ?? null)
     },
-    [free, moments, onUndoSkip],
+    [free, moments],
   )
 
   /**
@@ -790,8 +794,7 @@ export function MomentFeed({
       >
         {/*
           * The feed, in the left gutter: one dot per moment, the front one
-          * stretched. Each dot goes to its moment; a skipped moment's brings
-          * it back.
+          * stretched. Each dot goes to its moment.
           *
           * The button is NOT the dot. It used to be, and that made every
           * target 8x8 css px with 16px between centres — which fails WCAG 2.2
@@ -830,7 +833,7 @@ export function MomentFeed({
                 disabled={!free || front}
                 onClick={() => goTo(index)}
                 aria-current={front ? "true" : undefined}
-                aria-label={moment.decision === "skipped" ? `Bring back: ${title}` : `Go to: ${title}`}
+                aria-label={`Go to: ${title}`}
                 className="group flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:size-11"
               >
                 <span

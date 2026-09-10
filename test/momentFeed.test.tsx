@@ -195,62 +195,61 @@ describe('MomentFeed — one moment at a time', () => {
     expect(h.onKeep).not.toHaveBeenCalled()
   })
 
-  it('moving on skips the moment you moved past', async () => {
+  it('moving through the feed decides nothing', async () => {
+    // Skipping went with Keep (the owner's call, 9 September): no keeping,
+    // no skipping, no liking in this MVP. Scrolling past a moment used to
+    // discard it and scrolling back used to bring it back; a person looking
+    // through their moments is not voting on them.
     const h = handlers()
-    render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' })])], video)} {...h} />)
-    fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    await waitFor(() => expect(h.onSkip).toHaveBeenCalledTimes(1))
-    expect(h.onSkip.mock.calls[0]![0].match.id).toBe('a')
+    const moments = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
+    render(<MomentFeed moments={moments} {...h} />)
 
-    cleanup()
-    const again = handlers()
-    render(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' })])], video)} {...again} />)
-    fireEvent.keyDown(window, { key: 'ArrowDown' })
-    await waitFor(() => expect(again.onSkip).toHaveBeenCalledTimes(1))
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    await waitFor(() => expect(front()).toBe(2))
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    fireEvent.keyDown(window, { key: 'ArrowUp' })
+    await waitFor(() => expect(front()).toBe(1))
+
+    expect(h.onSkip).not.toHaveBeenCalled()
+    expect(h.onUndoSkip).not.toHaveBeenCalled()
+    expect(h.onKeep).not.toHaveBeenCalled()
   })
 
-  it('scrolling back onto a skipped moment brings it back; a kept one is final', async () => {
-    const skippedBefore = feedMoments(
+  it('a moment already skipped stays skipped — scrolling over it is not an undo', async () => {
+    // The decision arrives from the server; this screen no longer makes or
+    // unmakes one. What it still does is say what the moment is.
+    const h = handlers()
+    const moments = feedMoments(
       [exchange('r1', [match({ id: 'gone', confidence: 0.9, feedback: 'rejected' }), match({ id: 'open', confidence: 0.8 })])],
       video,
     )
-    const h = handlers()
-    render(<MomentFeed moments={skippedBefore} {...h} />)
+    render(<MomentFeed moments={moments} {...h} />)
     fireEvent.keyDown(window, { key: 'ArrowUp' })
-    await waitFor(() => expect(h.onUndoSkip).toHaveBeenCalledTimes(1))
-    expect(h.onUndoSkip.mock.calls[0]![0].match.id).toBe('gone')
-
-    cleanup()
-    const keptBefore = feedMoments(
-      [exchange('r1', [match({ id: 'saved', confidence: 0.9, feedback: 'approved' }), match({ id: 'open', confidence: 0.8 })])],
-      video,
-    )
-    const k = handlers()
-    render(<MomentFeed moments={keptBefore} {...k} />)
-    fireEvent.keyDown(window, { key: 'ArrowUp' })
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    expect(k.onUndoSkip).not.toHaveBeenCalled()
-    expect(screen.getByText('Kept')).toBeTruthy()
+    await waitFor(() => expect(front()).toBe(1))
+    expect(h.onUndoSkip).not.toHaveBeenCalled()
+    expect(screen.getByTestId('feed-decision').textContent).toContain('Skipped')
   })
 
-  it("every dot goes to its moment; a skipped moment's dot brings it back", async () => {
+  it('every dot goes to its moment, and decides nothing on the way', async () => {
     const moments = feedMoments(
       [exchange('r1', [match({ id: 'saved', confidence: 0.9, feedback: 'approved' }), match({ id: 'gone', confidence: 0.8, feedback: 'rejected' }), match({ id: 'open', confidence: 0.7 })])],
       video,
     )
     const h = handlers()
     render(<MomentFeed moments={moments} {...h} />)
-    const dots = screen.getByTestId('feed-dots')
-    expect(dots.querySelectorAll('button')).toHaveLength(3)
-    await userEvent.click(screen.getByRole('button', { name: 'Bring back: Harbour skyline' }))
-    expect(h.onUndoSkip).toHaveBeenCalledTimes(1)
-    expect(h.onUndoSkip.mock.calls[0]![0].match.id).toBe('gone')
+    expect(screen.getByTestId('feed-dots').querySelectorAll('button')).toHaveLength(3)
+
+    // Every dot reads the same way now — a skipped moment's used to say
+    // "Bring back", and nothing brings anything back.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Go to: Harbour skyline' })[1]!)
     expect(front()).toBe(2)
-    // A kept moment's dot just goes there: it stays kept, and its card says so.
+    expect(screen.getByTestId('feed-decision').textContent).toContain('Skipped')
+
     await userEvent.click(screen.getAllByRole('button', { name: 'Go to: Harbour skyline' })[0]!)
     expect(front()).toBe(1)
     expect(screen.getByTestId('feed-decision').textContent).toContain('Kept')
-    expect(h.onUndoSkip).toHaveBeenCalledTimes(1)
+    expect(h.onUndoSkip).not.toHaveBeenCalled()
+    expect(h.onSkip).not.toHaveBeenCalled()
   })
 
   it('keeps playing the link it started with while the page re-signs it, and takes the new one only when the old fails', () => {
@@ -290,57 +289,18 @@ describe('MomentFeed — one moment at a time', () => {
   })
 
   it('a held key is one press, and two quick presses are one move', async () => {
-    // Codex's finding on #75, still live: key repeat could run through the
-    // feed before the person let go. It guarded Keep then and guards moving
-    // on now — a skip is recorded for each moment passed, so a held key
-    // would still discard several.
-    const moments = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 })])], video)
-    const h = handlers()
-    render(<MomentFeed moments={moments} {...h} />)
+    // Codex's finding on #75. It guarded Keep, then skipping, and now guards
+    // the position alone — a held key would otherwise run the whole feed past
+    // the person before they let go.
+    const moments = feedMoments([exchange('r1', [match({ id: 'a', confidence: 0.9 }), match({ id: 'b', confidence: 0.8 }), match({ id: 'c', confidence: 0.7 })])], video)
+    render(<MomentFeed moments={moments} {...handlers()} />)
+    expect(front()).toBe(1)
     fireEvent.keyDown(window, { key: 'ArrowLeft', repeat: true })
     fireEvent.keyDown(window, { key: 'ArrowLeft', repeat: true })
-    expect(h.onSkip).not.toHaveBeenCalled()
+    expect(front()).toBe(1)
     fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    expect(h.onSkip).toHaveBeenCalledTimes(1)
-  })
-
-  it('moving past a moment already decided is not a second decision', async () => {
-    // The kept card stays on screen saying its file is being made — that
-    // state arrives from the server now rather than from a press here, so
-    // this builds it directly. Moving past it must not skip it; moving past
-    // the undecided one after it must.
-    const h = handlers()
-    const kept = feedMoments(
-      [
-        {
-          request: request('r1', [match({ id: 'a', confidence: 0.9, feedback: 'approved', clip: { id: 'c-a', status: 'pending' } }), match({ id: 'b', confidence: 0.8 })]),
-          clips: [{ id: 'c-a', clipMatchId: 'a', status: 'pending', url: null, media: null } as never],
-        },
-      ],
-      video,
-    )
-    render(<MomentFeed moments={kept} {...h} />)
-    // The feed opens on the first moment nobody has decided on, so it starts
-    // past the kept one. Going back up onto it is not an undo — only a
-    // SKIPPED moment is brought back that way.
-    expect(front()).toBe(2)
-    fireEvent.keyDown(window, { key: 'ArrowUp' })
-    await waitFor(() => expect(front()).toBe(1))
-    expect(h.onUndoSkip).not.toHaveBeenCalled()
-    expect(screen.getByTestId('feed-decision').textContent).toContain('Kept · cutting')
-
-    // Moving past it again is not a second decision about it.
-    await new Promise((resolve) => setTimeout(resolve, 450))
     fireEvent.keyDown(window, { key: 'ArrowLeft' })
     await waitFor(() => expect(front()).toBe(2))
-    expect(h.onSkip).not.toHaveBeenCalled()
-
-    // Moving past the undecided one after it is.
-    await new Promise((resolve) => setTimeout(resolve, 450))
-    fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    await waitFor(() => expect(h.onSkip).toHaveBeenCalledTimes(1))
-    expect(h.onSkip.mock.calls[0]![0].match.id).toBe('b')
   })
 
   it('shows a clip made on Keep before the moment has been re-read with its id', () => {
