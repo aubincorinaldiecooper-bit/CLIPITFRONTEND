@@ -98,18 +98,15 @@ export function UploadStep({
           }
           if (ready) onSubmit?.()
         }}
-        // Typing is allowed the moment there is a video, even while it is
-        // still uploading or being read. Only SENDING waits for ready — the
-        // line below the box has promised exactly that, and the field used
-        // to contradict it.
-        isDisabled={!somethingToAskAbout || disabled || isSearching}
+        // The question can be written before a video is picked. Only SENDING
+        // waits for an uploaded video; disabling the editor here made the
+        // compact prompt open into a search bar nobody could type in.
+        isDisabled={disabled || isSearching}
         // Typing and sending are two different gates here, and always were.
         canSend={ready}
-        // The old words were "Upload a video first…", which named a
-        // container that is no longer on the screen. They name the plus
-        // beside them now.
-        placeholder={somethingToAskAbout ? "Tell Clipit what to look for..." : "Add a video, then ask"}
+        placeholder="Ask anything..."
         label="Search your footage"
+        isCollapsible
         attach={{
           label: "Add a video",
           accept: VIDEO_ACCEPT,
