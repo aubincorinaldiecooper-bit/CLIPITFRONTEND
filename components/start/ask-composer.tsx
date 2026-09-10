@@ -61,8 +61,6 @@ export interface AskComposerProps {
   canSend?: boolean;
   /** The input's accessible name — what a screen reader calls the box. */
   label: string;
-  /** Fold an empty landing-page composer down to its one-line prompt. */
-  isCollapsible?: boolean;
   handleRef?: React.Ref<ChatComposerInputHandle>;
   /**
    * What the plus picks up here. Absent means no plus.
@@ -95,7 +93,6 @@ export function AskComposer({
   isDisabled = false,
   canSend,
   label,
-  isCollapsible = false,
   handleRef,
   attach,
   drawer,
@@ -105,40 +102,7 @@ export function AskComposer({
   const [model, setModel] = useState<string>(MODEL_NAMES[0]);
   const [effort, setEffort] = useState<string>(EFFORTS[0]);
   const picker = useRef<HTMLInputElement>(null);
-  const shell = useRef<HTMLElement>(null);
   const voice = useVoiceCapture();
-  const [expanded, setExpanded] = useState(
-    () => !isCollapsible || value.trim().length > 0,
-  );
-
-  // A draft arriving from outside (including a restored failed question)
-  // must never be hidden behind the closed prompt. Recording also needs the
-  // full box because its stop control lives in the composer footer.
-  useEffect(() => {
-    if (value.trim().length > 0 || drawer || voice.isRecording)
-      setExpanded(true);
-  }, [drawer, value, voice.isRecording]);
-
-  // The compact form replaces the full editor, so opening it briefly moves
-  // focus through the document body while the two swap. Listen for the next
-  // real focus target as well as React's blur event; this also covers Tab and
-  // assistive-technology navigation away from the empty composer.
-  useEffect(() => {
-    if (!isCollapsible || !expanded) return;
-    const onFocus = (event: FocusEvent) => {
-      if (
-        !shell.current?.contains(event.target as Node) &&
-        value.trim() === "" &&
-        !drawer &&
-        !voice.isRecording
-      ) {
-        setExpanded(false);
-      }
-    };
-    document.addEventListener("focusin", onFocus);
-    return () => document.removeEventListener("focusin", onFocus);
-  }, [drawer, expanded, isCollapsible, value, voice.isRecording]);
-
   const submit = (nextValue: string) => {
     if (isDisabled || canSend === false) return;
     onSubmit(nextValue);
@@ -165,54 +129,27 @@ export function AskComposer({
           }}
         />
       )}
+      {/*
+        Always open — the owner's call of 2026-09-10, and their picture of it:
+        the question on its own line with the model, the effort dial, the plus
+        and the round action button in a row beneath.
+
+        What was here was a fold: an empty box shrank to a one-line pill and
+        opened on focus. It also could not be typed into. Opening it swapped
+        the pill for the editor, and the focus handlers read the pill's own
+        removal as "focus left the box" — measured in a browser as
+        focusout(null) -> editor visible -> focusin -> editor hidden, all
+        before the mouse button came back up. The box shut in the same frame
+        the click opened it.
+
+        The fold is gone rather than repaired. It is not what the owner wants
+        on this screen, so there is nothing here to keep working.
+      */}
       <section
-        ref={shell}
         aria-label={`${label} composer`}
-        className={`relative w-full transition-[max-width] duration-300 ${expanded ? "max-w-lg" : "max-w-xs"}`}
-        onFocusCapture={() => setExpanded(true)}
-        onBlurCapture={(event) => {
-          if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-          if (
-            isCollapsible &&
-            value.trim() === "" &&
-            !drawer &&
-            !voice.isRecording
-          )
-            setExpanded(false);
-        }}
+        className="relative w-full max-w-lg"
       >
-        {!expanded && (
-          <button
-            type="button"
-            onClick={() => {
-              setExpanded(true);
-              window.setTimeout(() => {
-                shell.current
-                  ?.querySelector<HTMLElement>('[role="textbox"]')
-                  ?.focus();
-              }, 0);
-            }}
-            disabled={isDisabled && !attach}
-            aria-label={`Open ${label.toLowerCase()}`}
-            aria-expanded="false"
-            className="flex h-12 w-full items-center rounded-full border border-border bg-card px-4 pr-12 text-left text-sm font-medium text-foreground/60 shadow-sm outline-none transition-[border-color,box-shadow] hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-          >
-            <span className="truncate">{placeholder}</span>
-          </button>
-        )}
-        {!expanded && attach && (
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => picker.current?.click()}
-            disabled={attach.isDisabled}
-            className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full text-foreground/60 outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-            aria-label={attach.label}
-          >
-            <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
-          </button>
-        )}
-        <span className={expanded ? "block" : "hidden"} aria-hidden={!expanded}>
+        <span className="block">
           <ChatComposer
             value={value}
             onChange={onChange}

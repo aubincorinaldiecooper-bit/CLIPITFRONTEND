@@ -106,7 +106,6 @@ export function UploadStep({
         canSend={ready}
         placeholder="Ask anything..."
         label="Search your footage"
-        isCollapsible
         attach={{
           label: "Add a video",
           accept: VIDEO_ACCEPT,

@@ -15,7 +15,6 @@ function Composer({ isDisabled = false, withAttachment = false }) {
       onSubmit={vi.fn()}
       placeholder="Ask anything"
       label="Search your footage"
-      isCollapsible
       isDisabled={isDisabled}
       attach={
         withAttachment
@@ -26,87 +25,56 @@ function Composer({ isDisabled = false, withAttachment = false }) {
   );
 }
 
-describe("the folding ask composer", () => {
-  it("starts as a compact prompt and opens into the full editor", async () => {
+/**
+ * The box is always open — the owner's call of 2026-09-10, with a picture of
+ * what they want: the question on its own line, and the model, the effort
+ * dial, the plus and the action button in a row beneath it.
+ *
+ * This file used to describe a fold: an empty box shrank to a one-line pill
+ * and opened on focus. Those tests went with the fold rather than being
+ * fixed, because the behaviour they described is not wanted. The one claim
+ * worth carrying forward is the last of them — that a box which cannot be
+ * typed into can still take a video — and it is here.
+ *
+ * Worth remembering: the fold's four tests all passed while the box could
+ * not be typed into at all in a real browser. Opening it swapped the pill
+ * for the editor, and the focus handlers read the pill's own removal as
+ * "focus left the box", so it shut in the same frame the click opened it.
+ * jsdom does not move focus the way a browser does, so nothing here saw it.
+ */
+describe("the ask composer", () => {
+  it("is open, with nothing to press first", () => {
+    render(<Composer />);
+    const box = screen.getByRole("textbox", { name: "Search your footage" });
+    expect(box.getAttribute("contenteditable")).toBe("true");
+    // No pill in front of it, and nothing claiming to be closed.
+    expect(screen.queryByRole("button", { name: /^Open / })).toBeNull();
+    expect(document.querySelector("[aria-expanded]")).toBeNull();
+  });
+
+  it("takes typing straight away", async () => {
     const person = userEvent.setup();
     render(<Composer />);
-
-    expect(
-      screen.queryByRole("textbox", { name: "Search your footage" }),
-    ).toBeNull();
-    const opener = screen.getByRole("button", {
-      name: "Open search your footage",
-    });
-    expect(opener.textContent).toBe("Ask anything");
-
-    await person.click(opener);
-
-    expect(
-      screen.getByRole("textbox", { name: "Search your footage" }),
-    ).toBeTruthy();
-  });
-
-  it("folds again after an empty editor loses focus", async () => {
-    const person = userEvent.setup();
-    render(
-      <>
-        <Composer />
-        <button type="button">Outside</button>
-      </>,
-    );
-
-    await person.click(
-      screen.getByRole("button", { name: "Open search your footage" }),
-    );
-    await person.click(screen.getByRole("button", { name: "Outside" }));
-
-    expect(
-      screen.getByRole("button", { name: "Open search your footage" }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("textbox", { name: "Search your footage" }),
-    ).toBeNull();
-  });
-
-  it("keeps a written question open when focus leaves", async () => {
-    const person = userEvent.setup();
-    render(
-      <>
-        <Composer />
-        <button type="button">Outside</button>
-      </>,
-    );
-
-    await person.click(
-      screen.getByRole("button", { name: "Open search your footage" }),
-    );
     await person.type(
       screen.getByRole("textbox", { name: "Search your footage" }),
-      "Find the goal",
+      "find the harbour",
     );
-    await person.click(screen.getByRole("button", { name: "Outside" }));
-
-    expect(
-      screen.getByRole("textbox", { name: "Search your footage" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Search your footage" }).textContent).toBe(
+      "find the harbour",
+    );
   });
 
-  it("still opens to the upload action when typing is unavailable", async () => {
-    const person = userEvent.setup();
+  it("still takes a video when it will not take typing", async () => {
     render(<Composer isDisabled withAttachment />);
-
-    await person.click(
-      screen.getByRole("button", { name: "Open search your footage" }),
-    );
-
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Add a video" })
-        .disabled,
-    ).toBe(false);
+    // The editor is shut, because there is nothing to ask about yet.
     expect(
       screen
         .getByRole("textbox", { name: "Search your footage" })
         .getAttribute("contenteditable"),
     ).toBe("false");
+    // The plus is not, because adding a video is how that changes.
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Add a video" }).disabled,
+    ).toBe(false);
   });
 });

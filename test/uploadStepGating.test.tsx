@@ -74,16 +74,10 @@ afterEach(cleanup)
 const box = () => screen.getByRole('textbox', { name: 'Search your footage' })
 const takesTyping = () => box().getAttribute('contenteditable') === 'true'
 const send = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Send' })
-const openBox = async () => {
-  const opener = screen.queryByRole('button', { name: 'Open search your footage' })
-  if (opener) await userEvent.click(opener)
-}
-
 describe('the ask box while a video is still being prepared', () => {
   it('lets people type, and keeps Send off', async () => {
     const onPromptChange = vi.fn()
     renderStep({ video: video(false), onPromptChange })
-    await openBox()
 
     expect(takesTyping()).toBe(true)
     await userEvent.type(box(), 'f')
@@ -112,7 +106,6 @@ describe('the ask box while a video is still being prepared', () => {
   it('accepts a question before a video is picked, while keeping Send off', async () => {
     const onPromptChange = vi.fn()
     renderStep({ video: null, onPromptChange })
-    await openBox()
     expect(takesTyping()).toBe(true)
     expect(screen.getByText('Ask anything...')).toBeTruthy()
     await userEvent.type(box(), 'find the introduction')
@@ -124,7 +117,6 @@ describe('the ask box while a video is still being prepared', () => {
     // The video row only exists once the upload completes — minutes, for a
     // long film — and those minutes are when a person wants to type.
     renderStep({ video: null, entries: [uploading()] })
-    await openBox()
     expect(takesTyping()).toBe(true)
     expect(send().disabled).toBe(true)
     expect(screen.getByText(/still uploading/)).toBeTruthy()
@@ -151,7 +143,6 @@ describe('the ask box while a video is still being prepared', () => {
     // A refused file (too large, say) stays in the list with its reason; it
     // is not "still being prepared".
     renderStep({ video: null, entries: [{ ...uploading(), phase: 'failed', error: 'Too large' }] })
-    await openBox()
     expect(takesTyping()).toBe(true)
     expect(send().disabled).toBe(true)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
@@ -160,7 +151,6 @@ describe('the ask box while a video is still being prepared', () => {
   it('still accepts a question after preparation failed, without promising it can send', async () => {
     const failed = { id: 'video-1', status: 'failed', readyForSearch: false } as unknown as Video
     renderStep({ video: failed })
-    await openBox()
     expect(takesTyping()).toBe(true)
     expect(send().disabled).toBe(true)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
