@@ -217,6 +217,23 @@ export interface EvaluationReport {
  */
 export type MatchFeedbackReason = "wrong_moment" | "missed_moment" | "bad_boundaries" | "not_relevant"
 
+/**
+ * What someone did with an answer, in the server's words
+ * (`chat_retrieval_signals.event_type`).
+ *
+ * These are OBSERVATIONS, not verdicts. A row here says a thumb was pressed,
+ * not that the answer was wrong — the difference matters, because nothing
+ * downstream is allowed to read one press as permission to change how a
+ * search behaves.
+ */
+export type ChatSignal =
+  | "timestamp_clicked"
+  | "answer_helpful"
+  | "answer_incorrect"
+  | "follow_up"
+  | "where_exactly"
+  | "missing_section"
+
 export interface ClipMatch {
   id: string
   startSeconds: number

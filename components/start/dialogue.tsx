@@ -16,13 +16,14 @@ import {
 import { Heading } from "@astryxdesign/core/Heading"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Mic01Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
+import { AnswerRating } from "./answer-rating"
 import { AttachmentTray, useAttachments } from "./composer-attachments"
 import { EFFORTS, EffortDial, MODEL_NAMES, ModelPicker } from "./composer-controls"
 import { useVoiceCapture, VoiceLevels } from "./composer-voice"
 import { Text } from "@astryxdesign/core/Text"
 import { VStack } from "@astryxdesign/core/VStack"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import type { ClipRequest, Video } from "@/lib/types"
+import type { ChatSignal, ClipRequest, Video } from "@/lib/types"
 import { acknowledgeLine, answerLine, candidatesLine, coverageLine, productionLine, progressLine, uncertainLine } from "./answer-words"
 import { askGate } from "./ask-gate"
 import type { FeedMoment } from "./moment-feed"
@@ -186,10 +187,21 @@ function UserLine({ text }: { text: string }) {
  * rather than a coloured slab. Ghost keeps the bubble's alignment and
  * padding without the fill.
  */
-function ModelLine({ text, streamed = false, children }: { text?: string; streamed?: boolean; children?: React.ReactNode }) {
+function ModelLine({
+  text,
+  streamed = false,
+  children,
+  metadata,
+}: {
+  text?: string
+  streamed?: boolean
+  children?: React.ReactNode
+  /** Rendered under the bubble, aligned to its text. Astryx's slot for a footer row. */
+  metadata?: React.ReactNode
+}) {
   return (
     <ChatMessage sender="assistant">
-      <ChatMessageBubble variant="ghost">
+      <ChatMessageBubble variant="ghost" metadata={metadata}>
         <span className="text-sm leading-relaxed text-muted-foreground" data-testid="dialogue-model">
           {text !== undefined && (streamed ? <StreamedText text={text} /> : text)}
           {children}
@@ -301,7 +313,17 @@ export function exchangeLines(exchange: Exchange, readThroughSeconds: number | n
  * 2026-09-03), and the exact numbers live in the activity row for anyone
  * who opens it.
  */
-function ExchangeLines({ exchange, video, followUp }: { exchange: Exchange; video: Video | null; followUp: boolean }) {
+function ExchangeLines({
+  exchange,
+  video,
+  followUp,
+  onRateAnswer,
+}: {
+  exchange: Exchange
+  video: Video | null
+  followUp: boolean
+  onRateAnswer?: (requestId: string, event: ChatSignal) => Promise<unknown>
+}) {
   const { request } = exchange
   const acknowledgement = <ModelLine text={acknowledgeLine(request.instruction, followUp)} streamed />
   if (isSearching(exchange)) {
@@ -318,12 +340,31 @@ function ExchangeLines({ exchange, video, followUp }: { exchange: Exchange; vide
     )
   }
   const lines = exchangeLines(exchange, video?.index?.readThroughSeconds, followUp)
+  /**
+   * The thumbs go under the LAST line, because that is where the answer
+   * ends — Astryx puts a bubble's metadata below it, so hanging them off an
+   * earlier line would drop them into the middle of the answer.
+   *
+   * Only on an answer that arrived. A search that FAILED said "that search
+   * didn't finish"; asking whether that was a good answer is asking about
+   * something nobody wrote. There is nothing to rate until there is.
+   */
+  const ratable = onRateAnswer !== undefined && request.status === "completed" && lines.length > 0
   return (
     <>
       {acknowledgement}
       <SearchActivity request={request} />
       {lines.map((line, index) => (
-        <ModelLine key={`${request.id}-${index}`} text={line} streamed />
+        <ModelLine
+          key={`${request.id}-${index}`}
+          text={line}
+          streamed
+          metadata={
+            ratable && index === lines.length - 1 ? (
+              <AnswerRating requestId={request.id} onRate={onRateAnswer} />
+            ) : undefined
+          }
+        />
       ))}
     </>
   )
@@ -349,6 +390,14 @@ export interface DialogueProps {
   onAsk: (instruction: string) => AskOutcome | Promise<AskOutcome>
   /** Returns false when the re-cut did not start; the dialogue says so instead of claiming it did. */
   onReclip: (moment: FeedMoment) => boolean | void | Promise<boolean | void>
+  /**
+   * Records what someone thought of an answer. Rejecting means it was not
+   * stored, and the thumb goes back to empty.
+   *
+   * Optional, and the thumbs are absent without it: a rating control with
+   * nowhere to send a rating is a button that pretends.
+   */
+  onRateAnswer?: (requestId: string, event: ChatSignal) => Promise<unknown>
 }
 
 /** What a re-cut note says right now, from the moment itself. */
@@ -381,7 +430,7 @@ const COMPOSER_PREVIEW = process.env.NEXT_PUBLIC_COMPOSER_PREVIEW === "true"
 /** What the draft allowed, kept. */
 const MAX_PICTURES = 6
 
-export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip }: DialogueProps) {
+export function Dialogue({ exchanges, video, moments, active, searching, onAsk, onReclip, onRateAnswer }: DialogueProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
@@ -643,7 +692,7 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
           {exchanges.map((exchange, index) => (
             <Fragment key={exchange.request.id}>
               <UserLine text={exchange.request.instruction} />
-              <ExchangeLines exchange={exchange} video={video} followUp={index > 0} />
+              <ExchangeLines exchange={exchange} video={video} followUp={index > 0} onRateAnswer={onRateAnswer} />
               {saidAfter(exchange.request.id)}
             </Fragment>
           ))}

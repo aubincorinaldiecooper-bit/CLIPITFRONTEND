@@ -92,7 +92,7 @@ describe('the ask box while a video is still being prepared', () => {
 
   it('stays off with nothing to ask about', () => {
     renderStep({ video: null })
-    expect(screen.getByPlaceholderText<HTMLInputElement>('Upload a video first...').disabled).toBe(true)
+    expect(screen.getByPlaceholderText<HTMLInputElement>('Add a video, then ask').disabled).toBe(true)
   })
 
   it('opens the moment a file is picked, before its bytes have landed', () => {
@@ -126,14 +126,84 @@ describe('the ask box while a video is still being prepared', () => {
     // A refused file (too large, say) stays in the list with its reason; it
     // is not "still being prepared".
     renderStep({ video: null, entries: [{ ...uploading(), phase: 'failed', error: 'Too large' }] })
-    expect(screen.getByPlaceholderText<HTMLInputElement>('Upload a video first...').disabled).toBe(true)
+    expect(screen.getByPlaceholderText<HTMLInputElement>('Add a video, then ask').disabled).toBe(true)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
   })
 
   it('promises nothing for a video whose preparation failed', () => {
     const failed = { id: 'video-1', status: 'failed', readyForSearch: false } as unknown as Video
     renderStep({ video: failed })
-    expect(screen.getByPlaceholderText<HTMLInputElement>('Upload a video first...').disabled).toBe(true)
+    expect(screen.getByPlaceholderText<HTMLInputElement>('Add a video, then ask').disabled).toBe(true)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
+  })
+})
+
+/**
+ * Home is the box and nothing else — the owner's call of 2026-09-10.
+ *
+ * The drop container above it is gone. Uploading is NOT: "the bar can hold
+ * video files so upload still exists, we're just removing the container".
+ *
+ * What this file is guarding is the half of that which is easy to lose. The
+ * container was the only thing on the screen saying a file was on its way
+ * or had failed, and deleting it without moving those words leaves someone
+ * waiting on an upload that stopped minutes ago.
+ */
+describe('home is the box alone, and the box still takes video', () => {
+  it('has no drop container on it', () => {
+    renderStep({ video: null })
+    expect(screen.queryByText(/drag/i)).toBeNull()
+    expect(screen.queryByText(/drop/i)).toBeNull()
+    // The container's own picker button is gone with it; the bar's remains.
+    expect(screen.queryByRole('button', { name: /browse|choose file/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Add a video' })).toBeTruthy()
+  })
+
+  it('hands a picked video to the same uploader the container used', async () => {
+    const onAdd = vi.fn()
+    render(
+      <UploadStep
+        entries={[]} video={null} promptValue="" onPromptChange={vi.fn()}
+        onAdd={onAdd} onRemove={vi.fn()} onRetry={vi.fn()} onSubmit={vi.fn()}
+      />,
+    )
+    const file = new File(['x'], 'harbour.mp4', { type: 'video/mp4' })
+    // The picker is hidden behind the paperclip, so the file goes to it
+    // directly — clicking the button opens the OS dialog, which jsdom has not
+    // got. What is being checked is that a pick reaches onAdd at all.
+    const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!
+    expect(picker.accept).toContain('video/')
+    await userEvent.upload(picker, file)
+    expect(onAdd).toHaveBeenCalledWith([file])
+  })
+
+  it('says a file is on its way, since the progress bar went with the container', () => {
+    renderStep({ video: null, entries: [uploading()] })
+    const line = screen.getByTestId('upload-progress').textContent ?? ''
+    expect(line).toContain('film.mp4')
+    expect(line).toContain('30%')
+  })
+
+  it('says why an upload failed, and offers the same two ways out', async () => {
+    // Without this the file simply vanishes and the box says "add a video",
+    // as though nothing had been added — which is the misleading half of
+    // "nothing happened".
+    const onRetry = vi.fn()
+    const onRemove = vi.fn()
+    render(
+      <UploadStep
+        entries={[{ ...uploading(), phase: 'failed', error: 'Too large' }]}
+        video={null} promptValue="" onPromptChange={vi.fn()}
+        onAdd={vi.fn()} onRemove={onRemove} onRetry={onRetry} onSubmit={vi.fn()}
+      />,
+    )
+    const failure = screen.getByTestId('upload-failure').textContent ?? ''
+    expect(failure).toContain('film.mp4')
+    expect(failure).toContain('Too large')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledWith('upload-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(onRemove).toHaveBeenCalledWith('upload-1')
   })
 })

@@ -8,6 +8,7 @@ import type {
   EvaluationReport,
   InvitePreview,
   LibraryClip,
+  ChatSignal,
   MatchFeedback,
   MatchFeedbackReason,
   ClipPost,
@@ -631,6 +632,31 @@ export const api = {
       // for anything but a rejection, so re-sending the same verdict with a
       // reason attached is a safe second tap, not a state change.
       body: JSON.stringify(reason ? { verdict, reason } : { verdict }),
+    })
+  },
+
+  /**
+   * Records what someone did with an answer: rated it, jumped to a
+   * timestamp, asked a follow-up.
+   *
+   * Append-only, and that is the whole point of it — the server keeps a log
+   * of what happened, not a field saying what the person currently thinks.
+   * Rating an answer well and then badly leaves BOTH rows. Nothing here
+   * edits or withdraws an earlier one, so the caller must not offer an undo
+   * it cannot deliver.
+   *
+   * `clientEventId` makes a delivery retry safe: the same id returns the row
+   * already stored rather than counting the same press twice. A DIFFERENT
+   * press needs a different id, or the server keeps the first one's meaning.
+   */
+  async recordChatSignal(
+    requestId: string,
+    event: ChatSignal,
+    extra?: { timestampSeconds?: number; detail?: string; clientEventId?: string },
+  ): Promise<{ signal: { id: string; eventType: ChatSignal } }> {
+    return request(`/api/clip-requests/${requestId}/signals`, {
+      method: "POST",
+      body: JSON.stringify({ event, ...extra }),
     })
   },
 
