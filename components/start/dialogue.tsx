@@ -591,7 +591,7 @@ export function Dialogue({ exchanges, video, moments, active, searching, onAsk, 
       }
       // The draft's tray, in the slot the composer already had for it.
       drawer={
-        pictures.attachments.length > 0 ? (
+        COMPOSER_PREVIEW && pictures.attachments.length > 0 ? (
           <ChatComposerDrawer count={pictures.attachments.length} label="Pictures">
             <AttachmentTray
               attachments={pictures.attachments}

@@ -1,6 +1,8 @@
 "use client"
 
-import { formatBytes, VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
+import { ChatComposerDrawer } from "@astryxdesign/core/Chat"
+import { VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
+import { UploadTray } from "./composer-attachments"
 import type { Video } from "@/lib/types"
 import { AskComposer } from "./ask-composer"
 import { askGate } from "./ask-gate"
@@ -19,9 +21,6 @@ export interface UploadStepProps {
   /** A search is already running for this instruction; the prompt becomes read-only and the action resumes watching. */
   searchInstruction?: string
 }
-
-/** How far along, as a percentage, for the line under the box. */
-const percent = (entry: UploadEntry) => Math.round((entry.progress ?? 0) * 100)
 
 /**
  * Home: one box, and nothing else.
@@ -77,14 +76,6 @@ export function UploadStep({
   const ready = (gate.accepting && !disabled) || isSearching
   /** Preparation failed: nothing here will ever become sendable, so no promise is made. */
   const failed = video?.status === "failed"
-  // A file that has been picked is a video that is coming. The row for it
-  // only exists once the bytes have landed, which for a long film is minutes
-  // — and those minutes are exactly when a person wants to type. A pick that
-  // FAILED is not coming: it needs a retry or removal, and promising that it
-  // will be ready is the same false promise a failed video makes.
-  const somethingToAskAbout = !failed && (video != null || entries.some((entry) => entry.phase !== "failed"))
-  const broken = entries.filter((entry) => entry.phase === "failed")
-  const arriving = entries.find((entry) => entry.phase === "uploading" || entry.phase === "queued")
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-3">
@@ -112,41 +103,14 @@ export function UploadStep({
           isDisabled: disabled || isSearching,
           onPick: onAdd,
         }}
+        drawer={
+          entries.length > 0 ? (
+            <ChatComposerDrawer count={entries.length} label={entries.length === 1 ? "Video" : "Videos"}>
+              <UploadTray entries={entries} onRemove={onRemove} onRetry={onRetry} />
+            </ChatComposerDrawer>
+          ) : undefined
+        }
       />
-
-      {arriving && (
-        <p className="truncate text-center text-xs text-muted-foreground" data-testid="upload-progress">
-          {arriving.phase === "queued"
-            ? `${arriving.file.name} — waiting to upload`
-            : `${arriving.file.name} — ${percent(arriving)}%${formatBytes(arriving.file.size) ? ` of ${formatBytes(arriving.file.size)}` : ""}`}
-        </p>
-      )}
-
-      {broken.map((entry) => (
-        <p key={entry.id} className="text-center text-xs text-destructive" data-testid="upload-failure">
-          <span className="mr-2">
-            {entry.file.name} — {entry.error ?? "Upload failed"}
-          </span>
-          <button
-            type="button"
-            onClick={() => onRetry(entry.id)}
-            className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Try again
-          </button>
-          <button
-            type="button"
-            onClick={() => onRemove(entry.id)}
-            className="rounded-md px-2 py-1 underline underline-offset-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Remove
-          </button>
-        </p>
-      ))}
-
-      {somethingToAskAbout && gate.waitingOn && (
-        <p className="text-center text-xs text-muted-foreground">{gate.waitingOn}</p>
-      )}
     </div>
   )
 }

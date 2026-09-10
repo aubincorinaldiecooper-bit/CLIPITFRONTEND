@@ -174,7 +174,12 @@ export function AskComposer({
                 isDisabled={isDisabled || canSend === false || undefined}
               />
             }
-            drawer={COMPOSER_PREVIEW ? drawer : undefined}
+            // Not gated, for the same reason the plus is not: the flag hides
+        // controls that do not work, and a video really is uploading. Gating
+        // this would hide a real file behind an unfinished-features switch.
+        // Whether a given drawer is real is the caller's to decide — the
+        // dialogue passes its picture tray only in a preview build.
+        drawer={drawer}
             footerActions={
               COMPOSER_PREVIEW ? (
                 <>
