@@ -74,16 +74,10 @@ afterEach(cleanup)
 const box = () => screen.getByRole('textbox', { name: 'Search your footage' })
 const takesTyping = () => box().getAttribute('contenteditable') === 'true'
 const send = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Send' })
-const openBox = async () => {
-  const opener = screen.queryByRole('button', { name: 'Open search your footage' })
-  if (opener) await userEvent.click(opener)
-}
-
 describe('the ask box while a video is still being prepared', () => {
   it('lets people type, and keeps Send off', async () => {
     const onPromptChange = vi.fn()
     renderStep({ video: video(false), onPromptChange })
-    await openBox()
 
     expect(takesTyping()).toBe(true)
     await userEvent.type(box(), 'f')
@@ -109,21 +103,24 @@ describe('the ask box while a video is still being prepared', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
-  it('stays off with nothing to ask about', async () => {
-    renderStep({ video: null })
-    await openBox()
-    expect(takesTyping()).toBe(false)
-    expect(screen.getByText('Add a video, then ask')).toBeTruthy()
+  it('accepts a question before a video is picked, while keeping Send off', async () => {
+    const onPromptChange = vi.fn()
+    renderStep({ video: null, onPromptChange })
+    expect(takesTyping()).toBe(true)
+    expect(screen.getByText('Ask anything...')).toBeTruthy()
+    await userEvent.type(box(), 'find the introduction')
+    expect(onPromptChange).toHaveBeenLastCalledWith('find the introduction')
+    expect(send().disabled).toBe(true)
   })
 
   it('opens the moment a file is picked, before its bytes have landed', async () => {
     // The video row only exists once the upload completes — minutes, for a
     // long film — and those minutes are when a person wants to type.
     renderStep({ video: null, entries: [uploading()] })
-    await openBox()
     expect(takesTyping()).toBe(true)
     expect(send().disabled).toBe(true)
-    expect(screen.getByText(/still uploading/)).toBeTruthy()
+    // The file is on screen as itself while it goes up.
+    expect(screen.getByRole('button', { name: /^film\.mp4 — uploading/ })).toBeTruthy()
   })
 
   it('sends as soon as the server says it takes questions, even while the video is still being prepared', async () => {
@@ -140,23 +137,22 @@ describe('the ask box while a video is still being prepared', () => {
     const uploading = { id: 'video-1', status: 'pending_upload', readyForSearch: false, acceptsQuestions: false } as unknown as Video
     renderStep({ video: uploading, promptValue: 'find the goal' })
     expect(send().disabled).toBe(true)
-    expect(screen.getByText(/still uploading/)).toBeTruthy()
   })
 
-  it('promises nothing when the only pick has failed to upload', async () => {
+  it('still accepts a question when the only pick failed, without promising it can send', async () => {
     // A refused file (too large, say) stays in the list with its reason; it
     // is not "still being prepared".
     renderStep({ video: null, entries: [{ ...uploading(), phase: 'failed', error: 'Too large' }] })
-    await openBox()
-    expect(takesTyping()).toBe(false)
+    expect(takesTyping()).toBe(true)
+    expect(send().disabled).toBe(true)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
   })
 
-  it('promises nothing for a video whose preparation failed', async () => {
+  it('still accepts a question after preparation failed, without promising it can send', async () => {
     const failed = { id: 'video-1', status: 'failed', readyForSearch: false } as unknown as Video
     renderStep({ video: failed })
-    await openBox()
-    expect(takesTyping()).toBe(false)
+    expect(takesTyping()).toBe(true)
+    expect(send().disabled).toBe(true)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
   })
 })
@@ -200,11 +196,23 @@ describe('home is the box alone, and the box still takes video', () => {
     expect(onAdd).toHaveBeenCalledWith([file])
   })
 
-  it('says a file is on its way, since the progress bar went with the container', () => {
+  it('shows the file itself while it goes up, not a line of text about it', () => {
+    // What was here was a filename and a percentage in grey under the box.
+    // The owner's call of 2026-09-10: that is a log line, not feedback.
     renderStep({ video: null, entries: [uploading()] })
-    const line = screen.getByTestId('upload-progress').textContent ?? ''
-    expect(line).toContain('film.mp4')
-    expect(line).toContain('30%')
+
+    // A thumbnail of the video, drawn from the file before a byte has landed.
+    const thumb = screen.getByRole('button', { name: /^film\.mp4 — uploading/ })
+    expect(thumb.querySelector('video')).toBeTruthy()
+
+    // The percentage is not drawn — a spinner is — but it is not thrown away
+    // either: it is the one thing a spinning circle cannot tell a screen
+    // reader, so it stays in the label.
+    expect(thumb.getAttribute('aria-label')).toBe('film.mp4 — uploading, 30%')
+
+    // And no text line survives.
+    expect(screen.queryByTestId('upload-progress')).toBeNull()
+    expect(screen.queryByText(/still uploading/)).toBeNull()
   })
 
   it('says why an upload failed, and offers the same two ways out', async () => {
@@ -220,13 +228,14 @@ describe('home is the box alone, and the box still takes video', () => {
         onAdd={vi.fn()} onRemove={onRemove} onRetry={onRetry} onSubmit={vi.fn()}
       />,
     )
-    const failure = screen.getByTestId('upload-failure').textContent ?? ''
-    expect(failure).toContain('film.mp4')
-    expect(failure).toContain('Too large')
+    // The thumbnail says which file and why, so a failure cannot go quiet.
+    expect(
+      screen.getByRole('button', { name: 'film.mp4 — Too large' }),
+    ).toBeTruthy()
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRetry).toHaveBeenCalledWith('upload-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove film.mp4' }))
     expect(onRemove).toHaveBeenCalledWith('upload-1')
   })
 })
