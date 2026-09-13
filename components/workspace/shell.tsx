@@ -1,54 +1,26 @@
 "use client"
 
-import { Upload } from "lucide-react"
+import { AppShell } from "@astryxdesign/core/AppShell"
 import { Toaster } from "@/components/ui/sonner"
-import { Logo } from "@/components/brand/logo"
+import { SideNav, type NavDestination } from "@/components/side-nav"
 import { WorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
-import { ProfileDropdown } from "@/components/workspace/profile-dropdown"
 import { ReportDock } from "@/components/workspace/report-dock"
-import { NotchNav, type NotchItemData } from "@/components/ui/adaptive-notch-navigation-bar"
 
 /**
- * The app's frame — every signed-in screen wears it.
+ * The workspace frame for Clipit's conversational UI.
  *
- * The rail is gone. The owner's call (2026-08-30): with Publishing now an
- * action on each clip in the library and Shared parked while its shape is
- * decided, navigation is two places — Upload and Library — and two places
- * live in the header, not a sidebar. The wordmark goes to Upload, which is
- * also what "home" now means: upload your footage, with an empty state.
- *
- * What the rail's other destinations became:
- * - Publishing: reached from any clip in the Library (the dialog lives
- *   there); the /publishing route still answers for old links.
- * - Shared and Rooms: hidden from navigation for now, deliberately not
- *   deleted — /shared, /shared/[id] and /join keep working, and invite
- *   links still land. When the owner settles Shared's shape it comes back.
- * - Home: the wordmark. /home redirects to /start.
- *
- * And the owner's call of 2026-09-02: the Library is hidden for now. Its
- * entry is withheld from the pill and from the account menu; /clips still
- * answers, and the entry comes back with it. A switcher with one
- * destination is nothing to switch between, so the pill itself is not
- * drawn until there are two again — the wordmark is the way home.
+ * The product now uses a persistent side rail rather than a floating header:
+ * video is context, while the conversation owns the main canvas. AppShell
+ * provides the responsive mobile drawer and the page's main/skip landmarks;
+ * the existing Clipit SideNav provides the actual destinations and collapse
+ * behavior.
  */
 
 export type AppDestination = "home" | "start" | "clips" | "publishing" | "workspaces" | "join"
 
-const NOTCH_ITEMS: NotchItemData[] = [
-  // A full navigation, as the wordmark's link is: the start screen must be
-  // genuinely fresh, and a client-side hop to the page already showing
-  // would keep the wizard where it was.
-  { id: "upload", label: "Upload", icon: Upload, href: "/start", fullNavigation: true },
-  // { id: "library", label: "Library", icon: Library, href: "/clips" } — hidden for now (owner, 2026-09-02).
-]
-
-/** The pill is drawn only with somewhere to switch to. */
-export const NOTCH_SHOWN: NotchItemData[] = NOTCH_ITEMS.length > 1 ? NOTCH_ITEMS : []
-
 /**
- * Which notch item the page being shown belongs to. Pages the nav does not
- * list — Publishing, Shared, Join — select nothing: saying "you are on
- * Upload" there would be untrue.
+ * Retained as a compatibility helper for older tests/imports while the notch
+ * header is no longer rendered by the workspace shell.
  */
 export function notchActiveId(active: AppDestination): string | null {
   if (active === "start" || active === "home") return "upload"
@@ -56,60 +28,34 @@ export function notchActiveId(active: AppDestination): string | null {
   return null
 }
 
-const NOTCH_LOGO = (
-  <a href="/start" aria-label="Clipit — upload your footage" className="flex items-center gap-[7px] py-1.5 text-foreground hover:opacity-80">
-    <Logo variant="mark" size={22} />
-    <span className="hidden sm:inline">
-      <Logo variant="wordmark" size={22} />
-    </span>
-  </a>
-)
+function navDestination(active: AppDestination): NavDestination {
+  if (active === "join") return "workspaces"
+  return active
+}
 
 export function WorkspaceShell({
   active,
+  activeWorkspaceId,
   children,
 }: {
   active: AppDestination
-  /** Accepted for compatibility with the Shared screens; unused since the
-   *  rail (and its per-room highlight) left the frame. */
   activeWorkspaceId?: string
   children: React.ReactNode
 }) {
-  const activeId = notchActiveId(active)
-
   return (
-    <div className="shadcn-scope flex min-h-dvh flex-col bg-background font-sans text-foreground">
-      {/* One Tab from the top jumps past the header to the content, so a
-          keyboard user is not made to walk the wordmark and every header
-          control before reaching the page. */}
-      <a
-        href="#workspace-content"
-        // Above the notch header, later in the document, whose logo sits exactly
-        // where this appears. Both stacking values come from the one scale in
-        // app/globals.css, so the order is a fact stated once, not two numbers
-        // that happen to agree.
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-(--z-skip-link) focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+    <WorkspaceSignInGate>
+      <AppShell
+        contentPadding={0}
+        height="fill"
+        variant="section"
+        sideNav={<SideNav active={navDestination(active)} activeWorkspaceId={activeWorkspaceId} />}
       >
-        Skip to content
-      </a>
-      <WorkspaceSignInGate>
-        {/* The notch nav IS the header (owner, 2026-09-02). It sat behind a
-            build-time switch that nothing set, so production showed a plain
-            bar for a day while the real header waited in the code. */}
-        <NotchNav
-          items={NOTCH_SHOWN}
-          activeId={activeId}
-          logo={NOTCH_LOGO}
-          rightCorner={<ProfileDropdown />}
-        >
-          <div id="workspace-content" tabIndex={-1} className="flex flex-1 flex-col gap-6 p-6 outline-none">
-            {children}
-          </div>
-          <Toaster />
-          {/* Bottom right, on every workspace page: a way to say something is wrong. */}
-          <ReportDock />
-        </NotchNav>
-      </WorkspaceSignInGate>
-    </div>
+        <section className="shadcn-scope flex min-h-full w-full flex-col bg-background p-6 text-foreground">
+          {children}
+        </section>
+        <Toaster />
+        <ReportDock />
+      </AppShell>
+    </WorkspaceSignInGate>
   )
 }
