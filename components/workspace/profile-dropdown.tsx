@@ -12,17 +12,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { authClient } from "@/lib/auth-client"
 import { forgetApiSession } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 
 /**
- * Who you are, in the top-right corner — the account control as a profile
- * card: name, email, avatar, and the places that belong to you.
+ * Who you are in the app frame.
  *
- * It renders for a guest too. A guest-only deployment still has a corner, and
- * the corner is where you go looking for your account; showing nothing there
- * reads as a missing control rather than a supported setup. Signed out it
- * offers the same sign-in dialog every gated action uses, and only when
- * sign-in is configured.
+ * `compact` lets the same account control live in the bottom of a collapsible
+ * side rail: the avatar remains available while the rail is closed, and the
+ * name/email return with the open rail. The menu behavior and auth flow are
+ * unchanged.
  */
 
 interface ProfileLink {
@@ -32,9 +31,8 @@ interface ProfileLink {
   value?: string
 }
 
-// The library is hidden for now (owner, 2026-09-02): its link left this
-// menu with the header's; /clips itself still answers, and the entry comes
-// back with the library. Nothing else lives here yet.
+// The library has its own first-class destination in the app rail, so this
+// menu stays about the account rather than duplicating navigation.
 const LINKS: ProfileLink[] = []
 
 function initialsOf(name: string) {
@@ -42,7 +40,7 @@ function initialsOf(name: string) {
   return parts.map((part) => part.charAt(0).toUpperCase()).join("") || "G"
 }
 
-export function ProfileDropdown() {
+export function ProfileDropdown({ compact = false }: { compact?: boolean }) {
   const { data: session, isPending } = authClient.useSession()
   const { askToSignIn } = useWorkspaceSignInGate()
   const [configured, setConfigured] = useState<boolean | null>(null)
@@ -74,7 +72,13 @@ export function ProfileDropdown() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-3 rounded-2xl border bg-card p-2 pr-2.5 text-left transition-colors hover:bg-shmuted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:max-w-52 lg:max-w-60"
+          aria-label={compact ? `${name} account menu` : undefined}
+          className={cn(
+            "flex items-center text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            compact
+              ? "mx-auto justify-center rounded-full p-1 hover:bg-shmuted"
+              : "w-full gap-3 rounded-2xl border bg-card p-2 pr-2.5 hover:bg-shmuted",
+          )}
         >
           <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-semibold text-primary-foreground">
             {avatar ? (
@@ -84,17 +88,16 @@ export function ProfileDropdown() {
               initialsOf(name)
             )}
           </span>
-          {/* The name and address only from md: the notch pins this control to the
-              right corner while the Upload/Library pill sits centred, and between
-              the sm and md widths a long name would run into the pill. */}
-          <span className="hidden min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden md:flex">
-            <span className="truncate text-sm font-medium">{name}</span>
-            <span className="truncate text-xs text-muted-foreground">{email}</span>
-          </span>
+          {!compact && (
+            <span className="min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden sm:flex">
+              <span className="truncate text-sm font-medium">{name}</span>
+              <span className="truncate text-xs text-muted-foreground">{email}</span>
+            </span>
+          )}
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" sideOffset={6} className="shadcn-scope w-64 rounded-2xl p-2">
+      <DropdownMenuContent align="start" sideOffset={6} className="shadcn-scope w-64 rounded-2xl p-2">
         {user ? (
           <>
             {LINKS.map((link) => (

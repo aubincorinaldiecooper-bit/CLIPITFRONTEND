@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   ChatComposer,
   ChatComposerInput,
@@ -18,25 +19,22 @@ import {
 import { useVoiceCapture, VoiceLevels } from "./composer-voice";
 
 /**
- * The owner's box, in one place.
+ * The one composer Clipit uses both before a search and for follow-ups.
  *
- * It was written inside the dialogue, where it is the thing you ask a
- * follow-up in. Home then had a bar of its own — an older pill with a video
- * glyph and a paper-plane — and the two looked nothing alike. The owner's
- * call of 2026-09-10 is that home wears THIS one: "the ONLY thing present on
- * our home screen is the same search input bar i shared".
+ * It stays intentionally larger than a conventional chat input: the user's
+ * question is the primary interface, while video is attached as context. The
+ * model and effort controls remain preview-only until they actually affect the
+ * backend request.
  *
- * So it lives here now and both screens render it. What differs between them
- * is passed in: the words in the empty box, and what the plus attaches — a
- * video on home, a picture beside the moments.
- *
- * The model name and the effort dial are cosmetic, by the owner's
- * instruction, and neither reaches the caller. `NEXT_PUBLIC_COMPOSER_PREVIEW`
- * hides them from a creator's build until they do something — the same gate
- * they have always been behind, applied on both screens rather than one.
+ * Motion here is deliberately tactile rather than decorative. An attachment
+ * eases into the composer, the composer lifts a fraction to acknowledge the
+ * added context, and the two physical controls compress very slightly when
+ * pressed. The app-level MotionConfig already respects prefers-reduced-motion.
  */
 export const COMPOSER_PREVIEW =
   process.env.NEXT_PUBLIC_COMPOSER_PREVIEW === "true";
+
+const QUICK_EASE = [0.22, 1, 0.36, 1] as const;
 
 export interface AskComposerProps {
   value: string;
@@ -49,30 +47,14 @@ export interface AskComposerProps {
   /**
    * Whether SENDING is allowed, separately from typing.
    *
-   * Home needs the two apart and always has: while a video is still on its
-   * way you can type — the line under the box promises exactly that — and
-   * only the send waits for the bytes to land. `isDisabled` closes the whole
-   * composer, so it cannot say this on its own, and without the split the
-   * box would take a question and send it at a video that is not there yet.
-   *
-   * Leave it out to let the composer decide for itself, which is "is there
-   * anything written".
+   * Home needs the two apart: while a video is still on its way you can type,
+   * and only sending waits for the bytes to land.
    */
   canSend?: boolean;
   /** The input's accessible name — what a screen reader calls the box. */
   label: string;
   handleRef?: React.Ref<ChatComposerInputHandle>;
-  /**
-   * What the plus picks up here. Absent means no plus.
-   *
-   * NOT behind the preview flag, and that distinction is the whole point of
-   * the flag: it hides controls that do not work yet. Attaching a video on
-   * home DOES work, and it is the only way a video gets in now that the drop
-   * container is gone — gating it would ship a home screen a creator cannot
-   * upload from. The caller decides whether its own attachment is real:
-   * pictures beside the moments are still collected and dropped, so the
-   * dialogue passes this only in a preview build.
-   */
+  /** What the plus picks up here. Absent means no plus. */
   attach?: {
     label: string;
     /** An `accept` list for the file picker — videos on home, pictures beside the moments. */
@@ -97,8 +79,6 @@ export function AskComposer({
   attach,
   drawer,
 }: AskComposerProps) {
-  // Both are strings on purpose: the pickers hand back a plain string, and
-  // neither value goes anywhere but back into its own control.
   const [model, setModel] = useState<string>(MODEL_NAMES[0]);
   const [effort, setEffort] = useState<string>(EFFORTS[0]);
   const picker = useRef<HTMLInputElement>(null);
@@ -108,9 +88,24 @@ export function AskComposer({
     onSubmit(nextValue);
   };
 
+  const animatedDrawer = (
+    <AnimatePresence initial={false} mode="popLayout">
+      {drawer ? (
+        <motion.div
+          key="composer-drawer"
+          initial={{ opacity: 0, y: 8, scale: 0.995 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.995 }}
+          transition={{ duration: 0.18, ease: QUICK_EASE }}
+        >
+          {drawer}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+
   return (
     <>
-      {/* Kept out of the composer's slots, next to the button that opens it. */}
       {attach && (
         <input
           ref={picker}
@@ -122,32 +117,16 @@ export function AskComposer({
           className="hidden"
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
-            // So picking the same file twice still fires a change — a retry
-            // after a failed upload is exactly that.
             event.target.value = "";
             if (files.length > 0) attach.onPick(files);
           }}
         />
       )}
-      {/*
-        Always open — the owner's call of 2026-09-10, and their picture of it:
-        the question on its own line with the model, the effort dial, the plus
-        and the round action button in a row beneath.
-
-        What was here was a fold: an empty box shrank to a one-line pill and
-        opened on focus. It also could not be typed into. Opening it swapped
-        the pill for the editor, and the focus handlers read the pill's own
-        removal as "focus left the box" — measured in a browser as
-        focusout(null) -> editor visible -> focusin -> editor hidden, all
-        before the mouse button came back up. The box shut in the same frame
-        the click opened it.
-
-        The fold is gone rather than repaired. It is not what the owner wants
-        on this screen, so there is nothing here to keep working.
-      */}
-      <section
+      <motion.section
         aria-label={`${label} composer`}
-        className="relative w-full max-w-lg"
+        className="relative w-full max-w-2xl"
+        animate={{ y: drawer ? -2 : 0, scale: drawer ? 1.004 : 1 }}
+        transition={{ duration: 0.2, ease: QUICK_EASE }}
       >
         <span className="block">
           <ChatComposer
@@ -155,31 +134,23 @@ export function AskComposer({
             onChange={onChange}
             onSubmit={submit}
             placeholder={placeholder}
-            // Keep the shell live so its working attachment button remains
-            // reachable when home has no video yet. Only the editor is disabled.
             isDisabled={false}
             input={
               <ChatComposerInput
                 label={label}
-                maxRows={4}
+                maxRows={5}
                 handleRef={handleRef}
                 isDisabled={isDisabled}
               />
             }
-            // Astryx's own send button, with one gate added. Passing `undefined`
-            // hands the decision back to the composer, which asks whether
-            // anything has been written.
             sendButton={
-              <ChatSendButton
-                isDisabled={isDisabled || canSend === false || undefined}
-              />
+              <motion.span className="inline-flex" whileTap={{ scale: 0.94 }} transition={{ duration: 0.12 }}>
+                <ChatSendButton
+                  isDisabled={isDisabled || canSend === false || undefined}
+                />
+              </motion.span>
             }
-            // Not gated, for the same reason the plus is not: the flag hides
-        // controls that do not work, and a video really is uploading. Gating
-        // this would hide a real file behind an unfinished-features switch.
-        // Whether a given drawer is real is the caller's to decide — the
-        // dialogue passes its picture tray only in a preview build.
-        drawer={drawer}
+            drawer={animatedDrawer}
             footerActions={
               COMPOSER_PREVIEW ? (
                 <>
@@ -188,9 +159,6 @@ export function AskComposer({
                 </>
               ) : undefined
             }
-            // Left of the send button, where the draft put them. The row exists
-            // for a working attachment even in a creator's build; only the
-            // microphone waits on the flag.
             sendActions={
               COMPOSER_PREVIEW || attach ? (
                 <>
@@ -201,26 +169,24 @@ export function AskComposer({
                     />
                   )}
                   {attach && (
-                    <button
+                    <motion.button
                       type="button"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => picker.current?.click()}
                       disabled={attach.isDisabled}
-                      className="flex size-7 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                      whileTap={{ scale: 0.92 }}
+                      transition={{ duration: 0.12 }}
+                      className="flex size-8 items-center justify-center rounded-full text-foreground/50 outline-none transition-colors duration-150 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
                       aria-label={attach.label}
                     >
-                      <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
-                    </button>
+                      <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
+                    </motion.button>
                   )}
                 </>
               ) : undefined
             }
-            // The draft turned its send button into a stop while recording; the
-            // composer does that itself.
             isStopShown={COMPOSER_PREVIEW && voice.isRecording}
             onStop={voice.stop}
-            // Where a refused microphone is said out loud, instead of the draft's
-            // console warning nobody reads.
             status={
               COMPOSER_PREVIEW && voice.problem
                 ? { type: "warning", message: voice.problem }
@@ -228,7 +194,7 @@ export function AskComposer({
             }
           />
         </span>
-      </section>
+      </motion.section>
     </>
   );
 }
