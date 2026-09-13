@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   ChatComposer,
   ChatComposerInput,
@@ -24,9 +25,16 @@ import { useVoiceCapture, VoiceLevels } from "./composer-voice";
  * question is the primary interface, while video is attached as context. The
  * model and effort controls remain preview-only until they actually affect the
  * backend request.
+ *
+ * Motion here is deliberately tactile rather than decorative. An attachment
+ * eases into the composer, the composer lifts a fraction to acknowledge the
+ * added context, and the two physical controls compress very slightly when
+ * pressed. The app-level MotionConfig already respects prefers-reduced-motion.
  */
 export const COMPOSER_PREVIEW =
   process.env.NEXT_PUBLIC_COMPOSER_PREVIEW === "true";
+
+const QUICK_EASE = [0.22, 1, 0.36, 1] as const;
 
 export interface AskComposerProps {
   value: string;
@@ -80,6 +88,22 @@ export function AskComposer({
     onSubmit(nextValue);
   };
 
+  const animatedDrawer = (
+    <AnimatePresence initial={false} mode="popLayout">
+      {drawer ? (
+        <motion.div
+          key="composer-drawer"
+          initial={{ opacity: 0, y: 8, scale: 0.995 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.995 }}
+          transition={{ duration: 0.18, ease: QUICK_EASE }}
+        >
+          {drawer}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+
   return (
     <>
       {attach && (
@@ -98,9 +122,11 @@ export function AskComposer({
           }}
         />
       )}
-      <section
+      <motion.section
         aria-label={`${label} composer`}
         className="relative w-full max-w-2xl"
+        animate={{ y: drawer ? -2 : 0, scale: drawer ? 1.004 : 1 }}
+        transition={{ duration: 0.2, ease: QUICK_EASE }}
       >
         <span className="block">
           <ChatComposer
@@ -118,11 +144,13 @@ export function AskComposer({
               />
             }
             sendButton={
-              <ChatSendButton
-                isDisabled={isDisabled || canSend === false || undefined}
-              />
+              <motion.span className="inline-flex" whileTap={{ scale: 0.94 }} transition={{ duration: 0.12 }}>
+                <ChatSendButton
+                  isDisabled={isDisabled || canSend === false || undefined}
+                />
+              </motion.span>
             }
-            drawer={drawer}
+            drawer={animatedDrawer}
             footerActions={
               COMPOSER_PREVIEW ? (
                 <>
@@ -141,16 +169,18 @@ export function AskComposer({
                     />
                   )}
                   {attach && (
-                    <button
+                    <motion.button
                       type="button"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => picker.current?.click()}
                       disabled={attach.isDisabled}
-                      className="flex size-8 items-center justify-center rounded-full text-foreground/50 outline-none transition-all duration-200 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                      whileTap={{ scale: 0.92 }}
+                      transition={{ duration: 0.12 }}
+                      className="flex size-8 items-center justify-center rounded-full text-foreground/50 outline-none transition-colors duration-150 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
                       aria-label={attach.label}
                     >
                       <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
-                    </button>
+                    </motion.button>
                   )}
                 </>
               ) : undefined
@@ -164,7 +194,7 @@ export function AskComposer({
             }
           />
         </span>
-      </section>
+      </motion.section>
     </>
   );
 }
