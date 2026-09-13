@@ -348,6 +348,22 @@ describe('MomentFeed — one moment at a time', () => {
     expect(screen.queryByTestId('feed-empty')).toBeNull()
   })
 
+  it('survives the moments landing after the searching card: the same hooks run on both renders', () => {
+    // The crash of 2026-09-13: the feed rendered the searching card through
+    // an early return that sat ABOVE two of its hooks, so the render that
+    // brought the first moments called more hooks than the one before it and
+    // React threw "Rendered more hooks than during the previous render" —
+    // every search that found anything took the page down as it finished.
+    const h = handlers()
+    const { rerender } = render(<MomentFeed moments={[]} searching {...h} />)
+    expect(screen.getByTestId('feed-searching')).toBeTruthy()
+    expect(() =>
+      rerender(<MomentFeed moments={feedMoments([exchange('r1', [match({ id: 'a' }), match({ id: 'b', description: 'The dunk' })])], video)} {...h} />),
+    ).not.toThrow()
+    expect(screen.getByTestId('feed-card').getAttribute('aria-label')).toBe('Harbour skyline')
+    expect(screen.queryByTestId('feed-searching')).toBeNull()
+  })
+
   it('plays exactly the moment from the source, with play/pause in the middle and the time within the moment', () => {
     // The owner's session of 2026-09-05: the card showed "1:38" over a
     // moment at 1:38–1:51 of the video, and nothing to press. The clock is

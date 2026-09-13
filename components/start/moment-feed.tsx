@@ -733,6 +733,30 @@ export function MomentFeed({
     if (Math.abs(event.deltaY) > WHEEL_THRESHOLD_PX) navigate(event.deltaY > 0 ? 1 : -1)
   }
 
+  /**
+   * Keep the moment you are on inside the rail once the rail scrolls.
+   *
+   * Devin's finding on #90: one button per moment and no bound, inside a
+   * 560px stage that hides its overflow. Ask enough questions and the ends of
+   * the list were simply cut off — 23 fit for a mouse and only 12 for a
+   * thumb, since a coarse pointer gets the 44px target the guidance asks for.
+   * The rail scrolls now, so the front dot has to be brought along with it.
+   *
+   * `nearest` moves it the least amount that works and does nothing when it
+   * is already visible, so there is no scrolling to see and nothing for the
+   * reduced-motion guard to argue with.
+   *
+   * Declared HERE, above the empty-feed return below, and it has to stay
+   * here: hooks must run in the same order on every render. These two sat
+   * after that return, so the render that showed the searching card called
+   * two hooks fewer than the render that showed the first moments — and
+   * React threw "Rendered more hooks than during the previous render" the
+   * moment a search finished, taking the whole page down with it.
+   */
+  const frontDot = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    frontDot.current?.scrollIntoView?.({ block: "nearest" })
+  }, [cursor])
 
   if (total === 0) {
     if (searching) {
@@ -765,24 +789,6 @@ export function MomentFeed({
   // neighbours each way are drawn.
   const cards = [...moments.map((moment) => ({ key: moment.match.id, moment })), { key: "end", moment: null as FeedMoment | null }]
   const decided = top !== undefined && top.decision !== null
-
-  /**
-   * Keep the moment you are on inside the rail once the rail scrolls.
-   *
-   * Devin's finding on #90: one button per moment and no bound, inside a
-   * 560px stage that hides its overflow. Ask enough questions and the ends of
-   * the list were simply cut off — 23 fit for a mouse and only 12 for a
-   * thumb, since a coarse pointer gets the 44px target the guidance asks for.
-   * The rail scrolls now, so the front dot has to be brought along with it.
-   *
-   * `nearest` moves it the least amount that works and does nothing when it
-   * is already visible, so there is no scrolling to see and nothing for the
-   * reduced-motion guard to argue with.
-   */
-  const frontDot = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    frontDot.current?.scrollIntoView?.({ block: "nearest" })
-  }, [cursor])
 
   return (
     <div className="flex w-full max-w-110 shrink-0 flex-col items-center sm:w-110" data-testid="moment-feed">
