@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { motion } from "motion/react"
 import type { ChatSignal, Video } from "@/lib/types"
 import { Dialogue } from "./dialogue"
 import { MomentFeed, feedCursor, feedMoments, type FeedMoment } from "./moment-feed"
@@ -34,10 +35,13 @@ export interface ReviewStepProps {
   onUploadMore: () => void
 }
 
+const ENTER_EASE = [0.22, 1, 0.36, 1] as const
+
 /**
- * Step 03: the moments, reviewed one at a time in a vertical feed, with the
- * dialogue beside it — the owner's screen of 2026-09-02. Both halves read
- * the same list: every moment of every question, in order.
+ * The conversational review surface. The first question moves here directly
+ * from the empty composer; the two columns arrive as one restrained handoff
+ * rather than a separate loading screen. MotionConfig at the app root turns
+ * these transforms off for people who prefer reduced motion.
  */
 export function ReviewStep({
   exchanges,
@@ -57,9 +61,6 @@ export function ReviewStep({
   onUploadMore,
 }: ReviewStepProps) {
   const moments = useMemo(() => feedMoments(exchanges, video), [exchanges, video])
-  // The card in front, as the feed reports it: what "this one" means in the
-  // dialogue. Kept moments stay in the feed to be looked at again, so the
-  // front card is a position the person moves, not the first open decision.
   const [front, setFront] = useState<number | null>(null)
   const active: FeedMoment | undefined = moments[front ?? feedCursor(moments)]
   useEffect(() => {
@@ -68,32 +69,49 @@ export function ReviewStep({
   }, [active, onFrontMomentChange])
 
   return (
-    // Narrow padding on a phone: the card keeps its width there, and the
-    // counter beside it needs the room the padding would have taken.
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-wrap justify-center gap-12 px-3 py-8 sm:px-6" data-testid="review-step">
-      <MomentFeed
-        moments={moments}
-        busy={busy}
-        paused={publishing}
-        searching={searching}
-        keeping={keeping}
-        onFrontChange={setFront}
-        onKeep={(moment) => void onKeep(moment.requestId, moment.match.id)}
-        onSkip={(moment) => void onSkip(moment.requestId, moment.match.id)}
-        onUndoSkip={(moment) => void onUndoSkip(moment.requestId, moment.match.id)}
-        onPublish={(moment) => void onPublish(moment.requestId, moment.match.id)}
-        onUploadMore={onUploadMore}
-      />
-      <Dialogue
-        exchanges={exchanges}
-        video={video}
-        moments={moments}
-        active={active}
-        searching={searching}
-        onAsk={onAsk}
-        onReclip={(moment) => onReclip(moment.requestId, moment.match.id)}
-        onRateAnswer={onRateAnswer}
-      />
-    </div>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: ENTER_EASE }}
+      className="mx-auto flex w-full max-w-5xl flex-1 flex-wrap justify-center gap-12 px-3 py-8 sm:px-6"
+      data-testid="review-step"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 8, scale: 0.99 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.22, delay: 0.03, ease: ENTER_EASE }}
+      >
+        <MomentFeed
+          moments={moments}
+          busy={busy}
+          paused={publishing}
+          searching={searching}
+          keeping={keeping}
+          onFrontChange={setFront}
+          onKeep={(moment) => void onKeep(moment.requestId, moment.match.id)}
+          onSkip={(moment) => void onSkip(moment.requestId, moment.match.id)}
+          onUndoSkip={(moment) => void onUndoSkip(moment.requestId, moment.match.id)}
+          onPublish={(moment) => void onPublish(moment.requestId, moment.match.id)}
+          onUploadMore={onUploadMore}
+        />
+      </motion.div>
+      <motion.div
+        className="flex min-w-0 flex-1"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, delay: 0.07, ease: ENTER_EASE }}
+      >
+        <Dialogue
+          exchanges={exchanges}
+          video={video}
+          moments={moments}
+          active={active}
+          searching={searching}
+          onAsk={onAsk}
+          onReclip={(moment) => onReclip(moment.requestId, moment.match.id)}
+          onRateAnswer={onRateAnswer}
+        />
+      </motion.div>
+    </motion.div>
   )
 }
