@@ -1,5 +1,6 @@
 "use client"
 
+import { motion } from "motion/react"
 import { ChatComposerDrawer } from "@astryxdesign/core/Chat"
 import { VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
 import { UploadTray } from "./composer-attachments"
@@ -21,6 +22,8 @@ export interface UploadStepProps {
   /** A search is already running for this instruction; the prompt becomes read-only and the action resumes watching. */
   searchInstruction?: string
 }
+
+const ENTER_EASE = [0.22, 1, 0.36, 1] as const
 
 /**
  * The Clipit empty state is the conversation itself.
@@ -48,7 +51,12 @@ export function UploadStep({
   const ready = (gate.accepting && !disabled) || isSearching
 
   return (
-    <div className="flex w-full max-w-2xl flex-col gap-3">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: ENTER_EASE }}
+      className="flex w-full max-w-2xl flex-col gap-3"
+    >
       <AskComposer
         value={isSearching ? searchInstruction : promptValue}
         onChange={onPromptChange}
@@ -81,6 +89,6 @@ export function UploadStep({
           ) : undefined
         }
       />
-    </div>
+    </motion.div>
   )
 }
