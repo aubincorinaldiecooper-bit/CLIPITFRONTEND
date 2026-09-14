@@ -240,20 +240,33 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     expect(box()).toBeTruthy()
     // The thread is in the page for the sheet to show; the peek's CSS puts it away.
     expect(screen.getByTestId("conversation-thread").className).toContain("max-[860px]:hidden")
-    expect(screen.getByTestId("moment-player").className).toContain("max-[860px]:h-full")
-    // At rest the sheet is exactly the peek tall (jsdom measures nothing, so the fallback stands).
+    // At rest the sheet is exactly the peek tall (jsdom measures nothing, so the fallback stands),
+    // and the card is the whole 9:16 frame in the room above it (jsdom's window is 1024 by 768).
     expect(sheet().style.height).toBe("118px")
+    const card = screen.getByTestId("footage-card")
+    expect([card.style.width, card.style.height]).toEqual(["334px", "594px"])
+    expect(screen.getByTestId("moment-player").className).toContain("max-[860px]:size-full")
+    expect(screen.queryByTestId("card-sound")).toBeNull()
   })
 
-  it("the handle opens and closes the sheet; open, it takes its share of the stage", async () => {
+  it("the handle opens and closes the sheet; open, the footage is the reference's card and the sheet has the rest", async () => {
     const user = userEvent.setup()
-    renderPage(exchange())
+    const onMutedChange = vi.fn()
+    renderPage(exchange(), { muted: false, onMutedChange })
     await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
     await user.click(handle())
     expect(sheet().dataset.state).toBe("open")
     expect(handle().getAttribute("aria-expanded")).toBe("true")
-    // jsdom's window is 768 tall: 52% of it, with the footage keeping its minimum.
-    expect(sheet().style.height).toBe("399px")
+    // Up, the card is the 3:4 window at its ceiling width, and the sheet has what it leaves
+    // of the 768px: 768 − 40 (top row) − 16 (margins) − 373 (the card).
+    expect(sheet().style.height).toBe("339px")
+    const card = screen.getByTestId("footage-card")
+    expect([card.style.width, card.style.height]).toEqual(["280px", "373px"])
+    // The sound control sits beside the card, since the card shows the frame's middle.
+    const sound = screen.getByTestId("card-sound")
+    expect(sound.getAttribute("aria-label")).toBe("Mute")
+    await user.click(sound)
+    expect(onMutedChange).toHaveBeenCalledWith(true)
     await user.click(handle())
     expect(sheet().dataset.state).toBe("peek")
   })
@@ -269,7 +282,7 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     expect(sheet().style.height).toBe("218px")
     fireEvent.pointerUp(head, { clientY: 600, pointerId: 1 })
     expect(sheet().dataset.state).toBe("open")
-    expect(sheet().style.height).toBe("399px")
+    expect(sheet().style.height).toBe("339px")
 
     fireEvent.pointerDown(head, { clientY: 300, pointerId: 1, button: 0 })
     fireEvent.pointerMove(head, { clientY: 400, pointerId: 1 })
