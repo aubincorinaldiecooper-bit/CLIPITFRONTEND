@@ -88,7 +88,12 @@ export function useVideoUploads({
    * the server it landed. Every failure is written onto that file's own row.
    * A transfer stopped on the way is not a failure and is not marked as
    * landed: the server never hears that its bytes arrived, because they did
-   * not.
+   * not. A stop can only stop bytes, though. Once they are all in storage
+   * the landing is seen through — the part-by-part upload sealed and the
+   * server told — because the alternative is a whole object stored for
+   * ever behind a video nobody can see (Devin's finding on #96). The one
+   * exception is a stop that lands between the last part and the seal: the
+   * parts are abandoned, which is the clean end there is.
    */
   const runUpload = useCallback(
     async (entry: UploadEntry) => {
@@ -112,12 +117,22 @@ export function useVideoUploads({
           (fraction) => patchUpload(entry.id, { progress: fraction }),
           signal,
         )
-        if (signal.aborted) return null
         if (outcome.multipart) {
+          if (signal.aborted) {
+            // Every part is in storage and none is sealed: walk away
+            // cleanly, as a failed part does, so nothing is left billed.
+            void api.abortMultipartUpload(created.id, outcome.multipart.uploadId).catch(() => {})
+            return null
+          }
           await api.completeMultipartUpload(created.id, outcome.multipart.uploadId, outcome.multipart.parts)
         }
-        if (signal.aborted) return null
+        // The bytes are whole in storage now, stop or no stop. The server is
+        // told so; a row already taken off the list simply shows nothing of
+        // it — the engine's landed-batch filter keeps a removed row's video
+        // off the screen — and the video is in the library, where it can be
+        // deleted, rather than stored unseen.
         const { video: queued } = await api.markUploaded(created.id)
+        if (signal.aborted) return null
         patchUpload(entry.id, { phase: "ready", progress: 1, videoId: queued.id })
         return queued
       } catch (cause) {

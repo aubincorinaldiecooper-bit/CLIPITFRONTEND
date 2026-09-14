@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   createUpload: vi.fn(),
   uploadFile: vi.fn(),
   completeMultipartUpload: vi.fn(),
+  abortMultipartUpload: vi.fn(),
   markUploaded: vi.fn(),
 }))
 vi.mock("@/lib/api", () => ({
@@ -41,7 +42,8 @@ function transfer() {
 beforeEach(() => {
   api.createUpload.mockReset().mockResolvedValue({ video: { id: "video-1" }, upload: { method: "PUT", url: "https://store.test/put", storageKey: "k", headers: {}, expiresInSeconds: 60 } })
   api.uploadFile.mockReset()
-  api.completeMultipartUpload.mockReset()
+  api.completeMultipartUpload.mockReset().mockResolvedValue(undefined)
+  api.abortMultipartUpload.mockReset().mockResolvedValue(undefined)
   api.markUploaded.mockReset().mockResolvedValue({ video: { id: "video-1", status: "queued" } })
 })
 afterEach(cleanup)
@@ -89,6 +91,49 @@ describe("useVideoUploads — a removed row stops its transfer", () => {
     expect(result.current.uploads).toEqual([])
     await waitFor(() => expect(result.current.uploadsBusy).toBe(false))
     expect(api.markUploaded).not.toHaveBeenCalled()
+  })
+
+  it("a stop that lands between the last part and the seal abandons the parts, and seals nothing", async () => {
+    // The loop has returned its receipt; the seal has not been asked for.
+    // Sealing would store the whole object behind a video nobody can see;
+    // the parts are walked away from instead (Devin's finding on #96).
+    let finish!: () => void
+    api.uploadFile.mockImplementation(
+      () =>
+        new Promise<{ multipart: { uploadId: string; parts: [] } }>((resolve) => {
+          finish = () => resolve({ multipart: { uploadId: "u-1", parts: [] } })
+        }),
+    )
+    const onBatchLanded = vi.fn()
+    const { result } = renderHook(() => useVideoUploads({ onBatchLanded }))
+    act(() => result.current.startUploads([file()]))
+    await waitFor(() => expect(api.uploadFile).toHaveBeenCalledTimes(1))
+    act(() => result.current.removeUpload(result.current.uploads[0]!.id))
+    finish()
+    await waitFor(() => expect(api.abortMultipartUpload).toHaveBeenCalledWith("video-1", "u-1"))
+    await waitFor(() => expect(result.current.uploadsBusy).toBe(false))
+    expect(api.completeMultipartUpload).not.toHaveBeenCalled()
+    expect(api.markUploaded).not.toHaveBeenCalled()
+    expect(onBatchLanded).not.toHaveBeenCalled()
+  })
+
+  it("a stop that arrives once the bytes are whole lets the landing finish on the server, and shows nothing of it", async () => {
+    // A stop can only stop bytes. Once they are all in storage the server
+    // is told they landed — otherwise a whole object sits there for ever
+    // behind a video nobody can see — and the removed row keeps the video
+    // off this screen.
+    api.uploadFile.mockResolvedValue({})
+    let land!: () => void
+    api.markUploaded.mockImplementation(() => new Promise((resolve) => { land = () => resolve({ video: { id: "video-1", status: "queued" } }) }))
+    const onBatchLanded = vi.fn()
+    const { result } = renderHook(() => useVideoUploads({ onBatchLanded }))
+    act(() => result.current.startUploads([file()]))
+    await waitFor(() => expect(api.markUploaded).toHaveBeenCalledTimes(1))
+    act(() => result.current.removeUpload(result.current.uploads[0]!.id))
+    land()
+    await waitFor(() => expect(result.current.uploadsBusy).toBe(false))
+    expect(result.current.uploads).toEqual([])
+    expect(onBatchLanded).not.toHaveBeenCalled()
   })
 
   it("a stopped transfer is not written up as a failure", async () => {
