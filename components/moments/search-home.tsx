@@ -25,6 +25,12 @@ import { AskComposer } from "./ask-composer"
  * video has landed, and only the SEND waits — for the bytes, and then for
  * the server to say it takes questions. A search already running is never
  * on this screen: its results are, with their own box.
+ *
+ * One video at a time. A question is asked of one video, so the box holds
+ * one: picking or dropping another replaces it — the old row leaves the
+ * tray and its upload, if still going, is dismissed by the engine — rather
+ * than sitting beside it with no way to be the one searched (Codex's
+ * finding on #95).
  */
 export interface SearchHomeProps {
   entries: UploadEntry[]
@@ -104,8 +110,14 @@ export function SearchHome({
 
   const placeholder = dragging ? "Drop the video to attach it…" : (onItsWay && gate.placeholder) || "Ask for a moment…"
 
+  // One video: the first file picked or dropped takes the place of whatever
+  // was attached — the tray's rows go, and a video opened here is let go.
   const pick = (files: File[]) => {
-    if (files.length > 0) onAdd(files)
+    const file = files[0]
+    if (!file) return
+    for (const entry of entries) onRemove(entry.id)
+    if (attached) onDetach?.()
+    onAdd([file])
   }
 
   // Drop-to-attach on the card itself, with no container to speak of: the
@@ -134,7 +146,6 @@ export function SearchHome({
           ref={picker}
           type="file"
           accept={VIDEO_ACCEPT}
-          multiple
           tabIndex={-1}
           aria-hidden="true"
           className="hidden"
@@ -176,7 +187,7 @@ export function SearchHome({
               className="h-9 rounded-full px-3 text-[13px] font-normal text-muted-foreground hover:text-foreground"
             >
               <Paperclip className="size-[15px]" />
-              {entries.length > 0 || attached ? "Attach another" : "Attach video"}
+              {entries.length > 0 || attached ? "Replace video" : "Attach video"}
             </Button>
           }
         />

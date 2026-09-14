@@ -170,8 +170,39 @@ describe("home is the box alone, and the box still takes video", () => {
     const file = new File(["x"], "harbour.mp4", { type: "video/mp4" })
     const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!
     expect(picker.accept).toContain("video/")
+    expect(picker.multiple).toBe(false)
     await userEvent.upload(picker, file)
     expect(onAdd).toHaveBeenCalledWith([file])
+  })
+
+  it("holds one video: picking another replaces the one on its way up", async () => {
+    // A question is asked of one video. Two in the tray with only the first
+    // ever searched was a row nobody could choose (Codex's finding on #95).
+    const onAdd = vi.fn()
+    const onRemove = vi.fn()
+    render(
+      <SearchHome entries={[uploading()]} video={null} promptValue="" onPromptChange={vi.fn()} onAdd={onAdd} onRemove={onRemove} onRetry={vi.fn()} onSubmit={vi.fn()} />,
+    )
+    expect(screen.getByRole("button", { name: "Replace video" })).toBeTruthy()
+    const next = new File(["y"], "second.mp4", { type: "video/mp4" })
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, next)
+    expect(onRemove).toHaveBeenCalledWith("upload-1")
+    expect(onAdd).toHaveBeenCalledWith([next])
+  })
+
+  it("holds one video: dropping several takes the first, and dropping onto an attached video lets it go", () => {
+    const onAdd = vi.fn()
+    const onDetach = vi.fn()
+    const opened = { id: "video-1", sourceType: "upload", title: "harbour.mp4", status: "ready", readyForSearch: true, acceptsQuestions: true, playback: null } as unknown as Video
+    render(
+      <SearchHome entries={[]} video={opened} promptValue="" onPromptChange={vi.fn()} onAdd={onAdd} onRemove={vi.fn()} onRetry={vi.fn()} onSubmit={vi.fn()} onDetach={onDetach} />,
+    )
+    const first = new File(["a"], "one.mp4", { type: "video/mp4" })
+    const second = new File(["b"], "two.mp4", { type: "video/mp4" })
+    const card = screen.getByTestId("search-home").querySelector('[data-slot="ask-composer"]')!.parentElement!
+    fireEvent.drop(card, { dataTransfer: { types: ["Files"], files: [first, second] } })
+    expect(onDetach).toHaveBeenCalledTimes(1)
+    expect(onAdd).toHaveBeenCalledWith([first])
   })
 
   it("takes a video dropped onto the card", () => {
@@ -231,7 +262,7 @@ describe("home is the box alone, and the box still takes video", () => {
     )
     const thumb = screen.getByRole("button", { name: "harbour.mp4 — attached" })
     expect(thumb.querySelector("video")?.getAttribute("src")).toBe("https://cdn.test/proxy.mp4")
-    expect(screen.getByRole("button", { name: "Attach another" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Replace video" })).toBeTruthy()
     await userEvent.click(screen.getByRole("button", { name: "Remove harbour.mp4" }))
     expect(onDetach).toHaveBeenCalledTimes(1)
     cleanup()

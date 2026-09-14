@@ -9,7 +9,7 @@ import type { ChatSignal, Clip, ClipMatch, MatchFeedback, MatchFeedbackReason, V
 import type { UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
-import { WorkspaceShell } from "@/components/workspace/shell"
+import { SearchShell } from "@/components/moments/search-shell"
 import { FollowUpComposer, SearchHome } from "@/components/moments/search-home"
 import { ResultsStage } from "@/components/moments/results-stage"
 import { MomentConversation } from "@/components/moments/moment-conversation"
@@ -164,6 +164,7 @@ export default function StartPage() {
    */
   const {
     uploads,
+    setUploads,
     startUploads,
     retryUpload,
     removeUpload,
@@ -658,13 +659,20 @@ export default function StartPage() {
     [exchanges, publishing],
   )
 
+  /**
+   * Nothing attached, nothing asked: home, empty. The tray goes too — a
+   * row whose upload had already landed would otherwise sit there with no
+   * way of becoming the video searched, its landing having already been
+   * reported (Devin's finding on #95).
+   */
   const reset = useCallback(() => {
     setVideo(null)
     setExchanges([])
+    setUploads([])
     setError(null)
     setPromptDraft("")
     go({ video: null, search: null, moment: null }, "replace")
-  }, [go])
+  }, [go, setUploads])
 
   const openFromLibrary = useCallback(
     async (videoIdToOpen: string) => {
@@ -742,7 +750,7 @@ export default function StartPage() {
   const resultsHref = addressOf({ video: video?.id ?? null, search: stagedExchange?.request.id ?? null, moment: null })
 
   return (
-    <WorkspaceShell active="start">
+    <SearchShell>
       <div ref={screenRoot} className="flex w-full flex-1 flex-col">
         <AnimatePresence mode="wait" initial={false}>
           {screen === "home" && (
@@ -776,7 +784,7 @@ export default function StartPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22, ease: EASE }}
-              className="flex w-full flex-1 flex-col px-4 pb-16 sm:px-10"
+              className="flex w-full flex-1 flex-col pb-16"
             >
               <ResultsStage
                 exchange={stagedExchange}
@@ -794,7 +802,7 @@ export default function StartPage() {
                 muted={muted}
                 onMutedChange={setMuted}
               />
-              <div className="mx-auto mt-10 w-full max-w-[640px]">
+              <div className="mx-auto mt-10 w-full max-w-[640px] px-4">
                 <FollowUpComposer
                   video={video}
                   promptValue={promptDraft}
@@ -850,6 +858,6 @@ export default function StartPage() {
         )}
       </div>
       <UpgradeDialog files={overLimit} onClose={clearOverLimit} />
-    </WorkspaceShell>
+    </SearchShell>
   )
 }

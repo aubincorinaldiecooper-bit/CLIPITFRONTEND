@@ -3,21 +3,21 @@
 import { useState, type ReactNode } from "react"
 import { Copy, ThumbsDown, ThumbsUp } from "lucide-react"
 import { toast } from "sonner"
-import { Button, buttonVariants } from "@/components/space/button"
+import { Button } from "@/components/space/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/space/tooltip"
 import { StreamedText } from "@/components/start/streamed-text"
 import type { ChatSignal } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /**
- * The answer about the selected moment, in the owner's prototype's shape
- * (2026-09-14): the words, one quiet line of where they come from, the
- * actions that belong to an answer, and a few follow-ups.
+ * What Clipit understood about the selected moment, in the owner's
+ * prototype's shape (2026-09-14): the words, one quiet line of where the
+ * moment sits and how it was found, and a row of small actions that belong
+ * to an answer — copy, the thumbs, and whatever else the page adds.
  *
- * The words are ours and their honesty rules are unchanged: every line is
- * one the search itself said — the count it finished with, a stretch it
- * could not look at, a moment it was unsure of. Nothing here is written to
- * sound like an answer.
+ * The words are the model's own account of the moment, and nothing here is
+ * written to sound like one: the description the search recorded, and the
+ * spoken line it heard when there was one.
  */
 
 /**
@@ -39,6 +39,9 @@ const THUMBS = [
   { event: "answer_helpful", icon: ThumbsUp, label: "Good answer" },
   { event: "answer_incorrect", icon: ThumbsDown, label: "Not what I was after" },
 ] as const satisfies ReadonlyArray<{ event: ChatSignal; icon: unknown; label: string }>
+
+/** One small action in the row under an answer. */
+export const answerActionClass = "size-[22px] text-muted-foreground hover:text-foreground pointer-coarse:size-11"
 
 export function AnswerRating({ requestId, onRate }: { requestId: string; onRate: (requestId: string, event: ChatSignal) => Promise<unknown> }) {
   /** What the server has taken for this answer, as far as this page knows. */
@@ -86,7 +89,7 @@ export function AnswerRating({ requestId, onRate }: { requestId: string; onRate:
                       setSending(null)
                     }
                   }}
-                  className={cn("size-[22px] text-muted-foreground hover:text-foreground pointer-coarse:size-11", isChosen && "text-foreground")}
+                  className={cn(answerActionClass, isChosen && "text-foreground")}
                 />
               }
             >
@@ -101,8 +104,10 @@ export function AnswerRating({ requestId, onRate }: { requestId: string; onRate:
 }
 
 export interface AnswerProps {
-  /** What the search said, line by line. */
-  lines: string[]
+  /** What Clipit understood: the moment, in the search's own words. */
+  text: string
+  /** The spoken line it heard there, when the moment was found by what was said. */
+  quote?: string | null
   /** Words arrive one after another, the way an answer does when someone is telling you. */
   streamed?: boolean
   /** The quiet line under the words: where the moment sits, how it was found. */
@@ -110,16 +115,15 @@ export interface AnswerProps {
   /** The question whose answer this is, for the thumbs; without it there are no thumbs. */
   requestId?: string
   onRate?: (requestId: string, event: ChatSignal) => Promise<unknown>
-  /** Things to do next, as chips. Each is a real action, not a suggestion. */
-  followUps?: ReactNode
+  /** Further small actions in the row — what can be done with the moment, as second things. */
+  actions?: ReactNode
   className?: string
 }
 
-export function Answer({ lines, streamed = true, metadata, requestId, onRate, followUps, className }: AnswerProps) {
-  const text = lines.join(" ")
+export function Answer({ text, quote, streamed = true, metadata, requestId, onRate, actions, className }: AnswerProps) {
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(quote ? `${text}\n“${quote}”` : text)
       toast.success("Copied")
     } catch {
       toast.error("Couldn't copy that.")
@@ -129,13 +133,13 @@ export function Answer({ lines, streamed = true, metadata, requestId, onRate, fo
   return (
     <div className={cn("group/answer", className)} data-testid="answer">
       <p className="text-[15px] leading-[1.7] text-foreground/85" data-testid="answer-words">
-        {lines.map((line, index) => (
-          <span key={`${index}-${line}`}>
-            {index > 0 ? " " : null}
-            {streamed ? <StreamedText text={line} /> : line}
-          </span>
-        ))}
+        {streamed ? <StreamedText text={text} /> : text}
       </p>
+      {quote && (
+        <p className="mt-2 border-l-2 border-shborder pl-3 text-[14px] leading-[1.6] text-muted-foreground" data-testid="answer-quote">
+          “{quote}”
+        </p>
+      )}
 
       <div className="mt-3.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span className="inline-flex min-w-0 items-baseline gap-1.5 truncate text-[11.5px]" data-testid="answer-metadata">
@@ -145,41 +149,17 @@ export function Answer({ lines, streamed = true, metadata, requestId, onRate, fo
           <TooltipProvider delay={400}>
             <Tooltip>
               <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label="Copy the answer"
-                    onClick={() => void copy()}
-                    className="size-[22px] text-muted-foreground hover:text-foreground pointer-coarse:size-11"
-                  />
-                }
+                render={<Button variant="ghost" size="icon-xs" aria-label="Copy the answer" onClick={() => void copy()} className={answerActionClass} />}
               >
                 <Copy className="size-[12.5px]" />
               </TooltipTrigger>
               <TooltipContent>Copy</TooltipContent>
             </Tooltip>
             {requestId && onRate && <AnswerRating requestId={requestId} onRate={onRate} />}
+            {actions}
           </TooltipProvider>
         </span>
       </div>
-
-      {followUps && <div className="mt-[18px] flex flex-wrap gap-1.5">{followUps}</div>}
     </div>
-  )
-}
-
-/** A follow-up chip's look, for a link that is one (the file to save). */
-export const followUpClass = cn(
-  buttonVariants({ variant: "ghost", size: "xs" }),
-  "rounded-full bg-foreground/[0.035] font-normal text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground/80",
-)
-
-/** A follow-up chip: one real thing to do next. */
-export function FollowUp({ children, className, ...props }: React.ComponentProps<typeof Button>) {
-  return (
-    <Button variant="ghost" size="xs" {...props} className={cn(followUpClass, className)}>
-      {children}
-    </Button>
   )
 }
