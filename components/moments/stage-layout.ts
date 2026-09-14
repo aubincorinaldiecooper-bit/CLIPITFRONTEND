@@ -1,15 +1,25 @@
 /**
- * The phone stage's arithmetic: how the sheet and the card above it share
+ * The phone stage's arithmetic: how the sheet and the footage above it share
  * the screen, to the owner's reference (2026-09-14: Instagram's comment
- * view). With the sheet down the footage is the whole 9:16 frame, as large
- * as the room allows. With the sheet up it is a card about half the screen
- * wide and 3:4 tall — a window onto the middle of the frame — pinned above
- * the sheet, which takes everything else.
+ * view).
+ *
+ * With the sheet down the footage is the player, edge to edge: the screen's
+ * width, and every pixel between the way back and the sheet (the owner,
+ * 2026-09-14 — "when the chat is collapsed it should just be the full
+ * player, it's mobile"). A phone is taller than 9:16, so filling its width
+ * leaves the picture a little taller than the room; the middle of it shows,
+ * the way a reel does. With the sheet up the footage is a card about half
+ * the screen wide and 3:4 tall, and the sheet takes everything else.
  */
 
 export interface Size {
   width: number
   height: number
+}
+
+/** A card on the stage: its size, and the corners it wears there. */
+export interface CardBox extends Size {
+  radius: number
 }
 
 /** The stage's top row — the way back — in pixels. */
@@ -23,8 +33,8 @@ export const CARD_MAX_WIDTH = 280
 export const CARD_ASPECT = 3 / 4
 /** The footage's frame, width over height: every delivered clip is 9:16. */
 export const FRAME_ASPECT = 9 / 16
-/** The card's side margins when it is the whole frame. */
-const FRAME_GUTTER = 16
+/** The open card's corners. Edge to edge it has none — a full-bleed picture is not a card. */
+const OPEN_RADIUS = 18
 /** The least thread an open sheet is worth: under this, a reply is a sliver between the question and the box. */
 export const MIN_THREAD = 120
 /** The least card worth keeping above an open sheet — still a picture. */
@@ -32,9 +42,9 @@ export const MIN_CARD = 120
 
 export const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
-/** The room the card has above a sheet `sheetHeight` tall. */
+/** Every pixel between the way back and a sheet `sheetHeight` tall. */
 export function cardRoom(stageHeight: number, sheetHeight: number): number {
-  return Math.max(0, stageHeight - TOP_ROW - sheetHeight - CARD_MARGIN * 2)
+  return Math.max(0, stageHeight - TOP_ROW - sheetHeight)
 }
 
 /**
@@ -56,16 +66,16 @@ export function openSheetHeight(stage: Size, peek: number): number {
   return Math.round(Math.min(peek, room))
 }
 
-/** With the sheet down: the whole frame, as large as the room allows. */
-export function peekCard(stage: Size, sheetHeight: number): Size {
-  const height = Math.min(cardRoom(stage.height, sheetHeight), (stage.width - FRAME_GUTTER * 2) / FRAME_ASPECT)
-  return { width: Math.round(height * FRAME_ASPECT), height: Math.round(height) }
+/** With the sheet down: the player, edge to edge, filling the room. */
+export function peekCard(stage: Size, sheetHeight: number): CardBox {
+  return { width: Math.round(stage.width), height: Math.round(cardRoom(stage.height, sheetHeight)), radius: 0 }
 }
 
 /** With the sheet up: the 3:4 card, about half the screen wide — narrower when the room is short. */
-export function openCard(stage: Size, sheetHeight: number): Size {
-  const width = Math.min(stage.width * CARD_SHARE, CARD_MAX_WIDTH, cardRoom(stage.height, sheetHeight) * CARD_ASPECT)
-  return { width: Math.round(width), height: Math.round(width / CARD_ASPECT) }
+export function openCard(stage: Size, sheetHeight: number): CardBox {
+  const room = Math.max(0, cardRoom(stage.height, sheetHeight) - CARD_MARGIN * 2)
+  const width = Math.min(stage.width * CARD_SHARE, CARD_MAX_WIDTH, room * CARD_ASPECT)
+  return { width: Math.round(width), height: Math.round(width / CARD_ASPECT), radius: OPEN_RADIUS }
 }
 
 /**
@@ -76,20 +86,11 @@ export function openCard(stage: Size, sheetHeight: number): Size {
  * the sheet cannot rise (the open height is the peek), the card is the
  * whole frame.
  */
-export function cardAt(stage: Size, peek: number, open: number, sheetHeight: number): Size {
+export function cardAt(stage: Size, peek: number, open: number, sheetHeight: number): CardBox {
   const from = peekCard(stage, peek)
   if (open <= peek) return from
   const to = openCard(stage, open)
   const t = clamp((sheetHeight - peek) / (open - peek), 0, 1)
-  return { width: Math.round(from.width + (to.width - from.width) * t), height: Math.round(from.height + (to.height - from.height) * t) }
-}
-
-/**
- * The 9:16 frame's height at the card's width — the whole picture, of which
- * the card shows the middle. Never shorter than the card: when the card IS
- * the frame, a rounding's worth of card showing under the picture would be
- * a hairline gap.
- */
-export function frameHeight(card: Size): number {
-  return Math.max(card.height, Math.round(card.width / FRAME_ASPECT))
+  const between = (a: number, b: number) => Math.round(a + (b - a) * t)
+  return { width: between(from.width, to.width), height: between(from.height, to.height), radius: between(from.radius, to.radius) }
 }

@@ -240,11 +240,12 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     expect(box()).toBeTruthy()
     // The thread is in the page for the sheet to show; the peek's CSS puts it away.
     expect(screen.getByTestId("conversation-thread").className).toContain("max-[860px]:hidden")
-    // At rest the sheet is exactly the peek tall (jsdom measures nothing, so the fallback stands),
-    // and the card is the whole 9:16 frame in the room above it (jsdom's window is 1024 by 768).
+    // At rest the sheet is exactly the peek tall (jsdom measures nothing, so the
+    // fallback stands), and the footage is the screen's full width and all the
+    // room above the sheet, square to the edges (jsdom's window is 1024 by 768).
     expect(sheet().style.height).toBe("118px")
     const card = screen.getByTestId("footage-card")
-    expect([card.style.width, card.style.height]).toEqual(["334px", "594px"])
+    expect([card.style.width, card.style.height, card.style.borderRadius]).toEqual(["1024px", "610px", "0px"])
     expect(screen.getByTestId("moment-player").className).toContain("max-[860px]:size-full")
     expect(screen.queryByTestId("card-sound")).toBeNull()
     // Down, the card is the whole frame and the player's own controls are in it.
@@ -264,7 +265,7 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     // of the 768px: 768 − 40 (top row) − 16 (margins) − 373 (the card).
     expect(sheet().style.height).toBe("339px")
     const card = screen.getByTestId("footage-card")
-    expect([card.style.width, card.style.height]).toEqual(["280px", "373px"])
+    expect([card.style.width, card.style.height, card.style.borderRadius]).toEqual(["280px", "373px", "18px"])
     // The sound control sits beside the card, since the card shows the frame's middle.
     const sound = screen.getByTestId("card-sound")
     expect(sound.getAttribute("aria-label")).toBe("Mute")

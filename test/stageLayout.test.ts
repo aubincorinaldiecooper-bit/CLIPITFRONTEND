@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { cardAt, frameHeight, openCard, openSheetHeight, peekCard } from "../components/moments/stage-layout"
+import { cardAt, openCard, openSheetHeight, peekCard } from "../components/moments/stage-layout"
 
 /**
  * The phone stage's arithmetic, to the owner's reference (2026-09-14:
@@ -10,15 +10,16 @@ const phone = { width: 390, height: 780 }
 const peek = 126
 
 describe("stage layout", () => {
-  it("with the sheet down, the card is the whole 9:16 frame, as tall as the room above the sheet", () => {
-    // 780 − 40 (top row) − 126 (peek) − 16 (margins) = 598 tall, 9:16 wide.
-    expect(peekCard(phone, peek)).toEqual({ width: 336, height: 598 })
+  it("with the sheet down, the footage is the screen's width and every pixel between the way back and the sheet", () => {
+    // 780 − 40 (the way back) − 126 (peek) = 614 tall, and the full 390 wide,
+    // square to the edges. A 390-wide 9:16 picture is 693 tall, so its middle shows.
+    expect(peekCard(phone, peek)).toEqual({ width: 390, height: 614, radius: 0 })
   })
 
   it("up, the sheet takes what the card leaves: the card is 55% of the width and 3:4 tall", () => {
     // 0.55 × 390 = 214.5 wide, 286 tall; the sheet is 780 − 40 − 16 − 286.
     expect(openSheetHeight(phone, peek)).toBe(438)
-    expect(openCard(phone, 438)).toEqual({ width: 215, height: 286 })
+    expect(openCard(phone, 438)).toEqual({ width: 215, height: 286, radius: 18 })
   })
 
   it("the card never grows past its ceiling on a wide phone", () => {
@@ -31,9 +32,9 @@ describe("stage layout", () => {
     expect(cardAt(phone, peek, open, peek)).toEqual(peekCard(phone, peek))
     expect(cardAt(phone, peek, open, open)).toEqual(openCard(phone, open))
     const midway = cardAt(phone, peek, open, (peek + open) / 2)
-    expect(midway).toEqual({ width: 276, height: 442 })
-    // The room halfway is 780 − 40 − 282 − 16 = 442: the card fills it exactly.
-    expect(midway.height).toBe(442)
+    expect(midway).toEqual({ width: 303, height: 450, radius: 9 })
+    // The room halfway is 780 − 40 − 282 = 458: the blended card fits inside it.
+    expect(midway.height).toBeLessThanOrEqual(458)
   })
 
   it("with the keyboard up, the thread keeps its least height and the card shrinks to what is left", () => {
@@ -42,11 +43,11 @@ describe("stage layout", () => {
     // the 206 that remain, still 3:4.
     const panned = { width: 390, height: 508 }
     expect(openSheetHeight(panned, peek)).toBe(246)
-    expect(openCard(panned, 246)).toEqual({ width: 155, height: 206 })
+    expect(openCard(panned, 246)).toEqual({ width: 155, height: 206, radius: 18 })
     // The same rule, with 444 of it the stage.
     const short = { width: 390, height: 444 }
     expect(openSheetHeight(short, peek)).toBe(246)
-    expect(openCard(short, 246)).toEqual({ width: 107, height: 142 })
+    expect(openCard(short, 246)).toEqual({ width: 107, height: 142, radius: 18 })
   })
 
   it("when not even the least card fits above the least thread, the sheet cannot rise, and the card is the whole frame", () => {
@@ -55,10 +56,10 @@ describe("stage layout", () => {
     expect(cardAt(cramped, peek, peek, peek)).toEqual(peekCard(cramped, peek))
   })
 
-  it("the frame behind the card is the whole 9:16 picture at the card's width", () => {
-    expect(frameHeight({ width: 215, height: 286 })).toBe(382)
-    // When the card is the frame, the frame is exactly the card — not a pixel short of it.
-    expect(frameHeight({ width: 336, height: 598 })).toBe(598)
+  it("the corners follow the card: none edge to edge, the card's own when it is one", () => {
+    const open = openSheetHeight(phone, peek)
+    expect(cardAt(phone, peek, open, peek).radius).toBe(0)
+    expect(cardAt(phone, peek, open, open).radius).toBe(18)
   })
 
   it("never asks for a sheet past the room below the top row, however tall the peek", () => {

@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"
 import { Answer, answerActionClass } from "./answer"
 import { AskComposer } from "./ask-composer"
 import { MomentPlayer } from "./moment-player"
-import { TOP_ROW, cardAt, clamp, frameHeight, openSheetHeight } from "./stage-layout"
+import { TOP_ROW, cardAt, clamp, openSheetHeight } from "./stage-layout"
 import { useStageFrame } from "./use-stage-frame"
 
 /**
@@ -40,15 +40,17 @@ import { useStageFrame } from "./use-stage-frame"
  * the video plays, without interrupting it). The footage takes the room
  * above; the conversation is a sheet below it, at rest showing only the
  * question and the box, pulled up — by its handle, or with a tap — to show
- * the answer and the thread. With the sheet down the footage is the whole
- * 9:16 frame; with the sheet up it is a card about half the screen wide
- * and 3:4 tall, a window onto the middle of the frame, with the sound
- * control beside it — the owner's reference (2026-09-14: Instagram's
- * comment view), whose arithmetic is stage-layout.ts. Whatever the sheet
- * does, the footage is the same element and keeps playing; it is never
- * re-mounted. The stage is sized to the part of the screen the keyboard
- * leaves (useStageFrame), so the box sits above the keyboard and the
- * footage above the box.
+ * the answer and the thread. With the sheet down the footage is the
+ * player, edge to edge, filling everything between the way back and the
+ * sheet; with the sheet up it is a card about half the screen wide and 3:4
+ * tall, with the sound control beside it — the owner's reference
+ * (2026-09-14: Instagram's comment view), whose arithmetic is
+ * stage-layout.ts. Either way the picture is the 9:16 frame drawn at the
+ * card's full width and centred, so a card shorter than the picture shows
+ * its middle. Whatever the sheet does, the footage is the same element and
+ * keeps playing; it is never re-mounted. The stage is sized to the part of
+ * the screen the keyboard leaves (useStageFrame), so the box sits above
+ * the keyboard and the footage above the box.
  *
  * Words that ask for THIS moment to be reworked — "tighten this one",
  * "re-cut it" — go to Re-clip; a question is a new search, and the page
@@ -334,35 +336,26 @@ export function MomentConversation({
       </div>
 
       <div className="flex items-start gap-12 max-[860px]:min-h-0 max-[860px]:flex-1 max-[860px]:flex-col max-[860px]:gap-0">
-        <div className="relative shrink-0 max-[860px]:flex max-[860px]:min-h-0 max-[860px]:w-full max-[860px]:flex-1 max-[860px]:items-center max-[860px]:justify-center max-[860px]:px-4 max-[860px]:py-2">
-          {/* The card: with the sheet down, the whole 9:16 frame; up, a 3:4
-              window onto its middle, and on the way between them a blend
-              that follows the finger. Until the stage is measured, CSS holds
-              the whole frame in the room there is. */}
+        <div className="relative shrink-0 max-[860px]:flex max-[860px]:min-h-0 max-[860px]:w-full max-[860px]:flex-1 max-[860px]:items-center max-[860px]:justify-center">
+          {/* The card the player fills: with the sheet down, the screen's
+              width and all the room there is, square to the edges; up, the
+              3:4 card with its corners; between them a blend that follows
+              the finger. The player draws the 9:16 picture at this width
+              and clips what will not fit, so a shorter card shows the
+              middle. Until the stage is measured, CSS fills the room. */}
           <div
             data-testid="footage-card"
-            style={card ? { width: card.width, height: card.height } : undefined}
+            style={card ? { width: card.width, height: card.height, borderRadius: card.radius } : undefined}
             className={cn(
-              "max-[860px]:relative max-[860px]:h-full max-[860px]:max-w-full max-[860px]:aspect-[9/16] max-[860px]:overflow-hidden max-[860px]:rounded-[18px] max-[860px]:shadow-[0_14px_40px_rgba(0,0,0,0.18)]",
-              "max-[860px]:transition-[width,height] max-[860px]:duration-300 max-[860px]:ease-[cubic-bezier(0.32,0.72,0,1)]",
+              "max-[860px]:size-full max-[860px]:overflow-hidden",
+              "max-[860px]:transition-[width,height,border-radius] max-[860px]:duration-300 max-[860px]:ease-[cubic-bezier(0.32,0.72,0,1)]",
               pulling !== null && "max-[860px]:transition-none",
             )}
           >
-            {/* The frame: the whole 9:16 picture at the card's width, centred,
-                so a shorter card shows its middle. */}
-            <div
-              style={card ? { height: frameHeight(card) } : undefined}
-              className={cn(
-                "max-[860px]:absolute max-[860px]:top-1/2 max-[860px]:left-0 max-[860px]:h-full max-[860px]:w-full max-[860px]:-translate-y-1/2",
-                "max-[860px]:transition-[height] max-[860px]:duration-300 max-[860px]:ease-[cubic-bezier(0.32,0.72,0,1)]",
-                pulling !== null && "max-[860px]:transition-none",
-              )}
-            >
-              {/* With the sheet up the card crops the player's own controls out of
-                  sight; they go, so nothing unseen takes focus, and the sound
-                  control beside the card stands in. */}
-              <MomentPlayer key={moment.match.id} moment={moment} video={video} muted={muted} onMutedChange={onMutedChange} controls={!(phone && raised)} />
-            </div>
+            {/* With the sheet up the card is small and the reference keeps it
+                clean: the player draws only the picture, and the sound
+                control beside the card stands in for its own. */}
+            <MomentPlayer key={moment.match.id} moment={moment} video={video} muted={muted} onMutedChange={onMutedChange} controls={!(phone && raised)} />
           </div>
           {phone && raised && (
             // The card shows the frame's middle, so the player's own sound
