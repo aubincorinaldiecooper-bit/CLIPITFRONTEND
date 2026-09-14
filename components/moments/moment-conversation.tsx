@@ -11,7 +11,7 @@ import { isEditRequest, isSearching, reclipNoteText, referencedIndex, sourceWord
 import { evidenceWords, formatRange, momentTitle, type FeedMoment } from "@/components/start/moments"
 import { StreamedText } from "@/components/start/streamed-text"
 import type { Exchange } from "@/components/start/types"
-import { useMediaQuery } from "@/hooks/use-media-query"
+import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { ChatSignal, Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { Answer, answerActionClass } from "./answer"
@@ -68,8 +68,6 @@ interface Note {
 /** Whether an ask was taken. `false` means it was not — the page has shown why — and the words stay in the box. */
 export type AskOutcome = boolean | void
 
-/** Below this width the page is the phone stage. The results stage draws its line at the same width. */
-const PHONE = "(max-width: 860px)"
 /** The sheet's two resting places. */
 type Sheet = "peek" | "open"
 /** How much of the stage an open sheet takes. */
@@ -201,6 +199,8 @@ export function MomentConversation({
   const threadId = useId()
   const [peekHeight, setPeekHeight] = useState(PEEK_FALLBACK)
   const press = useRef<{ y: number; height: number; moved: boolean } | null>(null)
+  /** Set by a pull that just ended, so a click the browser fires for it does not toggle the sheet back. */
+  const swallowClick = useRef(false)
 
   // The peek is exactly the handle, the question and the box — measured, so
   // the sheet at rest hides nothing of them and shows nothing else.
@@ -221,23 +221,36 @@ export function MomentConversation({
   }, [phone])
 
   const stageHeight = frame?.height ?? 0
-  const openHeight = Math.max(peekHeight, Math.min(Math.round(stageHeight * OPEN_SHARE), stageHeight - TOP_ROW - MIN_FOOTAGE))
-  const sheetHeight = pulling ?? (sheet === "open" ? openHeight : peekHeight)
+  // Neither resting place runs past the room below the top row: a sheet
+  // taller than the stage would have its bottom — the box and its send —
+  // clipped away (Devin's finding on #97). The box itself has a ceiling on
+  // a phone, so a long draft scrolls inside it rather than growing the peek.
+  const room = stageHeight > 0 ? Math.max(0, stageHeight - TOP_ROW) : Number.POSITIVE_INFINITY
+  const peek = Math.min(peekHeight, room)
+  const openHeight = Math.min(room, Math.max(peek, Math.min(Math.round(stageHeight * OPEN_SHARE), stageHeight - TOP_ROW - MIN_FOOTAGE)))
+  const sheetHeight = pulling ?? (sheet === "open" ? openHeight : peek)
   /** Up, or on its way up: the thread shows. */
   const raised = sheet === "open" || pulling !== null
 
   // A reply nobody can see is no reply: the sheet rises to show one, and
-  // the thread keeps its newest line in view.
+  // the thread keeps its newest line in view. While the sheet is down the
+  // thread is not drawn and has no height to scroll, so the scroll waits
+  // for the sheet to be open and runs again then (Devin's finding on #97).
   const noteCount = notes.length
   useEffect(() => {
     if (phone && noteCount > 0) setSheet("open")
   }, [phone, noteCount])
   useEffect(() => {
+    if (noteCount === 0 || (phone && sheet !== "open")) return
     const thread = threadRef.current
     if (thread) thread.scrollTop = thread.scrollHeight
-  }, [noteCount])
+  }, [phone, sheet, noteCount])
 
   const toggleSheet = () => setSheet((current) => (current === "open" ? "peek" : "open"))
+  const onHandleClick = () => {
+    if (swallowClick.current) return
+    toggleSheet()
+  }
 
   // The handle row is the grip: pull it up or down, or tap it. Pointer
   // events rather than touch, so a mouse on a narrow window works the same.
@@ -252,7 +265,7 @@ export function MomentConversation({
     const pull = start.y - event.clientY
     if (!start.moved && Math.abs(pull) < TAP_SLOP) return
     start.moved = true
-    setPulling(clamp(start.height + pull, peekHeight, openHeight))
+    setPulling(clamp(start.height + pull, peek, openHeight))
   }
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     const start = press.current
@@ -264,9 +277,18 @@ export function MomentConversation({
       if (!(event.target as Element).closest("button")) toggleSheet()
       return
     }
+    // A pull that started on the handle may be followed by the handle's own
+    // click, in browsers that fire one after a captured drag; that click
+    // must not undo where the pull went (Devin's finding on #97). The flag
+    // lives only until the browser's turn is over: the click, if it comes,
+    // is dispatched in the same turn as this pointerup.
+    swallowClick.current = true
+    window.setTimeout(() => {
+      swallowClick.current = false
+    }, 0)
     const pull = start.y - event.clientY
-    const height = clamp(start.height + pull, peekHeight, openHeight)
-    const midway = (peekHeight + openHeight) / 2
+    const height = clamp(start.height + pull, peek, openHeight)
+    const midway = (peek + openHeight) / 2
     setSheet(pull > DECISIVE_PULL ? "open" : pull < -DECISIVE_PULL ? "peek" : height > midway ? "open" : "peek")
   }
   const onPointerCancel = () => {
@@ -335,7 +357,7 @@ export function MomentConversation({
           >
             <button
               type="button"
-              onClick={toggleSheet}
+              onClick={onHandleClick}
               aria-expanded={raised}
               aria-controls={threadId}
               aria-label={raised ? "Hide the conversation" : "Show the conversation"}

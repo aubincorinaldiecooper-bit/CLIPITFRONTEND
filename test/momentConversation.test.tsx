@@ -208,7 +208,7 @@ describe("MomentConversation", () => {
 function onAPhone() {
   const original = window.matchMedia
   window.matchMedia = ((query: string) => ({
-    matches: query === "(max-width: 860px)",
+    matches: query === "(width < 860px)",
     media: query,
     onchange: null,
     addListener: () => {},
@@ -275,6 +275,35 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     fireEvent.pointerMove(head, { clientY: 400, pointerId: 1 })
     fireEvent.pointerUp(head, { clientY: 400, pointerId: 1 })
     expect(sheet().dataset.state).toBe("peek")
+  })
+
+  it("a pull that starts on the handle is not undone by the click a browser may fire after it", async () => {
+    renderPage(exchange())
+    await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+    const grip = handle()
+    fireEvent.pointerDown(grip, { clientY: 700, pointerId: 1, button: 0 })
+    fireEvent.pointerMove(grip, { clientY: 600, pointerId: 1 })
+    fireEvent.pointerUp(grip, { clientY: 600, pointerId: 1 })
+    fireEvent.click(grip)
+    expect(sheet().dataset.state).toBe("open")
+    // The next press is its own: a plain click still toggles.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    fireEvent.click(grip)
+    expect(sheet().dataset.state).toBe("peek")
+  })
+
+  it("the sheet never runs past the room below the top row, so the box is never clipped away", async () => {
+    // A screen so short that even the peek would not fit: the sheet stops
+    // at the room there is (jsdom's frame is the window's own height).
+    const tall = window.innerHeight
+    window.innerHeight = 120
+    try {
+      renderPage(exchange())
+      await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+      await waitFor(() => expect(sheet().style.height).toBe("80px"))
+    } finally {
+      window.innerHeight = tall
+    }
   })
 
   it("a tap on the question beside the handle opens the sheet too", async () => {

@@ -112,8 +112,16 @@ export function AskComposer({
             "resize-none border-0 bg-transparent shadow-none focus-visible:border-0 focus-visible:ring-0 disabled:bg-transparent",
             // Sixteen-pixel words on a phone: anything smaller makes Safari on
             // iOS zoom the whole page in when the box is focused, and the
-            // footage with it.
-            home ? "min-h-16 rounded-[20px] px-[18px] pt-4 pb-1 text-base md:text-[15px]" : "min-h-[42px] px-3 py-2.5 text-base md:text-sm",
+            // footage with it. "A phone" is every width the moment page
+            // treats as its stage, 860px and under — a phone held sideways
+            // included (Codex's finding on #97). Marked important because
+            // the textarea's own md:text-sm also matches a sideways phone,
+            // and which of the two won would otherwise be a matter of
+            // stylesheet order. Above 860px the sizes are the thread's 14px
+            // and home's 15px, as before.
+            home
+              ? "min-h-16 rounded-[20px] px-[18px] pt-4 pb-1 md:text-[15px] max-[860px]:text-base!"
+              : "min-h-[42px] px-3 py-2.5 max-[860px]:text-base! max-[860px]:max-h-[132px]",
           )}
         />
         {!home && (
