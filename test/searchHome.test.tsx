@@ -217,6 +217,32 @@ describe("home is the box alone, and the box still takes video", () => {
     expect(onRemove).toHaveBeenCalledWith("upload-1")
   })
 
+  it("shows a video that arrived without the tray — opened from the library, or come back to — and offers to take it off", async () => {
+    // Back from the results lands here with the video still attached; a
+    // video opened from the library never had a row in the tray at all.
+    // Either way the box must show what the question is about.
+    const onDetach = vi.fn()
+    const opened = {
+      id: "video-1", sourceType: "upload", sourceUrl: null, title: "harbour.mp4", originalFilename: "harbour.mp4", status: "ready",
+      readyForSearch: true, acceptsQuestions: true, playback: { url: "https://cdn.test/source.mp4", expiresAt: "", proxyUrl: "https://cdn.test/proxy.mp4" },
+    } as unknown as Video
+    render(
+      <SearchHome entries={[]} video={opened} promptValue="" onPromptChange={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} onSubmit={vi.fn()} onDetach={onDetach} />,
+    )
+    const thumb = screen.getByRole("button", { name: "harbour.mp4 — attached" })
+    expect(thumb.querySelector("video")?.getAttribute("src")).toBe("https://cdn.test/proxy.mp4")
+    expect(screen.getByRole("button", { name: "Attach another" })).toBeTruthy()
+    await userEvent.click(screen.getByRole("button", { name: "Remove harbour.mp4" }))
+    expect(onDetach).toHaveBeenCalledTimes(1)
+    cleanup()
+    // A video whose upload is in the tray is shown by its row, once.
+    render(
+      <SearchHome entries={[{ ...uploading(), phase: "ready", videoId: "video-1" }]} video={opened} promptValue="" onPromptChange={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} onSubmit={vi.fn()} onDetach={onDetach} />,
+    )
+    expect(screen.queryByTestId("attached-video")).toBeNull()
+    expect(screen.getByRole("button", { name: "film.mp4 — uploaded" })).toBeTruthy()
+  })
+
   it("an example fills the box rather than searching: there is nothing to search yet", async () => {
     const onPromptChange = vi.fn()
     const onSubmit = vi.fn()

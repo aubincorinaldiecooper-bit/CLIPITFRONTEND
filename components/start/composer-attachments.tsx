@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils"
 
 const SPRING = "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
 
-function ThumbFrame({
+export function ThumbFrame({
   index,
   label,
   removeLabel,

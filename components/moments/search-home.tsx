@@ -4,8 +4,9 @@ import { useRef, useState, type DragEvent } from "react"
 import { Paperclip } from "lucide-react"
 import { VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
 import { Button } from "@/components/space/button"
-import { UploadTray } from "@/components/start/composer-attachments"
+import { ThumbFrame, UploadTray } from "@/components/start/composer-attachments"
 import { askGate } from "@/components/start/ask-gate"
+import { videoLabel } from "@/components/start/moments"
 import type { Video } from "@/lib/types"
 import { AskComposer } from "./ask-composer"
 
@@ -34,7 +35,34 @@ export interface SearchHomeProps {
   onRemove: (id: string) => void
   onRetry: (id: string) => void
   onSubmit?: () => void
+  /** Take the opened video off the box: a video from the library, or one whose upload has landed and left the tray. */
+  onDetach?: () => void
   disabled?: boolean
+}
+
+/**
+ * The video the question is asked of, when it did not arrive through the
+ * tray — opened from the library, or come back to with Back — drawn from
+ * its own watchable proxy, with the same frame and remove control as a
+ * file on its way up. Without it the box would take a question about a
+ * video nobody can see.
+ */
+function AttachedVideo({ video, onDetach }: { video: Video; onDetach?: () => void }) {
+  const name = videoLabel(video)
+  const source = video.playback?.proxyUrl ?? video.playback?.url ?? null
+  return (
+    <span className="flex items-start gap-2" data-testid="attached-video">
+      <ThumbFrame index={0} label={`${name} — attached`} removeLabel={`Remove ${name}`} onRemove={() => onDetach?.()}>
+        {source ? (
+          <video src={source} preload="metadata" muted playsInline disablePictureInPicture aria-hidden className="size-full object-cover" />
+        ) : (
+          <span aria-hidden className="flex size-full items-center justify-center bg-shmuted px-1 text-center text-[9px] leading-tight text-muted-foreground">
+            {name}
+          </span>
+        )}
+      </ThumbFrame>
+    </span>
+  )
 }
 
 /**
@@ -57,6 +85,7 @@ export function SearchHome({
   onRemove,
   onRetry,
   onSubmit,
+  onDetach,
   disabled,
 }: SearchHomeProps) {
   const picker = useRef<HTMLInputElement>(null)
@@ -68,6 +97,9 @@ export function SearchHome({
   // "Still uploading" is only true of a file that IS uploading: with nothing
   // picked yet, or only a refused pick in the tray, nothing is promised.
   const onItsWay = Boolean(video) || entries.some((entry) => entry.phase === "queued" || entry.phase === "uploading")
+  // A video in the tray is shown by its row; one that is not — opened from
+  // the library, or the row taken away — is shown as itself.
+  const attached = video && !entries.some((entry) => entry.videoId === video.id) ? video : null
   const waitingOn = !ready && onItsWay ? gate.waitingOn : null
 
   const placeholder = dragging ? "Drop the video to attach it…" : (onItsWay && gate.placeholder) || "Ask for a moment…"
@@ -129,9 +161,10 @@ export function SearchHome({
           dragging={dragging}
           textareaRef={box}
           drawer={
-            entries.length > 0 ? (
-              <div className="px-2.5 pt-2.5" data-testid="attached-videos">
-                <UploadTray entries={entries} onRemove={onRemove} onRetry={onRetry} />
+            entries.length > 0 || attached ? (
+              <div className="flex items-start gap-2 px-2.5 pt-2.5" data-testid="attached-videos">
+                {attached && <AttachedVideo video={attached} onDetach={onDetach} />}
+                {entries.length > 0 && <UploadTray entries={entries} onRemove={onRemove} onRetry={onRetry} />}
               </div>
             ) : undefined
           }
@@ -143,7 +176,7 @@ export function SearchHome({
               className="h-9 rounded-full px-3 text-[13px] font-normal text-muted-foreground hover:text-foreground"
             >
               <Paperclip className="size-[15px]" />
-              {entries.length > 0 ? "Attach another" : "Attach video"}
+              {entries.length > 0 || attached ? "Attach another" : "Attach video"}
             </Button>
           }
         />

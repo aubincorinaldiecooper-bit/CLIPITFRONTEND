@@ -109,6 +109,12 @@ export default function StartPage() {
       if (node.scrollTop > 0) node.scrollTop = 0
     }
   }, [screenKey])
+  // The address says which video is attached, whichever door it came
+  // through, so a reload keeps it and Back from the results still has it.
+  const videoId = video?.id ?? null
+  useEffect(() => {
+    if (videoId && address.video !== videoId) go({ video: videoId }, "replace")
+  }, [videoId, address.video, go])
   /** The moment in the centre of the stage, so the stage reopens on it and a report names its question. */
   const [stagedMomentId, setStagedMomentId] = useState<string | null>(null)
   const onStagedMomentChange = useCallback((moment: FeedMoment | undefined) => {
@@ -200,7 +206,6 @@ export default function StartPage() {
 
   // --- polling ------------------------------------------------------------
 
-  const videoId = video?.id
   const indexSettled =
     video?.index == null ||
     video.index.status === "ready" ||
@@ -314,13 +319,16 @@ export default function StartPage() {
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
 
   /**
-   * Which screen, from the address and the conversation: a moment named
-   * by the address that is on stage, else the results of the question the
-   * address names (the newest, if it names none or one that is not here),
-   * else home. Home is also where a video with no question yet is asked.
+   * Which screen, from the address alone: a moment it names that is on
+   * stage, else the results of the question it names (the newest, if the
+   * one named is not here), else home. The conversation does not get a
+   * say — Back from the results must land on home, with the video still
+   * attached, not on the results again (Devin's finding on #95) — so a
+   * video opened with a conversation has its newest question written into
+   * the address as it opens.
    */
   const stagedExchange = useMemo(
-    () => (video ? (exchanges.find((exchange) => exchange.request.id === address.search) ?? exchanges.at(-1) ?? null) : null),
+    () => (video && address.search ? (exchanges.find((exchange) => exchange.request.id === address.search) ?? exchanges.at(-1) ?? null) : null),
     [video, exchanges, address.search],
   )
   const stagedMoments = useMemo(() => (stagedExchange ? feedMoments([stagedExchange], video) : []), [stagedExchange, video])
@@ -671,9 +679,10 @@ export default function StartPage() {
         setExchanges(restored)
         setPromptDraft("")
         setVideo(opened)
-        // Opened, with its conversation: the address says which video, so a
-        // reload lands back here.
-        go({ video: opened.id }, "replace")
+        // Opened, with its conversation: the address says which video and,
+        // unless it already names one, its newest question — so the results
+        // are the screen, and a reload lands back on them.
+        go({ video: opened.id, search: readAddress().search ?? restored.at(-1)?.request.id ?? null }, "replace")
       } catch (cause) {
         fail(cause)
       } finally {
@@ -754,6 +763,7 @@ export default function StartPage() {
                 onRemove={dropUpload}
                 onRetry={retryUpload}
                 onSubmit={handleNext}
+                onDetach={reset}
                 disabled={busy}
               />
             </motion.div>
