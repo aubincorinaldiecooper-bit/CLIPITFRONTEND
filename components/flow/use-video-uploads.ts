@@ -93,7 +93,8 @@ export function useVideoUploads({
    * server told — because the alternative is a whole object stored for
    * ever behind a video nobody can see (Devin's finding on #96). The one
    * exception is a stop that lands between the last part and the seal: the
-   * parts are abandoned, which is the clean end there is.
+   * parts are abandoned — the stop is not settled until they are — which is
+   * the clean end there is.
    */
   const runUpload = useCallback(
     async (entry: UploadEntry) => {
@@ -120,8 +121,13 @@ export function useVideoUploads({
         if (outcome.multipart) {
           if (signal.aborted) {
             // Every part is in storage and none is sealed: walk away
-            // cleanly, as a failed part does, so nothing is left billed.
-            void api.abortMultipartUpload(created.id, outcome.multipart.uploadId).catch(() => {})
+            // cleanly, as a failed part does, so nothing is left billed —
+            // and settle only once that is done. The tidy-up is part of the
+            // stop, not something fired after it: the request outlives the
+            // tab and is tried a few bounded times, in abortMultipartUpload
+            // (Devin's finding on #96). Past those attempts the catch below
+            // settles the stop anyway; the bucket's sweep is the backstop.
+            await api.abortMultipartUpload(created.id, outcome.multipart.uploadId)
             return null
           }
           await api.completeMultipartUpload(created.id, outcome.multipart.uploadId, outcome.multipart.parts)

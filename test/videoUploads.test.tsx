@@ -93,10 +93,8 @@ describe("useVideoUploads — a removed row stops its transfer", () => {
     expect(api.markUploaded).not.toHaveBeenCalled()
   })
 
-  it("a stop that lands between the last part and the seal abandons the parts, and seals nothing", async () => {
-    // The loop has returned its receipt; the seal has not been asked for.
-    // Sealing would store the whole object behind a video nobody can see;
-    // the parts are walked away from instead (Devin's finding on #96).
+  /** A part-by-part transfer whose receipt is handed over only when `finish` is called. */
+  function partsTransfer() {
     let finish!: () => void
     api.uploadFile.mockImplementation(
       () =>
@@ -104,14 +102,49 @@ describe("useVideoUploads — a removed row stops its transfer", () => {
           finish = () => resolve({ multipart: { uploadId: "u-1", parts: [] } })
         }),
     )
+    return { finish: () => finish() }
+  }
+
+  it("a stop that lands between the last part and the seal abandons the parts, and seals nothing", async () => {
+    // The loop has returned its receipt; the seal has not been asked for.
+    // Sealing would store the whole object behind a video nobody can see;
+    // the parts are walked away from instead (Devin's finding on #96).
+    const going = partsTransfer()
+    let abandoned!: () => void
+    api.abortMultipartUpload.mockImplementation(() => new Promise<void>((resolve) => { abandoned = () => resolve() }))
     const onBatchLanded = vi.fn()
     const { result } = renderHook(() => useVideoUploads({ onBatchLanded }))
     act(() => result.current.startUploads([file()]))
     await waitFor(() => expect(api.uploadFile).toHaveBeenCalledTimes(1))
     act(() => result.current.removeUpload(result.current.uploads[0]!.id))
-    finish()
+    going.finish()
+    await waitFor(() => expect(api.abortMultipartUpload).toHaveBeenCalledWith("video-1", "u-1"))
+    // The tidy-up is part of the stop: the engine is still busy while the
+    // parts are being abandoned, and settles only once they are.
+    expect(result.current.uploadsBusy).toBe(true)
+    abandoned()
+    await waitFor(() => expect(result.current.uploadsBusy).toBe(false))
+    expect(api.completeMultipartUpload).not.toHaveBeenCalled()
+    expect(api.markUploaded).not.toHaveBeenCalled()
+    expect(onBatchLanded).not.toHaveBeenCalled()
+  })
+
+  it("a stop whose parts could not be abandoned still settles, seals nothing, and is not written up as a failure", async () => {
+    // Past abortMultipartUpload's own attempts there is nothing more to try
+    // from here; the bucket's sweep is the backstop. The stop settles, the
+    // row stays gone, and nothing is sealed or reported.
+    const going = partsTransfer()
+    api.abortMultipartUpload.mockRejectedValue(new Error("offline"))
+    const onBatchLanded = vi.fn()
+    const { result } = renderHook(() => useVideoUploads({ onBatchLanded }))
+    act(() => result.current.startUploads([file()]))
+    await waitFor(() => expect(api.uploadFile).toHaveBeenCalledTimes(1))
+    const id = result.current.uploads[0]!.id
+    act(() => result.current.removeUpload(id))
+    going.finish()
     await waitFor(() => expect(api.abortMultipartUpload).toHaveBeenCalledWith("video-1", "u-1"))
     await waitFor(() => expect(result.current.uploadsBusy).toBe(false))
+    expect(result.current.uploads).toEqual([])
     expect(api.completeMultipartUpload).not.toHaveBeenCalled()
     expect(api.markUploaded).not.toHaveBeenCalled()
     expect(onBatchLanded).not.toHaveBeenCalled()
