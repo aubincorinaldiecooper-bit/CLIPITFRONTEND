@@ -128,14 +128,20 @@ export function ResultsStage({
   const lines = useMemo(() => exchangeLines(exchange, video?.index?.readThroughSeconds, followUp), [exchange, video, followUp])
   const candidates = searching ? candidatesLine(request) : null
   const count = moments.length
-  // Looping needs a ring; with one or two moments it would hide a neighbour.
+  // The ring closes once there are three: the centred card then has a
+  // neighbour on each side, wherever it is in the list, and the band runs
+  // both ways to the edge of the screen. With two the ring would show the
+  // same card twice.
   const loop = count > 2
   const slides = useMemo(() => moments.map((moment) => ({ alt: momentTitle(moment.match) })), [moments])
+  /** The words and the caption sit in a measure; the band runs past it. */
+  const measure = "mx-auto w-full max-w-[1100px] px-4 sm:px-10"
 
   return (
-    <div className="mx-auto w-full max-w-[1100px]" data-testid="results-stage">
-      <p className="pt-[30px] pb-2 text-[10px] tracking-[0.14em] text-muted-foreground uppercase">{searching ? "Looking for" : "Found for"}</p>
-      <h2 className="max-w-[760px] text-[27px] leading-[1.35] font-medium tracking-[-0.01em] text-foreground" data-testid="stage-question">
+    <div className="w-full" data-testid="results-stage">
+      <div className={measure}>
+      <p className="pt-6 pb-2 text-[10px] tracking-[0.14em] text-muted-foreground uppercase max-[860px]:pt-3">{searching ? "Looking for" : "Found for"}</p>
+      <h2 className="max-w-[760px] text-[27px] leading-[1.35] font-medium tracking-[-0.01em] text-foreground max-[860px]:text-[19px] max-[860px]:leading-snug" data-testid="stage-question">
         {request.instruction}
       </h2>
 
@@ -156,9 +162,19 @@ export function ResultsStage({
           ))
         )}
       </div>
+      </div>
 
       {count > 0 ? (
         <div className="w-full">
+          {/*
+            * The band. On a desk the cards run across the whole screen and the
+            * outer ones clip at its edge: the centred one matters by where it
+            * stands and how far forward, not because the rest were shrunk
+            * away — a gentle rake, neighbours nearly full size and only a
+            * little fainter. On a phone it is one card with a peek of each
+            * neighbour and almost no rake, sized so the caption and Open
+            * moment are on screen with it.
+            */}
           <CoverflowCarousel
             key={request.id}
             slides={slides}
@@ -167,13 +183,15 @@ export function ResultsStage({
             onApi={onApi}
             loop={loop}
             label="Moments found"
-            cardWidth={compact ? "clamp(196px, 62vw, 260px)" : "clamp(150px, 18vw, 224px)"}
-            cardHeight={compact ? "calc(clamp(196px, 62vw, 260px) * 16 / 9)" : "calc(clamp(150px, 18vw, 224px) * 16 / 9)"}
-            rotate={compact ? 14 : 38}
-            depth={compact ? 0.18 : 0.5}
-            perspective={compact ? 5 : 3.4}
-            fade={0.12}
-            gap={compact ? 0.12 : 0.06}
+            cardWidth={compact ? "clamp(190px, 60vw, 250px)" : "clamp(176px, 15vw, 236px)"}
+            cardHeight={compact ? "calc(clamp(190px, 60vw, 250px) * 16 / 9)" : "calc(clamp(176px, 15vw, 236px) * 16 / 9)"}
+            rotate={compact ? 5 : 26}
+            depth={compact ? 0.05 : 0.2}
+            perspective={compact ? 7 : 4.5}
+            falloff={compact ? 1 : 0.75}
+            fade={compact ? 0.18 : 0.07}
+            gap={compact ? 0.06 : 0.1}
+            frameClassName={compact ? "py-4" : "py-10"}
             cardClassName="rounded-[20px] border bg-shcard p-2.5 shadow-[0_2px_14px_rgba(0,0,0,0.06)]"
             renderSlide={(_slide, index, isActive) => {
               const entry = moments[index]!
@@ -209,7 +227,7 @@ export function ResultsStage({
 
           {/* The caption follows the active moment: what happens, then when, then how it was found. */}
           {active && (
-            <div key={active.match.id} className="-mt-2 flex flex-col items-center px-6 text-center duration-200 animate-in fade-in" data-testid="stage-caption">
+            <div key={active.match.id} className="-mt-2 flex flex-col items-center px-6 text-center duration-200 animate-in fade-in max-[860px]:mt-0" data-testid="stage-caption">
               <p className="max-w-[44ch] text-[17px] leading-snug tracking-[-0.01em] text-foreground">{momentTitle(active.match)}</p>
               <p className="mt-2 text-[13px] text-muted-foreground">
                 <span className="tabular-nums">{formatRange(active.match)}</span> · {evidenceWords(active.match)}
@@ -261,7 +279,7 @@ export function ResultsStage({
       ) : null}
 
       {others.length > 0 && (
-        <div className="mt-12 flex flex-wrap items-center gap-1.5" data-testid="stage-others">
+        <div className={cn(measure, "mt-12 flex flex-wrap items-center gap-1.5")} data-testid="stage-others">
           <span className="mr-1 text-xs text-muted-foreground">Also asked of this video:</span>
           {others.map((other) => (
             <Button

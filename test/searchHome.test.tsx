@@ -170,7 +170,61 @@ describe("home is the box alone, and the box still takes video", () => {
     const file = new File(["x"], "harbour.mp4", { type: "video/mp4" })
     const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!
     expect(picker.accept).toContain("video/")
+    expect(picker.multiple).toBe(false)
     await userEvent.upload(picker, file)
+    expect(onAdd).toHaveBeenCalledWith([file])
+  })
+
+  it("holds one video: picking another replaces the one on its way up, and keeps the question", async () => {
+    // A question is asked of one video. Two in the tray with only the first
+    // ever searched was a row nobody could choose (Codex's finding on #95).
+    // Replacing is the page's own act — not a remove and not a detach, both
+    // of which start over and would throw the typed question away (Devin's
+    // finding on #96).
+    const onAdd = vi.fn()
+    const onRemove = vi.fn()
+    const onReplace = vi.fn()
+    const onDetach = vi.fn()
+    const onPromptChange = vi.fn()
+    render(
+      <SearchHome entries={[uploading()]} video={null} promptValue="find the winning goal" onPromptChange={onPromptChange} onAdd={onAdd} onRemove={onRemove} onRetry={vi.fn()} onSubmit={vi.fn()} onReplace={onReplace} onDetach={onDetach} />,
+    )
+    expect(screen.getByRole("button", { name: "Replace video" })).toBeTruthy()
+    const next = new File(["y"], "second.mp4", { type: "video/mp4" })
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, next)
+    expect(onReplace).toHaveBeenCalledTimes(1)
+    expect(onAdd).toHaveBeenCalledWith([next])
+    expect(onRemove).not.toHaveBeenCalled()
+    expect(onDetach).not.toHaveBeenCalled()
+    expect(onPromptChange).not.toHaveBeenCalled()
+    expect(box().value).toBe("find the winning goal")
+  })
+
+  it("holds one video: dropping several takes the first, and dropping onto an attached video replaces it", () => {
+    const onAdd = vi.fn()
+    const onReplace = vi.fn()
+    const onDetach = vi.fn()
+    const opened = { id: "video-1", sourceType: "upload", title: "harbour.mp4", status: "ready", readyForSearch: true, acceptsQuestions: true, playback: null } as unknown as Video
+    render(
+      <SearchHome entries={[]} video={opened} promptValue="" onPromptChange={vi.fn()} onAdd={onAdd} onRemove={vi.fn()} onRetry={vi.fn()} onSubmit={vi.fn()} onReplace={onReplace} onDetach={onDetach} />,
+    )
+    const first = new File(["a"], "one.mp4", { type: "video/mp4" })
+    const second = new File(["b"], "two.mp4", { type: "video/mp4" })
+    const card = screen.getByTestId("search-home").querySelector('[data-slot="ask-composer"]')!.parentElement!
+    fireEvent.drop(card, { dataTransfer: { types: ["Files"], files: [first, second] } })
+    expect(onReplace).toHaveBeenCalledTimes(1)
+    expect(onDetach).not.toHaveBeenCalled()
+    expect(onAdd).toHaveBeenCalledWith([first])
+  })
+
+  it("a first pick, with nothing attached, replaces nothing", async () => {
+    const onReplace = vi.fn()
+    const onAdd = vi.fn()
+    renderHome({ video: null, onAdd })
+    render(<SearchHome entries={[]} video={null} promptValue="" onPromptChange={vi.fn()} onAdd={onAdd} onRemove={vi.fn()} onRetry={vi.fn()} onSubmit={vi.fn()} onReplace={onReplace} />)
+    const file = new File(["x"], "harbour.mp4", { type: "video/mp4" })
+    await userEvent.upload(document.querySelectorAll<HTMLInputElement>('input[type="file"]')[1]!, file)
+    expect(onReplace).not.toHaveBeenCalled()
     expect(onAdd).toHaveBeenCalledWith([file])
   })
 
@@ -231,7 +285,7 @@ describe("home is the box alone, and the box still takes video", () => {
     )
     const thumb = screen.getByRole("button", { name: "harbour.mp4 — attached" })
     expect(thumb.querySelector("video")?.getAttribute("src")).toBe("https://cdn.test/proxy.mp4")
-    expect(screen.getByRole("button", { name: "Attach another" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Replace video" })).toBeTruthy()
     await userEvent.click(screen.getByRole("button", { name: "Remove harbour.mp4" }))
     expect(onDetach).toHaveBeenCalledTimes(1)
     cleanup()

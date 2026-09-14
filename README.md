@@ -33,8 +33,10 @@ npm run build
 - **`/publishing`** — where social account connections will live; clips
   download today and will post from here later.
 
-A collapsible side rail (224px open, 52px closed, remembered per browser)
-walks between them on desktop; a link row in the header takes over on phones.
+The search screens wear a light header — the mark, Library, Shared, New
+search and the account — and nothing else. The library and the shared rooms
+keep the collapsible side rail (224px open, 52px closed, remembered per
+browser) on desktop, with a link row in the header on phones.
 
 ## Sign-in
 

@@ -3,16 +3,17 @@
 import { useRef, useState } from "react"
 import { ArrowLeft, Download, RotateCcw } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import { buttonVariants } from "@/components/space/button"
-import { acknowledgeLine, candidatesLine, productionLine, progressLine } from "@/components/start/answer-words"
+import { Button, buttonVariants } from "@/components/space/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/space/tooltip"
+import { acknowledgeLine, candidatesLine, progressLine } from "@/components/start/answer-words"
 import { askGate } from "@/components/start/ask-gate"
-import { exchangeLines, isEditRequest, isSearching, reclipNoteText, referencedIndex, sourceWords } from "@/components/start/conversation"
-import { formatRange, momentTitle, type FeedMoment } from "@/components/start/moments"
+import { isEditRequest, isSearching, reclipNoteText, referencedIndex, sourceWords } from "@/components/start/conversation"
+import { evidenceWords, formatRange, momentTitle, type FeedMoment } from "@/components/start/moments"
 import { StreamedText } from "@/components/start/streamed-text"
 import type { Exchange } from "@/components/start/types"
 import type { ChatSignal, Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { Answer, FollowUp, followUpClass } from "./answer"
+import { Answer, answerActionClass } from "./answer"
 import { AskComposer } from "./ask-composer"
 import { MomentPlayer } from "./moment-player"
 
@@ -20,12 +21,22 @@ import { MomentPlayer } from "./moment-player"
  * One moment and the conversation about it — the third screen of the
  * owner's prototype (2026-09-14).
  *
- * The thread is what the search said about this question, then whatever
- * has been said since: a moment kept and its file on its way, a re-cut
- * asked for and what became of it. Words that ask for THIS moment to be
- * reworked — "tighten this one", "re-cut it" — go to Re-clip; a question
- * is a new search, and the page takes it to that search's results. The
- * result set itself is navigated from the results page, never from here.
+ * The hierarchy is the page: the footage, then what Clipit understood
+ * about it, then the conversation. What the search said about the whole
+ * question — how many it found, what it could not look at — belongs to the
+ * results page and stays there; here the answer is this moment, in the
+ * search's own words, and the spoken line it heard when there was one.
+ *
+ * What can be DONE with the moment — re-cut it, save its file — is real
+ * product behaviour and stays reachable, as small actions in the row under
+ * the answer, beside copy and the thumbs; not as the architecture of the
+ * screen (the owner, 2026-09-14). Whether it was kept, and how its file is
+ * getting on, is on the picture, where the player says so.
+ *
+ * Words that ask for THIS moment to be reworked — "tighten this one",
+ * "re-cut it" — go to Re-clip; a question is a new search, and the page
+ * takes it to that search's results. The result set itself is navigated
+ * from the results page, never from here.
  *
  * One honesty rule sits in the middle of that, carried over from the
  * dialogue: the system cannot yet follow the WORDS of an edit. A re-cut
@@ -90,7 +101,6 @@ export function MomentConversation({
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)
-  const title = momentTitle(moment.match)
 
   const addNote = (role: Note["role"], text: string, reclipOf?: string) =>
     setNotes((previous) => [...previous, { id: `note-${previous.length}-${Date.now()}`, role, text, ...(reclipOf ? { reclipOf } : {}) }])
@@ -150,12 +160,12 @@ export function MomentConversation({
 
   const gate = askGate(video)
   const disabled = searching || !gate.accepting
-  const placeholder = searching ? "Still looking…" : (gate.placeholder ?? "Ask about this moment, or for another…")
+  const placeholder = searching ? "Still looking…" : (gate.placeholder ?? "Ask about this moment…")
 
   const running = isSearching(exchange)
-  const lines = exchangeLines(exchange, video?.index?.readThroughSeconds, followUp)
   const from = sourceWords(request)
   const canReclip = !moment.reworking && (moment.match.reclipsRemaining ?? 0) > 0 && !running
+  const saveable = moment.production === "produced" && moment.downloadUrl ? moment.downloadUrl : null
 
   return (
     <div data-testid="moment-conversation">
@@ -195,44 +205,59 @@ export function MomentConversation({
               </div>
             ) : (
               <Answer
-                lines={lines}
-                requestId={request.status === "completed" && lines.length > 0 ? request.id : undefined}
+                text={momentTitle(moment.match)}
+                quote={moment.match.quote}
+                requestId={request.status === "completed" ? request.id : undefined}
                 onRate={onRateAnswer}
                 metadata={
                   <>
                     <span className="tabular-nums">{formatRange(moment.match)}</span>
+                    <span className="opacity-70">· {evidenceWords(moment.match)}</span>
                     {from && <span className="opacity-70">· {from}</span>}
                   </>
                 }
-                followUps={
+                actions={
                   <>
                     {canReclip && (
-                      <FollowUp onClick={() => void submit("re-cut this one")} data-testid="follow-up-reclip">
-                        <RotateCcw className="size-3" />
-                        Re-cut this moment
-                      </FollowUp>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              aria-label="Re-cut this moment"
+                              data-testid="action-reclip"
+                              onClick={() => void submit("re-cut this one")}
+                              className={answerActionClass}
+                            />
+                          }
+                        >
+                          <RotateCcw className="size-[12.5px]" />
+                        </TooltipTrigger>
+                        <TooltipContent>Re-cut this moment</TooltipContent>
+                      </Tooltip>
                     )}
-                    {moment.production === "produced" && moment.downloadUrl && (
-                      <a
-                        href={moment.downloadUrl}
-                        download
-                        aria-label="Download — save this clip"
-                        data-testid="follow-up-download"
-                        className={followUpClass}
-                      >
-                        <Download className="size-3" />
-                        Download
-                      </a>
+                    {saveable && (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <a
+                              href={saveable}
+                              download
+                              aria-label="Download — save this clip"
+                              data-testid="action-download"
+                              className={cn(buttonVariants({ variant: "ghost", size: "icon-xs" }), answerActionClass)}
+                            />
+                          }
+                        >
+                          <Download className="size-[12.5px]" />
+                        </TooltipTrigger>
+                        <TooltipContent>Download the clip</TooltipContent>
+                      </Tooltip>
                     )}
                   </>
                 }
               />
-            )}
-
-            {moment.decision === "kept" && (
-              <p className="text-sm leading-relaxed text-muted-foreground" data-testid="conversation-model">
-                <StreamedText text={productionLine(moment.match.description, moment.production)} />
-              </p>
             )}
 
             {notes.map((note) =>
@@ -248,7 +273,7 @@ export function MomentConversation({
             )}
           </div>
 
-          <div className={cn("mt-7 max-[860px]:order-4")}>
+          <div className="mt-7 max-[860px]:order-4">
             <AskComposer
               size="thread"
               value={draft}
@@ -260,9 +285,6 @@ export function MomentConversation({
               disabled={disabled || pending}
               textareaRef={box}
             />
-            <p className="mt-2 min-h-4 text-[11.5px] text-muted-foreground">
-              {`“Re-cut it” reworks “${title}”. Anything else is a new search of this video.`}
-            </p>
           </div>
         </section>
       </div>

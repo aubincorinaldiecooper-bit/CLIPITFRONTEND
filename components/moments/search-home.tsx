@@ -25,6 +25,12 @@ import { AskComposer } from "./ask-composer"
  * video has landed, and only the SEND waits — for the bytes, and then for
  * the server to say it takes questions. A search already running is never
  * on this screen: its results are, with their own box.
+ *
+ * One video at a time. A question is asked of one video, so the box holds
+ * one: picking or dropping another replaces it — the old row leaves the
+ * tray and its transfer is stopped — rather than sitting beside it with no
+ * way to be the one searched (Codex's finding on #95). Replacing is not
+ * starting over: the words already typed stay (Devin's finding on #96).
  */
 export interface SearchHomeProps {
   entries: UploadEntry[]
@@ -35,7 +41,9 @@ export interface SearchHomeProps {
   onRemove: (id: string) => void
   onRetry: (id: string) => void
   onSubmit?: () => void
-  /** Take the opened video off the box: a video from the library, or one whose upload has landed and left the tray. */
+  /** Another video is about to take the place of what is attached: let the old one go, rows and all, and keep the question. */
+  onReplace?: () => void
+  /** Take the video off the box and start again: the question goes with it. */
   onDetach?: () => void
   disabled?: boolean
 }
@@ -85,6 +93,7 @@ export function SearchHome({
   onRemove,
   onRetry,
   onSubmit,
+  onReplace,
   onDetach,
   disabled,
 }: SearchHomeProps) {
@@ -104,8 +113,14 @@ export function SearchHome({
 
   const placeholder = dragging ? "Drop the video to attach it…" : (onItsWay && gate.placeholder) || "Ask for a moment…"
 
+  // One video: the first file picked or dropped takes the place of whatever
+  // was attached — the page lets the old one go, rows and all, and keeps the
+  // question — and then the new one starts.
   const pick = (files: File[]) => {
-    if (files.length > 0) onAdd(files)
+    const file = files[0]
+    if (!file) return
+    if (entries.length > 0 || attached) onReplace?.()
+    onAdd([file])
   }
 
   // Drop-to-attach on the card itself, with no container to speak of: the
@@ -134,7 +149,6 @@ export function SearchHome({
           ref={picker}
           type="file"
           accept={VIDEO_ACCEPT}
-          multiple
           tabIndex={-1}
           aria-hidden="true"
           className="hidden"
@@ -176,7 +190,7 @@ export function SearchHome({
               className="h-9 rounded-full px-3 text-[13px] font-normal text-muted-foreground hover:text-foreground"
             >
               <Paperclip className="size-[15px]" />
-              {entries.length > 0 || attached ? "Attach another" : "Attach video"}
+              {entries.length > 0 || attached ? "Replace video" : "Attach video"}
             </Button>
           }
         />

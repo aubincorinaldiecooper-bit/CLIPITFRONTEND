@@ -57,6 +57,8 @@ export interface CoverflowCarouselProps {
   initialIndex?: number
   className?: string
   cardClassName?: string
+  /** The frame's own classes — its vertical padding keeps shadows clear of the clip, and a phone has less room for it. */
+  frameClassName?: string
   /** Render the card's contents. Falls back to `slide.src` as an image. */
   renderSlide?: (slide: CoverflowSlide, index: number, active: boolean) => React.ReactNode
   /** Fired when the centred card changes, so the page can follow it. */
@@ -89,6 +91,7 @@ export function CoverflowCarousel({
   initialIndex = 0,
   className,
   cardClassName,
+  frameClassName,
   renderSlide,
   onSelect,
   onApi,
@@ -336,7 +339,7 @@ export function CoverflowCarousel({
             }
           }}
           // Vertical padding keeps the drop shadows clear of the overflow clip.
-          className="cursor-grab overflow-hidden py-10 outline-none ring-ring focus-visible:ring-2 active:cursor-grabbing"
+          className={cn("cursor-grab overflow-hidden py-10 outline-none ring-ring focus-visible:ring-2 active:cursor-grabbing", frameClassName)}
           style={{
             perspective: `calc(var(--cf-card) * ${perspective})`,
             // Horizontal drag is ours; the page keeps vertical scrolling.

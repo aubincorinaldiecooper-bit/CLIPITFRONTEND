@@ -79,8 +79,12 @@ Every control ships laid out properly, and nothing moves when you use it.
 
 Settled decisions — hold every screen to these:
 
-- **Two type voices, one job each.** Instrument Serif is the wordmark's
-  voice and nothing else's. Every other word in the interface is Geist.
+- **Two type voices, one job each.** The wordmark is the Logo component
+  (components/brand/logo.tsx): Inter ExtraBold, to the owner's spec, drawn
+  by the landing header and footer and by the search shell, and that voice
+  belongs to nothing else. Every other word in the interface is Geist.
+  (This line used to name Instrument Serif; no font by that name is loaded
+  anywhere, and the wordmark never wore it.)
 - **A contrast floor for grey text.** On the dark ground, body-size text
   never drops below 60% foreground opacity; display-size text may go to
   50%. Anything fainter is decoration and must not carry words.
@@ -96,12 +100,13 @@ Settled decisions — hold every screen to these:
 - **The search screens are Shadcn Space on Base UI** (the owner's call,
   2026-09-14: the prototype is the target interaction and art direction).
   Home, the results and the moment page — app/start and components/moments
-  — take their furniture from components/space, never from Astryx. What
-  those screens still stand inside is Astryx until it is touched in its own
-  right: the workspace shell and side rail (shared by every workspace
-  page), the media framing in components/media (shared with the library),
-  and the publish dialog. Migrate the rest of the app the same way, screen
-  by screen, as each is touched.
+  — take their furniture from components/space, never from Astryx, and
+  stand in their own light shell (components/moments/search-shell.tsx: a
+  header, no rail). What they still reach into is Astryx until it is
+  touched in its own right: the media framing in components/media (shared
+  with the library) and the publish dialog. The library and the shared
+  rooms keep the workspace shell and rail. Migrate the rest of the app the
+  same way, screen by screen, as each is touched.
 
 <!-- ASTRYX:START -->
 Astryx v0.5.2 · 163 components

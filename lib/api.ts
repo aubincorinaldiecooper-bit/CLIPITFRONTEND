@@ -426,18 +426,50 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
 }
 
 
+/** What a stopped upload rejects with — the same shape a stopped fetch uses. */
+export function uploadCancelled(): DOMException {
+  return new DOMException("The upload was stopped.", "AbortError")
+}
+
+/** How an abandoned part-by-part upload is walked away from: the attempts, each one's bound, and the pause between them. */
+const ABANDON_ATTEMPTS = 3
+const ABANDON_ATTEMPT_MS = 10_000
+const ABANDON_PAUSE_MS = 500
+
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Whether a failed attempt to abandon is worth another: nothing definite
+ * came back — the network, a timeout, the server tripping — as opposed to
+ * a refusal, which will not change on being asked again.
+ */
+function abandonRetryable(cause: unknown): boolean {
+  return !(cause instanceof ApiError) || cause.status >= 500 || cause.status === 0
+}
+
 /**
  * One PUT, by XHR — the only way to watch upload progress — resolving with
  * the response's ETag (a part-by-part upload's receipt; harmless otherwise).
+ * A `signal` that aborts stops the transfer where it is: the bytes not yet
+ * sent stay unsent (Devin's finding on #96: a replaced upload kept going).
  */
 function putOnce(
   url: string,
   body: Blob,
   headers: Record<string, string>,
   onProgress: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? uploadCancelled())
+      return
+    }
     const xhr = new XMLHttpRequest()
+    const stop = () => xhr.abort()
+    signal?.addEventListener("abort", stop, { once: true })
+    xhr.addEventListener("loadend", () => signal?.removeEventListener("abort", stop))
+    xhr.addEventListener("abort", () => reject(signal?.reason ?? uploadCancelled()))
     xhr.open("PUT", url, true)
     for (const [header, value] of Object.entries(headers)) {
       xhr.setRequestHeader(header, value)
@@ -502,12 +534,36 @@ export const api = {
     })
   },
 
-  /** Walk away cleanly: parts already in storage stop being stored and billed. */
+  /**
+   * Walk away cleanly: parts already in storage stop being stored and
+   * billed. Nothing else can reach them — DeleteObject cannot — so this
+   * request is part of the stop, not something fired after it (Devin's
+   * finding on #96):
+   *
+   * - It outlives the tab (`keepalive`). It is often sent at the moment the
+   *   person is leaving — the row taken off the list, the tab closed — and
+   *   a request the browser dropped on the way out left the parts stored.
+   * - Each attempt is bounded, and a failure that says nothing definite is
+   *   tried again a few times, with a pause between. A refusal is not.
+   * - It resolves only once storage has taken the abort, and rejects only
+   *   once every attempt has failed. The bucket's own sweep, a week after
+   *   the upload began, stands behind that as the backstop, not the plan.
+   */
   async abortMultipartUpload(videoId: string, uploadId: string): Promise<void> {
-    await request(`/api/videos/${videoId}/abort-multipart`, {
-      method: "POST",
-      body: JSON.stringify({ uploadId }),
-    })
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await request(
+          `/api/videos/${videoId}/abort-multipart`,
+          { method: "POST", body: JSON.stringify({ uploadId }), keepalive: true },
+          true,
+          ABANDON_ATTEMPT_MS,
+        )
+        return
+      } catch (cause) {
+        if (attempt >= ABANDON_ATTEMPTS || !abandonRetryable(cause)) throw cause
+        await pause(ABANDON_PAUSE_MS * attempt)
+      }
+    }
   },
 
   /** Seals a part-by-part upload: storage stitches the slices into one file. */
@@ -532,6 +588,8 @@ export const api = {
     target: UploadTarget,
     file: File,
     onProgress: (fraction: number) => void,
+    /** Stops the transfer where it is; a part-by-part upload is then abandoned in storage too. */
+    signal?: AbortSignal,
   ): Promise<{ multipart?: { uploadId: string; parts: Array<{ partNumber: number; etag: string }> } }> {
     // A big file goes in pieces. Each slice's URL is asked for FRESH just
     // before the slice is sent — presigning the whole set up front gave every
@@ -542,24 +600,35 @@ export const api = {
       const parts: Array<{ partNumber: number; etag: string }> = []
       try {
         for (let index = 0; index < partCount; index += 1) {
+          if (signal?.aborted) throw signal.reason ?? uploadCancelled()
           const slice = file.slice(index * partSizeBytes, (index + 1) * partSizeBytes)
           const { url } = await api.createPartUploadUrl(videoId, uploadId, index + 1, slice.size)
-          const etag = await putOnce(url, slice, {}, (fraction) =>
-            // Whole-file progress: the slices already sent, plus this one's own.
-            onProgress((index * partSizeBytes + fraction * slice.size) / file.size),
+          const etag = await putOnce(
+            url,
+            slice,
+            {},
+            (fraction) =>
+              // Whole-file progress: the slices already sent, plus this one's own.
+              onProgress((index * partSizeBytes + fraction * slice.size) / file.size),
+            signal,
           )
           parts.push({ partNumber: index + 1, etag })
         }
       } catch (cause) {
         // Walk away cleanly: parts already in storage would otherwise sit
-        // there, stored and billed, until the bucket's sweep found them.
+        // there, stored and billed, until the bucket's sweep found them. Not
+        // awaited: a part that failed is news the row must carry NOW, not
+        // once the tidy-up has been tried for half a minute over a hanging
+        // network. The request looks after itself — it outlives the tab and
+        // is tried again on its own (abortMultipartUpload) — and its fate
+        // is nothing a failed row could act on.
         void api.abortMultipartUpload(videoId, uploadId).catch(() => {})
         throw cause
       }
       return { multipart: { uploadId, parts } }
     }
     if (!target.url) throw new ApiError(500, "bad_upload_target", "The upload target carries no URL.")
-    await putOnce(target.url, file, target.headers, onProgress)
+    await putOnce(target.url, file, target.headers, onProgress, signal)
     return {}
   },
 

@@ -43,24 +43,26 @@ const said = () => screen.getAllByTestId("conversation-model").map((node) => nod
 const words = () => screen.getByTestId("answer-words").textContent ?? ""
 
 describe("MomentConversation", () => {
-  it("shows the question, the answer the search gave, and where the moment sits", () => {
+  it("shows the question, what Clipit understood about this moment, and where it sits", () => {
     renderPage(exchange({ matches: [match(), match({ id: "m2", confidence: 0.5 })] }))
     expect(screen.getByTestId("conversation-question").textContent).toBe("find the harbour")
-    expect(words()).toBe("Found 2 moments.")
-    expect(screen.getByTestId("answer-metadata").textContent).toBe("0:10–0:34· from what I'd noted")
+    // The moment, not the search: how many were found belongs to the results page.
+    expect(words()).toBe("Harbour skyline")
+    expect(document.body.textContent).not.toContain("Found 2 moments")
+    expect(screen.getByTestId("answer-metadata").textContent).toBe("0:10–0:34· seen· from what I'd noted")
     // The player plays exactly the moment, from the source.
     expect((screen.getByTestId("moment-video") as HTMLVideoElement).getAttribute("src")).toBe("https://cdn.test/proxy.mp4?sig=1#t=10")
     expect(screen.getByRole("link", { name: "All moments" }).getAttribute("href")).toBe("/start?video=video-1&search=req-1")
   })
 
-  it("names a stretch it could not look at, and the maybes, in the answer", () => {
-    renderPage(
-      exchange({
-        matches: [match()],
-        coverage: { complete: false, locatable: true, unsearchedSeconds: 90, gaps: [{ startSeconds: 60, endSeconds: 150, startTimecode: "1:00", endTimecode: "2:30", reason: "provider_refused" }], degraded: [] },
-      }),
-    )
-    expect(words()).toBe("Found one moment. I couldn't look at 1m 30s of this video (1:00–2:30), so I'd have missed anything there.")
+  it("quotes the spoken line when the moment was found by what was said", () => {
+    renderPage(exchange({ matches: [match({ source: "multimodal", quote: "let's go" })] }))
+    expect(words()).toBe("Harbour skyline")
+    expect(screen.getByTestId("answer-quote").textContent).toBe("“let's go”")
+    expect(screen.getByTestId("answer-metadata").textContent).toContain("seen and heard")
+    cleanup()
+    renderPage(exchange())
+    expect(screen.queryByTestId("answer-quote")).toBeNull()
   })
 
   it("while the search is still running, says what it is doing rather than an answer", () => {
@@ -73,16 +75,24 @@ describe("MomentConversation", () => {
     expect(box().placeholder).toBe("Still looking…")
   })
 
-  it("a kept moment's news follows its file: cutting, then ready — or not", () => {
+  it("the box asks about this moment, and says nothing about workflows", () => {
+    renderPage(exchange())
+    expect(box().placeholder).toBe("Ask about this moment…")
+    expect(document.body.textContent).not.toContain("publish")
+    expect(document.body.textContent).not.toContain("reworks")
+  })
+
+  it("a kept moment's file is news on the picture, not a line in the conversation", () => {
     const kept = exchange({ matches: [match({ feedback: "approved", clip: { id: "c-a", status: "generating" } })] })
     const { rerender } = renderPage(kept)
-    expect(said()).toContain('Kept. Cutting "Harbour skyline" to 9:16 now.')
+    expect(screen.getByTestId("moment-decision").textContent).toBe("Kept · cutting…")
+    expect(screen.queryByTestId("conversation-model")).toBeNull()
     const failed = exchange({ matches: [match({ feedback: "approved", clip: { id: "c-a", status: "failed" } })] })
     const list = moments([failed])
     rerender(
       <MomentConversation moment={list[0]!} exchange={failed} video={video} moments={list} followUp={false} searching={false} backHref="#" onBack={vi.fn()} onAsk={vi.fn()} onReclip={vi.fn()} muted onMutedChange={vi.fn()} />,
     )
-    expect(said()).toContain('I couldn\'t finish cutting "Harbour skyline". Keep it again to retry.')
+    expect(screen.getByTestId("moment-decision").textContent).toBe("Kept · cut failed")
   })
 
   it("a new question is a search, and leaves the box once it was taken", async () => {
@@ -144,19 +154,20 @@ describe("MomentConversation", () => {
     expect(said().at(-1)).not.toContain("Re-cutting")
   })
 
-  it("refuses a re-cut it cannot give, in words, and offers the chip only while one is left", async () => {
+  it("refuses a re-cut it cannot give, in words, and offers the action only while one is left", async () => {
     const onReclip = vi.fn()
     renderPage(exchange({ matches: [match({ reclipsRemaining: 0 })] }), { onReclip })
-    expect(screen.queryByTestId("follow-up-reclip")).toBeNull()
+    expect(screen.queryByTestId("action-reclip")).toBeNull()
     await userEvent.type(box(), "re-cut it{enter}")
     expect(onReclip).not.toHaveBeenCalled()
     expect(said().at(-1)).toBe('"Harbour skyline" has used all its re-cuts.')
   })
 
-  it("the chip is the same re-cut as the words", async () => {
+  it("the small action is the same re-cut as the words, and sits under the answer, not as a chip", async () => {
     const onReclip = vi.fn(async () => true)
     renderPage(exchange(), { onReclip })
-    await userEvent.click(screen.getByTestId("follow-up-reclip"))
+    expect(screen.queryByText("Re-cut this moment")).toBeNull()
+    await userEvent.click(screen.getByRole("button", { name: "Re-cut this moment" }))
     expect(onReclip).toHaveBeenCalledTimes(1)
     expect(onReclip.mock.calls[0]![0].match.id).toBe("match-1")
   })
@@ -175,7 +186,8 @@ describe("MomentConversation", () => {
       derivativeStatus: "ready",
     }
     renderPage(exchange({ matches: [match({ feedback: "approved", clip: { id: "c-a", status: "ready" } })] }, [{ id: "c-a", clipMatchId: "match-1", status: "ready", url: "https://cdn.test/clips/v/c-a.mp4?sig=1", media } as never]))
-    expect(screen.getByTestId("follow-up-download").getAttribute("href")).toBe("https://cdn.test/save.mp4")
+    expect(screen.getByTestId("action-download").getAttribute("href")).toBe("https://cdn.test/save.mp4")
+    expect(screen.queryByText("Download")).toBeNull()
     // And the player plays the finished file, not the source.
     expect((screen.getByTestId("moment-video") as HTMLVideoElement).getAttribute("src")).toBe("https://cdn.test/clips/v/c-a-vertical.mp4?sig=1")
   })
