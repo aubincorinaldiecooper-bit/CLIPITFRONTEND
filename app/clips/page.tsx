@@ -71,8 +71,8 @@ function ClipsBody() {
    * The library is a door for new footage too, at the owner's ask: drag a
    * video anywhere onto this page — the page shows the same upload state the
    * New clip screen uses — or press Upload video. The engine is the shared
-   * one, and when the batch lands it hands the videos to the theater
-   * (/start?videos=…), which opens the first and offers the carousel.
+   * one, and when the batch lands it opens the first video on the search
+   * screens (/start?video=…); the rest are here in the library.
    */
   const {
     uploads,
@@ -83,7 +83,8 @@ function ClipsBody() {
     clearOverLimit,
   } = useVideoUploads({
     onBatchLanded: (videos) => {
-      router.push(`/start?videos=${videos.map((video) => video.id).join(",")}`)
+      const first = videos[0]
+      if (first) router.push(`/start?video=${first.id}`)
     },
   })
   const uploadInput = useRef<HTMLInputElement>(null)

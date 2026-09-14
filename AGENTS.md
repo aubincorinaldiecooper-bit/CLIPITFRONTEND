@@ -88,10 +88,20 @@ Settled decisions — hold every screen to these:
   components/providers.tsx covers motion/react; the guard in globals.css
   covers CSS animations. Spinners keep turning — they are information,
   not decoration.
-- **Astryx components first.** Interface furniture (buttons, forms, nav,
-  dialogs, tables) comes from @astryxdesign/core wearing theme/clipit.ts;
-  hand-rolled equivalents need a reason. The theater media player stays
-  custom by the owner's decision (2026-08-22).
+- **Astryx components first — outside the search screens.** Interface
+  furniture (buttons, forms, nav, dialogs, tables) comes from
+  @astryxdesign/core wearing theme/clipit.ts; hand-rolled equivalents need
+  a reason. The theater media player stays custom by the owner's decision
+  (2026-08-22).
+- **The search screens are Shadcn Space on Base UI** (the owner's call,
+  2026-09-14: the prototype is the target interaction and art direction).
+  Home, the results and the moment page — app/start and components/moments
+  — take their furniture from components/space, never from Astryx. What
+  those screens still stand inside is Astryx until it is touched in its own
+  right: the workspace shell and side rail (shared by every workspace
+  page), the media framing in components/media (shared with the library),
+  and the publish dialog. Migrate the rest of the app the same way, screen
+  by screen, as each is touched.
 
 <!-- ASTRYX:START -->
 Astryx v0.5.2 · 163 components

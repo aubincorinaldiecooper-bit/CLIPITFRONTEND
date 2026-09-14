@@ -1,12 +1,10 @@
 /**
  * What jsdom does not have, and Astryx expects.
  *
- * Several components observe media queries — ChatLayout asks about density
- * and reduced motion before it renders a single message — and jsdom ships no
- * `matchMedia` at all, so the component throws rather than degrading. The
- * moment feed's test carried its own copy of this stub; that was fine until a
- * second file needed it, and twelve chat tests failed at once on a missing
- * browser API rather than on anything about the chat.
+ * Several components observe media queries — the results stage asks whether
+ * the screen is narrow, the coverflow whether motion should be reduced — and
+ * jsdom ships no `matchMedia` at all, so the component throws rather than
+ * degrading. One stub here, for every test.
  *
  * Nothing matches: every query reports false, which is the quiet default —
  * no reduced-motion preference, no wide-viewport branch.
@@ -25,4 +23,20 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
       dispatchEvent: () => false,
     }),
   })
+}
+
+/*
+ * jsdom has no ResizeObserver either. The coverflow measures its frame with
+ * one; without it every results-stage test would fail on a missing browser
+ * API rather than on anything about the stage. Nothing is observed: the
+ * ring paints once from a zero width, which is all a test can see anyway.
+ */
+if (typeof window !== "undefined" && typeof (window as unknown as { ResizeObserver?: unknown }).ResizeObserver !== "function") {
+  class StillObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(window, "ResizeObserver", { writable: true, value: StillObserver })
+  Object.defineProperty(globalThis, "ResizeObserver", { writable: true, value: StillObserver })
 }

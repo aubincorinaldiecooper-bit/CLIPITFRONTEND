@@ -11,6 +11,10 @@
    (animate-in, fade-in, data-[state]…). Additive names only. */
 @import "tw-animate-css";
 
+/* `fullscreen:` for the moment player: its ratio box fills the screen once
+   the Fullscreen API has it, and the browser is the one saying so. */
+@custom-variant fullscreen (&:fullscreen);
+
 /*
  * The landing page is a dark, cinematic surface in both schemes: the orbit
  * gallery is lit imagery on a near-black ground, and a light background would
@@ -109,6 +113,26 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/*
+ * The search screens' entrance (the owner's prototype, 2026-09-14): a
+ * player rises into place once. The reduced-motion guard below zeroes it
+ * like every other animation here.
+ */
+@theme inline {
+  --animate-rise-in: rise-in 300ms ease backwards;
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 /*

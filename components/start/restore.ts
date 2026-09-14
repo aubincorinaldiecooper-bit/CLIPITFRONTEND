@@ -29,11 +29,6 @@ export async function restoreConversation(
   )
 }
 
-/** Whether a restored conversation has moments to review — the feed, rather than the question box, is the place to land. */
-export function hasReviewable(exchanges: Exchange[]): boolean {
-  return exchanges.some((exchange) => exchange.request.status === "completed" && (exchange.request.matches?.length ?? 0) > 0)
-}
-
 /** The moment a clip belongs to, wherever it sits in the conversation. */
 export function matchForClip(exchanges: Exchange[], clipId: string): { requestId: string; matchId: string } | null {
   for (const exchange of exchanges) {
