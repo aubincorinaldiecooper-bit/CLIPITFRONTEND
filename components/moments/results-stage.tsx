@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, Play } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import { Badge } from "@/components/space/badge"
 import { Button, buttonVariants } from "@/components/space/button"
@@ -140,41 +140,29 @@ export function ResultsStage({
   return (
     <div className="w-full" data-testid="results-stage">
       <div className={measure}>
-      <p className="pt-6 pb-2 text-[10px] tracking-[0.14em] text-muted-foreground uppercase max-[860px]:pt-3">{searching ? "Looking for" : "Found for"}</p>
-      <h2 className="max-w-[760px] text-[27px] leading-[1.35] font-medium tracking-[-0.01em] text-foreground max-[860px]:text-[19px] max-[860px]:leading-snug" data-testid="stage-question">
-        {request.instruction}
-      </h2>
+        <p className="pt-6 pb-2 text-[10px] tracking-[0.14em] text-muted-foreground uppercase max-[860px]:pt-3">{searching ? "Looking for" : "Found for"}</p>
+        <h2 className="max-w-[760px] text-[27px] leading-[1.35] font-medium tracking-[-0.01em] text-foreground max-[860px]:text-[19px] max-[860px]:leading-snug" data-testid="stage-question">
+          {request.instruction}
+        </h2>
 
-      <div className="pt-3 pb-2 text-sm text-muted-foreground" data-testid="stage-words">
-        {searching ? (
-          <>
-            <TextShimmer as="p">{progressLine(request, video)}</TextShimmer>
-            {candidates && <p className="mt-1">{candidates}</p>}
-          </>
-        ) : (
-          // The search's own words: the count it finished with, in a sentence,
-          // then a stretch it could not look at, then the maybes. No separate
-          // number — a count the sentence does not say is one it disagrees with.
-          lines.map((line, index) => (
-            <p key={`${request.id}-${index}`} className={cn("max-w-[640px]", index > 0 && "mt-1")}>
-              {line}
-            </p>
-          ))
-        )}
-      </div>
+        <div className="pt-3 pb-2 text-sm text-muted-foreground" data-testid="stage-words">
+          {searching ? (
+            <>
+              <TextShimmer as="p">{progressLine(request, video)}</TextShimmer>
+              {candidates && <p className="mt-1">{candidates}</p>}
+            </>
+          ) : (
+            lines.map((line, index) => (
+              <p key={`${request.id}-${index}`} className={cn("max-w-[640px]", index > 0 && "mt-1")}>
+                {line}
+              </p>
+            ))
+          )}
+        </div>
       </div>
 
       {count > 0 ? (
         <div className="w-full">
-          {/*
-            * The band. On a desk the cards run across the whole screen and the
-            * outer ones clip at its edge: the centred one matters by where it
-            * stands and how far forward, not because the rest were shrunk
-            * away — a gentle rake, neighbours nearly full size and only a
-            * little fainter. On a phone it is one card with a peek of each
-            * neighbour and almost no rake, sized so the caption and Open
-            * moment are on screen with it.
-            */}
           <CoverflowCarousel
             key={request.id}
             slides={slides}
@@ -183,23 +171,23 @@ export function ResultsStage({
             onApi={onApi}
             loop={loop}
             label="Moments found"
-            cardWidth={compact ? "clamp(190px, 60vw, 250px)" : "clamp(176px, 15vw, 236px)"}
-            cardHeight={compact ? "calc(clamp(190px, 60vw, 250px) * 16 / 9)" : "calc(clamp(176px, 15vw, 236px) * 16 / 9)"}
-            rotate={compact ? 5 : 26}
-            depth={compact ? 0.05 : 0.2}
+            cardWidth={compact ? "clamp(176px, 56vw, 232px)" : "clamp(176px, 15vw, 236px)"}
+            cardHeight={compact ? "calc(clamp(176px, 56vw, 232px) * 16 / 9)" : "calc(clamp(176px, 15vw, 236px) * 16 / 9)"}
+            rotate={compact ? 4 : 26}
+            depth={compact ? 0.04 : 0.2}
             perspective={compact ? 7 : 4.5}
             falloff={compact ? 1 : 0.75}
-            fade={compact ? 0.18 : 0.07}
-            gap={compact ? 0.06 : 0.1}
-            frameClassName={compact ? "py-4" : "py-10"}
-            cardClassName="rounded-[20px] border bg-shcard p-2.5 shadow-[0_2px_14px_rgba(0,0,0,0.06)]"
+            fade={compact ? 0.16 : 0.07}
+            gap={compact ? 0.05 : 0.1}
+            frameClassName={compact ? "py-3" : "py-10"}
+            cardClassName="rounded-[18px] border bg-shcard p-2 shadow-[0_2px_12px_rgba(0,0,0,0.055)]"
             renderSlide={(_slide, index, isActive) => {
               const entry = moments[index]!
               return (
                 <div
                   className={cn(
-                    "relative size-full overflow-hidden rounded-[14px] bg-neutral-950 transition-shadow duration-200",
-                    isActive && "shadow-[0_18px_48px_rgba(0,0,0,0.18)]",
+                    "relative size-full overflow-hidden rounded-[13px] bg-neutral-950 transition-shadow duration-200",
+                    isActive && "shadow-[0_16px_42px_rgba(0,0,0,0.16)]",
                   )}
                 >
                   {isActive ? (
@@ -215,9 +203,6 @@ export function ResultsStage({
                       <Badge variant="ghost" className="absolute top-2.5 left-2.5 h-auto bg-black/32 px-2 py-1 text-[11px] font-normal text-white/85 backdrop-blur-md hover:bg-black/32 hover:text-white/85">
                         {formatRange(entry.match)}
                       </Badge>
-                      <span className="absolute top-1/2 left-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm">
-                        <Play className="ml-0.5 size-4 fill-current" />
-                      </span>
                     </>
                   )}
                 </div>
@@ -225,7 +210,6 @@ export function ResultsStage({
             }}
           />
 
-          {/* The caption follows the active moment: what happens, then when, then how it was found. */}
           {active && (
             <div key={active.match.id} className="-mt-2 flex flex-col items-center px-6 text-center duration-200 animate-in fade-in max-[860px]:mt-0" data-testid="stage-caption">
               <p className="max-w-[44ch] text-[17px] leading-snug tracking-[-0.01em] text-foreground">{momentTitle(active.match)}</p>
@@ -244,9 +228,6 @@ export function ResultsStage({
                   <ChevronLeft className="size-4" />
                 </Button>
 
-                {/* A link, because it is one: it has an address of its own,
-                    and a modifier click opens it in a new tab. A plain click
-                    stays on this page. */}
                 <a
                   href={momentHref(active)}
                   onClick={(event) => {
