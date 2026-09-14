@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MomentConversation } from "../components/moments/moment-conversation"
 import type { Exchange } from "../components/start/types"
@@ -201,6 +201,127 @@ describe("MomentConversation", () => {
     renderPage(exchange(), {}, uploading)
     expect(box().disabled).toBe(true)
     expect(box().placeholder).toBe("Your video is still uploading…")
+  })
+})
+
+/** Makes the page believe it is on a phone: the one media query the stage asks about matches. */
+function onAPhone() {
+  const original = window.matchMedia
+  window.matchMedia = ((query: string) => ({
+    matches: query === "(width < 860px)",
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia
+  return () => {
+    window.matchMedia = original
+  }
+}
+
+describe("On a phone: the footage above, the conversation a sheet below", () => {
+  let widen: () => void
+  beforeEach(() => {
+    widen = onAPhone()
+  })
+  afterEach(() => widen())
+
+  const sheet = () => screen.getByTestId("conversation-sheet")
+  const handle = () => screen.getByRole("button", { name: /the conversation/ })
+
+  it("rests as a peek — the question and the box — with the thread put away, and the footage sized by the room it has", async () => {
+    renderPage(exchange())
+    await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+    expect(handle().getAttribute("aria-expanded")).toBe("false")
+    expect(screen.getByTestId("conversation-question").textContent).toBe("find the harbour")
+    expect(box()).toBeTruthy()
+    // The thread is in the page for the sheet to show; the peek's CSS puts it away.
+    expect(screen.getByTestId("conversation-thread").className).toContain("max-[860px]:hidden")
+    expect(screen.getByTestId("moment-player").className).toContain("max-[860px]:h-full")
+    // At rest the sheet is exactly the peek tall (jsdom measures nothing, so the fallback stands).
+    expect(sheet().style.height).toBe("118px")
+  })
+
+  it("the handle opens and closes the sheet; open, it takes its share of the stage", async () => {
+    const user = userEvent.setup()
+    renderPage(exchange())
+    await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+    await user.click(handle())
+    expect(sheet().dataset.state).toBe("open")
+    expect(handle().getAttribute("aria-expanded")).toBe("true")
+    // jsdom's window is 768 tall: 52% of it, with the footage keeping its minimum.
+    expect(sheet().style.height).toBe("399px")
+    await user.click(handle())
+    expect(sheet().dataset.state).toBe("peek")
+  })
+
+  it("a pull on the head goes where it was pulling: up opens, down closes", async () => {
+    renderPage(exchange())
+    await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+    const head = screen.getByTestId("sheet-head")
+    fireEvent.pointerDown(head, { clientY: 700, pointerId: 1, button: 0 })
+    fireEvent.pointerMove(head, { clientY: 600, pointerId: 1 })
+    // On its way up the thread already shows, and the sheet follows the finger.
+    expect(sheet().dataset.state).toBe("open")
+    expect(sheet().style.height).toBe("218px")
+    fireEvent.pointerUp(head, { clientY: 600, pointerId: 1 })
+    expect(sheet().dataset.state).toBe("open")
+    expect(sheet().style.height).toBe("399px")
+
+    fireEvent.pointerDown(head, { clientY: 300, pointerId: 1, button: 0 })
+    fireEvent.pointerMove(head, { clientY: 400, pointerId: 1 })
+    fireEvent.pointerUp(head, { clientY: 400, pointerId: 1 })
+    expect(sheet().dataset.state).toBe("peek")
+  })
+
+  it("a pull that starts on the handle is not undone by the click a browser may fire after it", async () => {
+    renderPage(exchange())
+    await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+    const grip = handle()
+    fireEvent.pointerDown(grip, { clientY: 700, pointerId: 1, button: 0 })
+    fireEvent.pointerMove(grip, { clientY: 600, pointerId: 1 })
+    fireEvent.pointerUp(grip, { clientY: 600, pointerId: 1 })
+    fireEvent.click(grip)
+    expect(sheet().dataset.state).toBe("open")
+    // The next press is its own: a plain click still toggles.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    fireEvent.click(grip)
+    expect(sheet().dataset.state).toBe("peek")
+  })
+
+  it("the sheet never runs past the room below the top row, so the box is never clipped away", async () => {
+    // A screen so short that even the peek would not fit: the sheet stops
+    // at the room there is (jsdom's frame is the window's own height).
+    const tall = window.innerHeight
+    window.innerHeight = 120
+    try {
+      renderPage(exchange())
+      await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+      await waitFor(() => expect(sheet().style.height).toBe("80px"))
+    } finally {
+      window.innerHeight = tall
+    }
+  })
+
+  it("a tap on the question beside the handle opens the sheet too", async () => {
+    renderPage(exchange())
+    await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+    const question = screen.getByTestId("conversation-question")
+    fireEvent.pointerDown(question, { clientY: 700, pointerId: 1, button: 0 })
+    fireEvent.pointerUp(question, { clientY: 702, pointerId: 1 })
+    expect(sheet().dataset.state).toBe("open")
+  })
+
+  it("a reply raises the sheet, so it is seen rather than put away", async () => {
+    const user = userEvent.setup()
+    renderPage(exchange(), { onReclip: vi.fn().mockResolvedValue(true) })
+    await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
+    await user.type(box(), "re-cut this one{Enter}")
+    await waitFor(() => expect(screen.getAllByTestId("conversation-model").length).toBeGreaterThan(0))
+    expect(sheet().dataset.state).toBe("open")
   })
 })
 

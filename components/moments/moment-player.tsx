@@ -239,7 +239,7 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
           "overflow-hidden bg-neutral-950 select-none fullscreen:aspect-auto fullscreen:h-screen fullscreen:w-screen fullscreen:rounded-none",
           compact
             ? "size-full rounded-[14px]"
-            : "h-[min(54vh,520px)] animate-rise-in rounded-[18px] shadow-[0_14px_40px_rgba(0,0,0,0.18)] max-[860px]:h-[min(64vh,520px)]",
+            : "h-[min(54vh,520px)] animate-rise-in rounded-[18px] shadow-[0_14px_40px_rgba(0,0,0,0.18)] max-[860px]:h-full max-[860px]:w-auto max-[860px]:max-w-full",
           className,
         )}
       >

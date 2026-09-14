@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react"
 import { ArrowLeft, Download, RotateCcw } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import { Button, buttonVariants } from "@/components/space/button"
@@ -11,11 +11,13 @@ import { isEditRequest, isSearching, reclipNoteText, referencedIndex, sourceWord
 import { evidenceWords, formatRange, momentTitle, type FeedMoment } from "@/components/start/moments"
 import { StreamedText } from "@/components/start/streamed-text"
 import type { Exchange } from "@/components/start/types"
+import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { ChatSignal, Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { Answer, answerActionClass } from "./answer"
 import { AskComposer } from "./ask-composer"
 import { MomentPlayer } from "./moment-player"
+import { useStageFrame } from "./use-stage-frame"
 
 /**
  * One moment and the conversation about it — the third screen of the
@@ -32,6 +34,15 @@ import { MomentPlayer } from "./moment-player"
  * the answer, beside copy and the thumbs; not as the architecture of the
  * screen (the owner, 2026-09-14). Whether it was kept, and how its file is
  * getting on, is on the picture, where the player says so.
+ *
+ * On a phone the same page is a stage (the owner, 2026-09-14: chat while
+ * the video plays, without interrupting it). The footage takes the room
+ * above; the conversation is a sheet below it, at rest showing only the
+ * question and the box, pulled up — by its handle, or with a tap — to show
+ * the answer and the thread. Whatever the sheet does, the footage shrinks
+ * to the room left and keeps playing; it is never re-mounted. The stage is
+ * sized to the part of the screen the keyboard leaves (useStageFrame), so
+ * the box sits above the keyboard and the footage above the box.
  *
  * Words that ask for THIS moment to be reworked — "tighten this one",
  * "re-cut it" — go to Re-clip; a question is a new search, and the page
@@ -56,6 +67,23 @@ interface Note {
 
 /** Whether an ask was taken. `false` means it was not — the page has shown why — and the words stay in the box. */
 export type AskOutcome = boolean | void
+
+/** The sheet's two resting places. */
+type Sheet = "peek" | "open"
+/** How much of the stage an open sheet takes. */
+const OPEN_SHARE = 0.52
+/** The stage's top row — the way back — in pixels. */
+const TOP_ROW = 40
+/** The least height the footage keeps above an open sheet: still a picture, not a sliver. */
+const MIN_FOOTAGE = 150
+/** The peek's height until it has been measured. */
+const PEEK_FALLBACK = 118
+/** A press that moved less than this many pixels is a tap. */
+const TAP_SLOP = 6
+/** A pull past this many pixels goes where it was pulling, whatever the midpoint says. */
+const DECISIVE_PULL = 40
+
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
 export interface MomentConversationProps {
   moment: FeedMoment
@@ -158,6 +186,116 @@ export function MomentConversation({
     }
   }
 
+  // ---- The phone stage: the footage above, the conversation a sheet below.
+  const phone = useMediaQuery(PHONE)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const frame = useStageFrame(stageRef, phone)
+  const [sheet, setSheet] = useState<Sheet>("peek")
+  /** The sheet's live height while it is being pulled; null at rest. */
+  const [pulling, setPulling] = useState<number | null>(null)
+  const headRef = useRef<HTMLDivElement>(null)
+  const footRef = useRef<HTMLDivElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
+  const threadId = useId()
+  const [peekHeight, setPeekHeight] = useState(PEEK_FALLBACK)
+  const press = useRef<{ y: number; height: number; moved: boolean } | null>(null)
+  /** Set by a pull that just ended, so a click the browser fires for it does not toggle the sheet back. */
+  const swallowClick = useRef(false)
+
+  // The peek is exactly the handle, the question and the box — measured, so
+  // the sheet at rest hides nothing of them and shows nothing else.
+  useEffect(() => {
+    if (!phone) return
+    const head = headRef.current
+    const foot = footRef.current
+    if (!head || !foot) return
+    const measure = () => {
+      const height = head.offsetHeight + foot.offsetHeight + 1 // the sheet's top border
+      if (height > 1) setPeekHeight(height)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(head)
+    observer.observe(foot)
+    return () => observer.disconnect()
+  }, [phone])
+
+  const stageHeight = frame?.height ?? 0
+  // Neither resting place runs past the room below the top row: a sheet
+  // taller than the stage would have its bottom — the box and its send —
+  // clipped away (Devin's finding on #97). The box itself has a ceiling on
+  // a phone, so a long draft scrolls inside it rather than growing the peek.
+  const room = stageHeight > 0 ? Math.max(0, stageHeight - TOP_ROW) : Number.POSITIVE_INFINITY
+  const peek = Math.min(peekHeight, room)
+  const openHeight = Math.min(room, Math.max(peek, Math.min(Math.round(stageHeight * OPEN_SHARE), stageHeight - TOP_ROW - MIN_FOOTAGE)))
+  const sheetHeight = pulling ?? (sheet === "open" ? openHeight : peek)
+  /** Up, or on its way up: the thread shows. */
+  const raised = sheet === "open" || pulling !== null
+
+  // A reply nobody can see is no reply: the sheet rises to show one, and
+  // the thread keeps its newest line in view. While the sheet is down the
+  // thread is not drawn and has no height to scroll, so the scroll waits
+  // for the sheet to be open and runs again then (Devin's finding on #97).
+  const noteCount = notes.length
+  useEffect(() => {
+    if (phone && noteCount > 0) setSheet("open")
+  }, [phone, noteCount])
+  useEffect(() => {
+    if (noteCount === 0 || (phone && sheet !== "open")) return
+    const thread = threadRef.current
+    if (thread) thread.scrollTop = thread.scrollHeight
+  }, [phone, sheet, noteCount])
+
+  const toggleSheet = () => setSheet((current) => (current === "open" ? "peek" : "open"))
+  const onHandleClick = () => {
+    if (swallowClick.current) return
+    toggleSheet()
+  }
+
+  // The handle row is the grip: pull it up or down, or tap it. Pointer
+  // events rather than touch, so a mouse on a narrow window works the same.
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!phone || event.button !== 0) return
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    press.current = { y: event.clientY, height: sheetHeight, moved: false }
+  }
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = press.current
+    if (!start) return
+    const pull = start.y - event.clientY
+    if (!start.moved && Math.abs(pull) < TAP_SLOP) return
+    start.moved = true
+    setPulling(clamp(start.height + pull, peek, openHeight))
+  }
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = press.current
+    if (!start) return
+    press.current = null
+    setPulling(null)
+    if (!start.moved) {
+      // A tap. The handle's own click toggles it; this is for the words beside it.
+      if (!(event.target as Element).closest("button")) toggleSheet()
+      return
+    }
+    // A pull that started on the handle may be followed by the handle's own
+    // click, in browsers that fire one after a captured drag; that click
+    // must not undo where the pull went (Devin's finding on #97). The flag
+    // lives only until the browser's turn is over: the click, if it comes,
+    // is dispatched in the same turn as this pointerup.
+    swallowClick.current = true
+    window.setTimeout(() => {
+      swallowClick.current = false
+    }, 0)
+    const pull = start.y - event.clientY
+    const height = clamp(start.height + pull, peek, openHeight)
+    const midway = (peek + openHeight) / 2
+    setSheet(pull > DECISIVE_PULL ? "open" : pull < -DECISIVE_PULL ? "peek" : height > midway ? "open" : "peek")
+  }
+  const onPointerCancel = () => {
+    press.current = null
+    setPulling(null)
+  }
+
   const gate = askGate(video)
   const disabled = searching || !gate.accepting
   const placeholder = searching ? "Still looking…" : (gate.placeholder ?? "Ask about this moment…")
@@ -167,32 +305,81 @@ export function MomentConversation({
   const canReclip = !moment.reworking && (moment.match.reclipsRemaining ?? 0) > 0 && !running
   const saveable = moment.production === "produced" && moment.downloadUrl ? moment.downloadUrl : null
 
-  return (
-    <div data-testid="moment-conversation">
-      <a
-        href={backHref}
-        onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
-          event.preventDefault()
-          onBack()
-        }}
-        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-ml-1.5 mb-2.5 font-normal text-muted-foreground hover:text-foreground")}
-      >
-        <ArrowLeft className="size-3.5" />
-        All moments
-      </a>
+  const stageStyle = frame ? ({ "--stage-h": `${frame.height}px`, "--stage-shift": `${frame.shift}px` } as CSSProperties) : undefined
 
-      <div className="flex items-start gap-12 max-[860px]:flex-col max-[860px]:gap-5">
-        <div className="shrink-0 max-[860px]:order-2 max-[860px]:self-center">
+  return (
+    <div
+      ref={stageRef}
+      data-testid="moment-conversation"
+      style={stageStyle}
+      className="max-[860px]:flex max-[860px]:h-[var(--stage-h,calc(100dvh_-_64px))] max-[860px]:translate-y-[var(--stage-shift,0px)] max-[860px]:flex-col max-[860px]:overflow-hidden max-[860px]:bg-background"
+    >
+      <div className="max-[860px]:flex max-[860px]:h-10 max-[860px]:shrink-0 max-[860px]:items-center max-[860px]:px-2">
+        <a
+          href={backHref}
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+            event.preventDefault()
+            onBack()
+          }}
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-ml-1.5 mb-2.5 font-normal text-muted-foreground hover:text-foreground max-[860px]:m-0")}
+        >
+          <ArrowLeft className="size-3.5" />
+          All moments
+        </a>
+      </div>
+
+      <div className="flex items-start gap-12 max-[860px]:min-h-0 max-[860px]:flex-1 max-[860px]:flex-col max-[860px]:gap-0">
+        <div className="shrink-0 max-[860px]:flex max-[860px]:min-h-0 max-[860px]:w-full max-[860px]:flex-1 max-[860px]:items-center max-[860px]:justify-center max-[860px]:px-4 max-[860px]:py-2">
           <MomentPlayer key={moment.match.id} moment={moment} video={video} muted={muted} onMutedChange={onMutedChange} />
         </div>
 
-        <section className="flex min-w-0 max-w-[520px] flex-1 flex-col pt-0.5 max-[860px]:contents" aria-label="Conversation about this moment">
-          <p className="mb-[18px] text-[15px] leading-normal font-medium tracking-[-0.005em] text-foreground max-[860px]:order-1" data-testid="conversation-question">
-            {request.instruction}
-          </p>
+        <section
+          data-testid="conversation-sheet"
+          data-state={phone ? (raised ? "open" : "peek") : "wide"}
+          aria-label="Conversation about this moment"
+          style={phone ? { height: sheetHeight } : undefined}
+          className={cn(
+            "group/sheet flex min-w-0 max-w-[520px] flex-1 flex-col pt-0.5",
+            "max-[860px]:w-full max-[860px]:max-w-none max-[860px]:flex-none max-[860px]:overflow-hidden max-[860px]:rounded-t-[22px] max-[860px]:border-t max-[860px]:border-shborder max-[860px]:bg-shcard max-[860px]:pt-0 max-[860px]:shadow-[0_-10px_30px_rgba(0,0,0,0.08)]",
+            "max-[860px]:transition-[height] max-[860px]:duration-300 max-[860px]:ease-[cubic-bezier(0.32,0.72,0,1)]",
+            pulling !== null && "max-[860px]:transition-none",
+          )}
+        >
+          <div
+            ref={headRef}
+            data-testid="sheet-head"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+            className="max-[860px]:cursor-grab max-[860px]:touch-none max-[860px]:select-none max-[860px]:px-4 max-[860px]:pb-2.5"
+          >
+            <button
+              type="button"
+              onClick={onHandleClick}
+              aria-expanded={raised}
+              aria-controls={threadId}
+              aria-label={raised ? "Hide the conversation" : "Show the conversation"}
+              data-testid="sheet-handle"
+              className="hidden h-6 w-full items-center justify-center max-[860px]:flex"
+            >
+              <span aria-hidden className="h-1 w-9 rounded-full bg-foreground/20" />
+            </button>
+            <p
+              className="mb-[18px] text-[15px] leading-normal font-medium tracking-[-0.005em] text-foreground max-[860px]:mb-0 max-[860px]:line-clamp-1"
+              data-testid="conversation-question"
+            >
+              {request.instruction}
+            </p>
+          </div>
 
-          <div className="flex flex-col gap-6 max-[860px]:order-3" data-testid="conversation-thread">
+          <div
+            ref={threadRef}
+            id={threadId}
+            className="flex flex-col gap-6 max-[860px]:hidden max-[860px]:min-h-0 max-[860px]:flex-1 max-[860px]:overflow-y-auto max-[860px]:overscroll-contain max-[860px]:px-4 max-[860px]:pt-1 max-[860px]:pb-3 max-[860px]:group-data-[state=open]/sheet:flex"
+            data-testid="conversation-thread"
+          >
             {running ? (
               <div className="text-[15px] leading-[1.7] text-foreground/85">
                 <p>
@@ -273,7 +460,7 @@ export function MomentConversation({
             )}
           </div>
 
-          <div className="mt-7 max-[860px]:order-4">
+          <div ref={footRef} className="mt-7 max-[860px]:mt-0 max-[860px]:px-3 max-[860px]:pt-1 max-[860px]:pb-[max(10px,env(safe-area-inset-bottom))]">
             <AskComposer
               size="thread"
               value={draft}

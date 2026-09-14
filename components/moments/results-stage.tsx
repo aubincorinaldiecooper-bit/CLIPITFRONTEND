@@ -10,7 +10,7 @@ import { candidatesLine, progressLine } from "@/components/start/answer-words"
 import { exchangeLines, isSearching } from "@/components/start/conversation"
 import { evidenceWords, formatRange, momentTitle, type FeedMoment } from "@/components/start/moments"
 import type { Exchange } from "@/components/start/types"
-import { useMediaQuery } from "@/hooks/use-media-query"
+import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { MomentPlayer } from "./moment-player"
@@ -81,7 +81,7 @@ export function ResultsStage({
 }: ResultsStageProps) {
   const { request } = exchange
   const searching = isSearching(exchange)
-  const compact = useMediaQuery("(max-width: 860px)")
+  const compact = useMediaQuery(PHONE)
   const apiRef = useRef<CoverflowApi | null>(null)
 
   // Held as the MOMENT in the centre rather than a number: the list is

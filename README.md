@@ -33,10 +33,15 @@ npm run build
 - **`/publishing`** — where social account connections will live; clips
   download today and will post from here later.
 
-The search screens wear a light header — the mark, Library, Shared, New
-search and the account — and nothing else. The library and the shared rooms
-keep the collapsible side rail (224px open, 52px closed, remembered per
-browser) on desktop, with a link row in the header on phones.
+The search screens wear a light header — the mark, New search and the
+account — and nothing else; the library and the shared rooms are in the
+account menu. On a phone the header is the mark and the account alone (the
+box to type into is already on the screen), and the moment page becomes a
+stage: the footage above, the conversation a sheet below that pulls up over
+it, the footage shrinking to the room left and playing on, the box kept above
+the keyboard. The library and the shared rooms keep the collapsible side rail
+(224px open, 52px closed, remembered per browser) on desktop, with a link row
+in the header on phones.
 
 ## Sign-in
 
