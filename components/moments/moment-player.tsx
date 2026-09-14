@@ -34,27 +34,12 @@ import { cn } from "@/lib/utils"
 
 const IDLE_MS = 1400
 
-/** What the media element reports, relative to the moment. */
 interface Playback {
   playing: boolean
-  /** Seconds into the moment. */
   current: number
-  /** The moment's length. */
   total: number
 }
 
-/**
- * The <video>, with its URL pinned at the value it started with.
- *
- * The page polls while a video is still being read and while a cut is on
- * its way, and every poll re-signs the playback URLs — bound straight to
- * the element, the newest one reloaded the player every two seconds and
- * threw the moment back to its start. The newest value is taken only when
- * the pinned one fails (an expired link). The caller keys this by moment
- * and by the FILE's identity (its path — see mediaIdentity), so a re-cut's
- * new file, or the finished file arriving in place of the source, starts
- * afresh, while a re-signed link to the same file does not.
- */
 function MomentVideo({
   source,
   still,
@@ -103,7 +88,6 @@ function MomentVideo({
       src={source.finished ? pinnedUrl : `${pinnedUrl}#t=${source.start}`}
       data-testid="moment-video"
       onError={() => {
-        // The pinned link no longer works; the freshest one gets its turn.
         if (latestUrl.current !== pinnedUrl) setPinnedUrl(latestUrl.current)
       }}
       poster={still ?? undefined}
@@ -112,8 +96,6 @@ function MomentVideo({
       autoPlay={autoPlay}
       loop={source.finished}
       playsInline
-      // The source stands in for the file inside a frame it does not fill;
-      // what shows around it is the player's own fill, not black bars.
       className={cn("h-full w-full", source.finished ? "bg-black" : "bg-transparent")}
       style={style}
       onLoadedMetadata={(event) => report(event.currentTarget)}
@@ -122,8 +104,6 @@ function MomentVideo({
       onEnded={(event) => report(event.currentTarget)}
       onSeeked={(event) => report(event.currentTarget)}
       onTimeUpdate={(event) => {
-        // The source stands in for an unfinished cut: play the moment, then
-        // the moment again — never the rest of the video.
         const element = event.currentTarget
         if (source.end !== null && element.currentTime >= source.end) element.currentTime = source.start
         report(element)
@@ -132,7 +112,6 @@ function MomentVideo({
   )
 }
 
-/** The badge on a decided moment: what was decided, and for a kept one, where its file is. */
 function decisionWords(moment: FeedMoment): string {
   if (moment.decision === "skipped") return "Skipped"
   if (moment.production === "producing") return "Kept · cutting…"
@@ -142,21 +121,11 @@ function decisionWords(moment: FeedMoment): string {
 
 export interface MomentPlayerProps {
   moment: FeedMoment
-  /** The video the moment is from, for the badge that says where. */
   video: Video | null
-  /** The results stage's card: no scrubber, no fullscreen — lighter chrome. */
   compact?: boolean
-  /** Sound is one setting for the whole screen: unmute once, stay unmuted from card to card. */
   muted: boolean
   onMutedChange: (muted: boolean) => void
-  /** Start playing as soon as it can (muted — the browser allows nothing else unasked). */
   autoPlay?: boolean
-  /**
-   * The badges, expand, sound and seek. False draws only the picture and
-   * its play button: for a card that shows the frame's middle, which would
-   * crop those out of sight while leaving them in the tab order (Codex's
-   * finding on #98). Whoever asks for that draws the sound control itself.
-   */
   controls?: boolean
   className?: string
 }
@@ -176,8 +145,6 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
   const [idle, setIdle] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
 
-  // The chrome shows while the moment is paused, and after a touch while it
-  // plays; then it leaves, so the footage is the picture.
   const wake = useCallback(() => {
     setIdle(false)
     window.clearTimeout(idleTimer.current)
@@ -203,8 +170,6 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
     if (!element) return
     wake()
     if (element.paused || element.ended) {
-      // A play the browser refuses (no gesture yet, a stalled load) is
-      // reported by the element's own events, not thrown at the page.
       void element.play()?.catch(() => undefined)
     } else {
       element.pause()
@@ -246,19 +211,15 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
           "overflow-hidden bg-neutral-950 select-none fullscreen:aspect-auto fullscreen:h-screen fullscreen:w-screen fullscreen:rounded-none",
           compact
             ? "size-full rounded-[14px]"
-            : "h-[min(54vh,520px)] animate-rise-in rounded-[18px] shadow-[0_14px_40px_rgba(0,0,0,0.18)] max-[860px]:size-full max-[860px]:rounded-[inherit] max-[860px]:shadow-none",
+            : "h-[min(50vh,480px)] animate-rise-in rounded-[18px] shadow-[0_12px_34px_rgba(0,0,0,0.16)] max-[860px]:size-full max-[860px]:rounded-[inherit] max-[860px]:shadow-none",
           className,
         )}
       >
         {source && !source.finished && moment.still && (
-          // The source stands in for the file inside the 9:16 frame. Behind
-          // its letterboxed picture, the moment's own still spread and blurred
-          // — the way the finished file fills that frame — instead of black.
           // eslint-disable-next-line @next/next/no-img-element
           <img src={moment.still} alt="" aria-hidden draggable={false} className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-70 blur-2xl" />
         )}
 
-        {/* A tap on the picture is play/pause, like every vertical player. */}
         <div className="flex h-full w-full cursor-pointer items-center justify-center" onClick={source ? toggle : undefined}>
           <div className="w-full in-[:fullscreen]:aspect-[9/16] in-[:fullscreen]:h-full in-[:fullscreen]:w-auto">
             <ClipComposition composition={composition} sourceAspectRatio={sourceAspectRatio} finished={source?.finished ?? true} className="w-full">
@@ -286,40 +247,39 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
           </div>
         </div>
 
-        {/* Where the footage is from — with the picture, not below it. */}
         {controls && (
-        <span className={cn("absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5", chrome)}>
-          {sourceHref ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Badge
-                    variant="ghost"
-                    render={<a href={sourceHref} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} />}
-                    className="h-auto gap-1.5 bg-black/32 px-2.5 py-1.5 text-[11.5px] font-normal text-white/85 backdrop-blur-md hover:bg-black/50 hover:text-white"
-                  />
-                }
-              >
+          <span className={cn("absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5", chrome)}>
+            {sourceHref ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Badge
+                      variant="ghost"
+                      render={<a href={sourceHref} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} />}
+                      className="h-auto gap-1.5 bg-black/32 px-2.5 py-1.5 text-[11.5px] font-normal text-white/85 backdrop-blur-md hover:bg-black/50 hover:text-white"
+                    />
+                  }
+                >
+                  {where}
+                  <ExternalLink className="size-[11px] opacity-65" />
+                </TooltipTrigger>
+                <TooltipContent>Open the source</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Badge variant="ghost" className="h-auto bg-black/32 px-2.5 py-1.5 text-[11.5px] font-normal text-white/85 backdrop-blur-md hover:bg-black/32 hover:text-white/85">
                 {where}
-                <ExternalLink className="size-[11px] opacity-65" />
-              </TooltipTrigger>
-              <TooltipContent>Open the source</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Badge variant="ghost" className="h-auto bg-black/32 px-2.5 py-1.5 text-[11.5px] font-normal text-white/85 backdrop-blur-md hover:bg-black/32 hover:text-white/85">
-              {where}
-            </Badge>
-          )}
-          {moment.decision && (
-            <span
-              data-testid="moment-decision"
-              className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white"
-            >
-              {moment.decision === "kept" ? <Check aria-hidden size={12} strokeWidth={3} /> : <X aria-hidden size={12} strokeWidth={3} />}
-              {decisionWords(moment)}
-            </span>
-          )}
-        </span>
+              </Badge>
+            )}
+            {moment.decision && (
+              <span
+                data-testid="moment-decision"
+                className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white"
+              >
+                {moment.decision === "kept" ? <Check aria-hidden size={12} strokeWidth={3} /> : <X aria-hidden size={12} strokeWidth={3} />}
+                {decisionWords(moment)}
+              </span>
+            )}
+          </span>
         )}
 
         {controls && !compact && (
@@ -381,56 +341,55 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
         )}
 
         {controls && (
-        <div
-          className={cn(
-            "absolute inset-x-0 bottom-0 z-10 flex items-center gap-3.5 bg-gradient-to-t from-black/40 to-transparent px-3.5 pt-8 pb-3.5",
-            chrome,
-          )}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={muted ? "Unmute" : "Mute"}
-                  aria-pressed={!muted}
-                  onClick={() => onMutedChange(!muted)}
-                  className="size-[30px] shrink-0 rounded-full bg-black/32 text-white hover:bg-black/50 hover:text-white"
-                />
-              }
-            >
-              {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
-            </TooltipTrigger>
-            <TooltipContent>{muted ? "Unmute" : "Mute"}</TooltipContent>
-          </Tooltip>
+          <div
+            className={cn(
+              "absolute inset-x-0 bottom-0 z-10 flex items-center gap-3 bg-gradient-to-t from-black/35 to-transparent px-3.5 pt-8 pb-3.5",
+              chrome,
+            )}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={muted ? "Unmute" : "Mute"}
+                    aria-pressed={!muted}
+                    onClick={() => onMutedChange(!muted)}
+                    className="size-[30px] shrink-0 rounded-full bg-black/32 text-white hover:bg-black/50 hover:text-white"
+                  />
+                }
+              >
+                {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+              </TooltipTrigger>
+              <TooltipContent>{muted ? "Unmute" : "Mute"}</TooltipContent>
+            </Tooltip>
 
-          {/* A real seek — Base UI's slider: click, drag, touch, arrow keys. */}
-          {compact || !source ? (
-            <span className="flex-1" />
-          ) : (
-            <Slider
-              aria-label="Seek within the moment"
-              min={0}
-              max={Math.max(playback.total, 0.01)}
-              step={0.01}
-              value={Math.min(playback.current, Math.max(playback.total, 0.01))}
-              onValueChange={(next) => seek(Array.isArray(next) ? (next[0] ?? 0) : next)}
-              className={cn(
-                "mx-0.5 flex-1",
-                "[&_[data-slot=slider-track]]:h-[2.5px] [&_[data-slot=slider-track]]:bg-white/25",
-                "[&_[data-slot=slider-range]]:bg-white/90",
-                "[&_[data-slot=slider-thumb]]:size-2.5 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:opacity-0 [&_[data-slot=slider-thumb]]:shadow-[0_1px_5px_rgba(0,0,0,0.35)] [&_[data-slot=slider-thumb]]:transition-opacity",
-                "hover:[&_[data-slot=slider-thumb]]:opacity-100 focus-within:[&_[data-slot=slider-thumb]]:opacity-100",
-              )}
-            />
-          )}
+            {compact || !source ? (
+              <span className="flex-1" />
+            ) : (
+              <Slider
+                aria-label="Seek within the moment"
+                min={0}
+                max={Math.max(playback.total, 0.01)}
+                step={0.01}
+                value={Math.min(playback.current, Math.max(playback.total, 0.01))}
+                onValueChange={(next) => seek(Array.isArray(next) ? (next[0] ?? 0) : next)}
+                className={cn(
+                  "mx-0.5 flex-1",
+                  "[&_[data-slot=slider-track]]:h-[2.5px] [&_[data-slot=slider-track]]:bg-white/25",
+                  "[&_[data-slot=slider-range]]:bg-white/90",
+                  "[&_[data-slot=slider-thumb]]:size-2.5 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:opacity-0 [&_[data-slot=slider-thumb]]:shadow-[0_1px_5px_rgba(0,0,0,0.35)] [&_[data-slot=slider-thumb]]:transition-opacity",
+                  "hover:[&_[data-slot=slider-thumb]]:opacity-100 focus-within:[&_[data-slot=slider-thumb]]:opacity-100",
+                )}
+              />
+            )}
 
-          <span className="shrink-0 text-[11.5px] tabular-nums text-white/85" data-testid="moment-time">
-            {source ? `${asClock(playback.current)} / ${asClock(playback.total)}` : asClock(moment.match.durationSeconds)}
-          </span>
-        </div>
+            <span className="shrink-0 text-[11.5px] tabular-nums text-white/85" data-testid="moment-time">
+              {source ? `${asClock(playback.current)} / ${asClock(playback.total)}` : asClock(moment.match.durationSeconds)}
+            </span>
+          </div>
         )}
       </AspectRatio>
     </TooltipProvider>
