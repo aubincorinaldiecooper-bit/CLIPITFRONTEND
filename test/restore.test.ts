@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "../components/start/restore"
+import { consumeSearchParams, matchForClip, restoreConversation } from "../components/start/restore"
 import type { Exchange } from "../components/start/types"
 import type { ClipRequest } from "../lib/types"
 
@@ -26,23 +26,14 @@ describe("restoreConversation", () => {
 
 describe("consumeSearchParams", () => {
   it("takes only the named parameters out of the address, and leaves the rest", () => {
-    window.history.replaceState(null, "", "/start?videos=vid-1&then=publish:c-1&other=1")
-    consumeSearchParams(["videos"])
+    window.history.replaceState(null, "", "/start?video=vid-1&then=publish:c-1&other=1")
+    consumeSearchParams(["video"])
     expect(window.location.search).toBe("?then=publish%3Ac-1&other=1")
     consumeSearchParams(["then"])
     expect(window.location.search).toBe("?other=1")
     // Nothing named: the address is left alone.
-    consumeSearchParams(["videos"])
+    consumeSearchParams(["video"])
     expect(window.location.search).toBe("?other=1")
-  })
-})
-
-describe("hasReviewable", () => {
-  it("is true only when a completed answer has moments", () => {
-    expect(hasReviewable([])).toBe(false)
-    expect(hasReviewable([{ request: request({ status: "searching", matches: [{ id: "m1" } as never] }), clips: [] }])).toBe(false)
-    expect(hasReviewable([{ request: request({ matches: [] }), clips: [] }])).toBe(false)
-    expect(hasReviewable([{ request: request({ matches: [{ id: "m1" } as never] }), clips: [] }])).toBe(true)
   })
 })
 

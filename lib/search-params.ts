@@ -25,3 +25,25 @@ export function consumeSearchParams(names: string[]): void {
   for (const name of names) url.searchParams.delete(name)
   window.history.replaceState(window.history.state, "", url.toString())
 }
+
+/**
+ * Write named parameters into the address, as a new history entry or in
+ * place of the current one. Null removes a parameter. Nothing is written
+ * when nothing would change, so a re-render never adds an entry.
+ *
+ * `pushState` and `replaceState` are the native ones; Next's router listens
+ * to both, so `useSearchParams` follows and Back walks the entries. The
+ * search screens move between home, results and a moment this way — one
+ * page holding one conversation, three addresses within it.
+ */
+export function writeSearchParams(changes: Record<string, string | null>, mode: "push" | "replace" = "replace"): void {
+  if (typeof window === "undefined") return
+  const url = new URL(window.location.href)
+  for (const [name, value] of Object.entries(changes)) {
+    if (value === null) url.searchParams.delete(name)
+    else url.searchParams.set(name, value)
+  }
+  if (url.toString() === window.location.href) return
+  if (mode === "push") window.history.pushState(window.history.state, "", url.toString())
+  else window.history.replaceState(window.history.state, "", url.toString())
+}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "motion/react"
+import { AnimatePresence } from "motion/react"
 import { api, ApiError } from "@/lib/api"
 import type { ChatSignal, Clip, ClipMatch, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 
@@ -9,22 +10,48 @@ import type { UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { WorkspaceShell } from "@/components/workspace/shell"
-import { Wizard } from "@/components/start/wizard"
-import { UploadStep } from "@/components/start/upload-step"
-import { ReviewStep } from "@/components/start/review-step"
+import { FollowUpComposer, SearchHome } from "@/components/moments/search-home"
+import { ResultsStage } from "@/components/moments/results-stage"
+import { MomentConversation } from "@/components/moments/moment-conversation"
 import { PublishDialog } from "@/components/start/publish-dialog"
 import { clipRowFor, needsKeep, publishableFor } from "@/components/start/production"
 import { oneAtATime, runKeep } from "@/components/start/keep-flow"
-import type { FeedMoment } from "@/components/start/moment-feed"
+import { feedMoments, type FeedMoment } from "@/components/start/moments"
 import { askGate } from "@/components/start/ask-gate"
-import type { Exchange, StartStep } from "@/components/start/types"
-import { consumeSearchParams, hasReviewable, matchForClip, restoreConversation } from "@/components/start/restore"
+import type { Exchange } from "@/components/start/types"
+import { consumeSearchParams, matchForClip, restoreConversation } from "@/components/start/restore"
+import { writeSearchParams } from "@/lib/search-params"
 import { setReportContext } from "@/lib/report-context"
 import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { readIntent } from "@/components/sign-in-gate"
 
 const POLL_MS = 2000
 const EASE = [0.23, 1, 0.32, 1] as const
+
+/**
+ * The three screens' addresses, on one page.
+ *
+ *   /start                                  search home
+ *   /start?video=V&search=S                 the results of question S
+ *   /start?video=V&search=S&moment=M        one moment of them, with its conversation
+ *
+ * One page holding one conversation — the video, its questions, the
+ * polling, keep and publish — and three addresses within it, written
+ * with the native history API so Back and Forward walk the screens and a
+ * reload lands where it left off (the owner's call of 2026-09-02 that the
+ * conversation comes back with the video). The library opens a video here
+ * the same way, with `video`.
+ */
+interface Address {
+  video: string | null
+  search: string | null
+  moment: string | null
+}
+
+function readAddress(): Address {
+  const params = new URL(window.location.href).searchParams
+  return { video: params.get("video"), search: params.get("search"), moment: params.get("moment") }
+}
 
 /**
  * The errand a sign-in was asked for, read on return once the person is
@@ -58,13 +85,37 @@ export default function StartPage() {
   const keepQueue = useRef(new Map<string, Promise<unknown>>())
   const keepingRef = useRef(keepingIds)
   keepingRef.current = keepingIds
-  /** The question that owns the moment in front, for a report made from this page. */
-  const [frontRequestId, setFrontRequestId] = useState<string | null>(null)
-  const onFrontMomentChange = useCallback((moment: FeedMoment | undefined) => setFrontRequestId(moment?.requestId ?? null), [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [step, setStep] = useState<StartStep>("upload")
   const [promptDraft, setPromptDraft] = useState("")
+  /** The address, mirrored: which screen, and which question and moment it is about. */
+  const [address, setAddress] = useState<Address>({ video: null, search: null, moment: null })
+  /** Move between the screens: write the address, then read it back. */
+  const go = useCallback((changes: Partial<Address>, mode: "push" | "replace" = "push") => {
+    writeSearchParams(changes, mode)
+    setAddress(readAddress())
+  }, [])
+  /**
+   * A new screen starts at its top. The screens share one scrolling
+   * region (the shell's), and pushState does not touch it — so "Open
+   * moment" pressed low on a long results page opened the moment page
+   * scrolled past its own heading and its way back.
+   */
+  const screenRoot = useRef<HTMLDivElement>(null)
+  const screenKey = `${address.search ?? ""}/${address.moment ?? ""}`
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+    for (let node = screenRoot.current?.parentElement ?? null; node; node = node.parentElement) {
+      if (node.scrollTop > 0) node.scrollTop = 0
+    }
+  }, [screenKey])
+  /** The moment in the centre of the stage, so the stage reopens on it and a report names its question. */
+  const [stagedMomentId, setStagedMomentId] = useState<string | null>(null)
+  const onStagedMomentChange = useCallback((moment: FeedMoment | undefined) => {
+    if (moment) setStagedMomentId(moment.match.id)
+  }, [])
+  /** Sound is one setting for the whole page: unmute once, stay unmuted from card to page. */
+  const [muted, setMuted] = useState(true)
   /**
    * The kept clip the publish screens are open for, if any. Only its
    * identity is held: whether its file is ready is read from the
@@ -107,7 +158,6 @@ export default function StartPage() {
    */
   const {
     uploads,
-    setUploads,
     startUploads,
     retryUpload,
     removeUpload,
@@ -121,27 +171,18 @@ export default function StartPage() {
   })
 
   /**
-   * Videos handed over from another door — the library uploads on /clips,
-   * then arrives here as ?videos=id,id. The batch is seeded so the carousel
-   * can walk it, and the first one opens.
+   * The address on arrival: a video opened from the library, a reload, a
+   * sign-in that came back. The video named there is opened, with its
+   * conversation, and the screen follows from the rest of the address.
    */
   useEffect(() => {
-    const handed = new URLSearchParams(window.location.search).get("videos")
-    if (!handed) return
-    const ids = handed.split(",").filter(Boolean)
-    if (ids.length === 0) return
-    // The address is consumed once the video has opened, in openFromLibrary
-    // — not here: a return whose loading fails must keep it, so a reload can
-    // try again (Devin's finding on #82).
-    setUploads(
-      ids.map((videoId, index) => ({
-        id: `handed-${index}-${videoId}`,
-        file: new File([], "Uploaded video"),
-        phase: "ready" as const,
-        videoId,
-      })),
-    )
-    void openFromLibrary(ids[0]!)
+    const first = readAddress()
+    setAddress(first)
+    // Back and Forward walk the screens; the page follows the address.
+    const onPop = () => setAddress(readAddress())
+    window.addEventListener("popstate", onPop)
+    if (first.video) void openFromLibrary(first.video)
+    return () => window.removeEventListener("popstate", onPop)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -272,12 +313,25 @@ export default function StartPage() {
    */
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
 
+  /**
+   * Which screen, from the address and the conversation: a moment named
+   * by the address that is on stage, else the results of the question the
+   * address names (the newest, if it names none or one that is not here),
+   * else home. Home is also where a video with no question yet is asked.
+   */
+  const stagedExchange = useMemo(
+    () => (video ? (exchanges.find((exchange) => exchange.request.id === address.search) ?? exchanges.at(-1) ?? null) : null),
+    [video, exchanges, address.search],
+  )
+  const stagedMoments = useMemo(() => (stagedExchange ? feedMoments([stagedExchange], video) : []), [stagedExchange, video])
+  const openMoment = address.moment ? stagedMoments.find((moment) => moment.match.id === address.moment) : undefined
+  const screen: "home" | "results" | "moment" = !stagedExchange ? "home" : openMoment ? "moment" : "results"
+
   // What a problem reported from this page is about: the video, and the
-  // question that owns the moment on screen — the newest question only
-  // when no moment is in front (Devin's finding on #88). Cleared on the
-  // way out.
+  // question on stage — the one that owns the moment on screen (Devin's
+  // finding on #88). Cleared on the way out.
   const reportVideoId = video?.id ?? null
-  const reportRequestId = frontRequestId ?? currentRequest?.id ?? null
+  const reportRequestId = stagedExchange?.request.id ?? currentRequest?.id ?? null
   useEffect(() => {
     setReportContext({ videoId: reportVideoId, clipRequestId: reportRequestId })
     return () => setReportContext({ videoId: null, clipRequestId: null })
@@ -297,7 +351,9 @@ export default function StartPage() {
       try {
         const { clipRequest: created } = await api.createClipRequest(video.id, instruction)
         setExchanges((previous) => [...previous, { request: created, clips: [] }])
-        setStep("review")
+        // Its results, where the search says what it is doing and its
+        // moments land as they are found.
+        go({ video: video.id, search: created.id, moment: null })
         return true
       } catch (cause) {
         fail(cause)
@@ -306,22 +362,20 @@ export default function StartPage() {
         setBusy(false)
       }
     },
-    [video, busy, fail],
+    [video, busy, fail, go],
   )
 
   const handleNext = useCallback(() => {
-    if (step !== "upload") return
-    if (searchRunning) {
-      setStep("review")
-      return
-    }
+    // One search at a time: the box under the results holds a second
+    // question back while one runs, and this holds the line if it did not.
+    if (searchRunning) return
     const instruction = promptDraft.trim()
     // A question goes as soon as the upload has landed; the answer waits for
-    // the rest inside the search, and the dialogue says what it is waiting on.
+    // the rest inside the search, and the results say what it is waiting on.
     if (!instruction || !askGate(video).accepting || busy) return
     setPromptDraft("")
     void startSearch(instruction)
-  }, [step, promptDraft, video, busy, searchRunning, startSearch])
+  }, [promptDraft, video, busy, searchRunning, startSearch])
 
   /**
    * Taking a file off the list takes it off the screen too: a video that was
@@ -335,10 +389,10 @@ export default function StartPage() {
         setVideo(null)
         setExchanges([])
         setPromptDraft("")
-        setStep("upload")
+        go({ video: null, search: null, moment: null }, "replace")
       }
     },
-    [uploads, removeUpload, video?.id],
+    [uploads, removeUpload, video?.id, go],
   )
 
   /** Resolves true once the server has taken the Re-clip; false when it refused, with the reason shown. */
@@ -600,9 +654,9 @@ export default function StartPage() {
     setVideo(null)
     setExchanges([])
     setError(null)
-    setStep("upload")
     setPromptDraft("")
-  }, [])
+    go({ video: null, search: null, moment: null }, "replace")
+  }, [go])
 
   const openFromLibrary = useCallback(
     async (videoIdToOpen: string) => {
@@ -617,10 +671,9 @@ export default function StartPage() {
         setExchanges(restored)
         setPromptDraft("")
         setVideo(opened)
-        setStep(hasReviewable(restored) ? "review" : "upload")
-        // Opened, with its conversation: the address no longer needs to say
-        // so. A reload from here must not re-open a stale batch.
-        consumeSearchParams(["videos"])
+        // Opened, with its conversation: the address says which video, so a
+        // reload lands back here.
+        go({ video: opened.id }, "replace")
       } catch (cause) {
         fail(cause)
       } finally {
@@ -628,7 +681,7 @@ export default function StartPage() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fail],
+    [fail, go],
   )
 
   /**
@@ -639,10 +692,8 @@ export default function StartPage() {
    */
   const parkVideoForSignIn = useCallback(() => {
     if (!video) return
-    const url = new URL(window.location.href)
-    url.searchParams.set("videos", video.id)
-    window.history.replaceState(window.history.state, "", url.toString())
-  }, [video])
+    go({ video: video.id }, "replace")
+  }, [video, go])
 
   // The parked publish, carried out once its moment is back on screen — and
   // only then taken out of the address, so a reload before this point tries
@@ -668,13 +719,33 @@ export default function StartPage() {
     )
   }
 
+  const stagedIndex = stagedExchange ? exchanges.findIndex((exchange) => exchange.request.id === stagedExchange.request.id) : -1
+  /** A screen's own address, for the links that lead to it. */
+  const addressOf = (parts: Address) => {
+    const params = new URLSearchParams()
+    if (parts.video) params.set("video", parts.video)
+    if (parts.search) params.set("search", parts.search)
+    if (parts.moment) params.set("moment", parts.moment)
+    const query = params.toString()
+    return query ? `/start?${query}` : "/start"
+  }
+  const momentHref = (moment: FeedMoment) => addressOf({ video: video?.id ?? null, search: moment.requestId, moment: moment.match.id })
+  const resultsHref = addressOf({ video: video?.id ?? null, search: stagedExchange?.request.id ?? null, moment: null })
+
   return (
     <WorkspaceShell active="start">
-      <div className="flex w-full flex-1 flex-col">
-        {step !== "review" ? (
-          <Wizard step={step}>
-            {step === "upload" && (
-              <UploadStep
+      <div ref={screenRoot} className="flex w-full flex-1 flex-col">
+        <AnimatePresence mode="wait" initial={false}>
+          {screen === "home" && (
+            <motion.div
+              key="home"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: EASE }}
+              className="flex w-full flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6"
+            >
+              <SearchHome
                 entries={uploads}
                 video={video}
                 promptValue={promptDraft}
@@ -683,31 +754,76 @@ export default function StartPage() {
                 onRemove={dropUpload}
                 onRetry={retryUpload}
                 onSubmit={handleNext}
-                onResume={() => setStep("review")}
                 disabled={busy}
-                searchInstruction={searchRunning ? currentRequest?.instruction : undefined}
               />
-            )}
-          </Wizard>
-        ) : (
-          <ReviewStep
-            exchanges={exchanges}
-            video={video}
-            busy={busy}
-            searching={searchRunning}
-            publishing={publishing !== null || publishPending}
-            keeping={keepingIds}
-            onFrontMomentChange={onFrontMomentChange}
-            onKeep={keepMatch}
-            onSkip={(requestId, matchId) => rateMatch(requestId, matchId, "rejected")}
-            onUndoSkip={(requestId, matchId) => rateMatch(requestId, matchId, null)}
-            onReclip={reclipMatch}
-            onAsk={(instruction) => (searchRunning ? false : startSearch(instruction))}
-            onRateAnswer={rateAnswer}
-            onPublish={publishMoment}
-            onUploadMore={reset}
-          />
-        )}
+            </motion.div>
+          )}
+
+          {screen === "results" && stagedExchange && (
+            <motion.div
+              key={`results-${stagedExchange.request.id}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: EASE }}
+              className="flex w-full flex-1 flex-col px-4 pb-16 sm:px-10"
+            >
+              <ResultsStage
+                exchange={stagedExchange}
+                video={video}
+                moments={stagedMoments}
+                followUp={stagedIndex > 0}
+                initialMomentId={stagedMomentId}
+                onActiveChange={onStagedMomentChange}
+                momentHref={momentHref}
+                onOpen={(moment) => go({ search: moment.requestId, moment: moment.match.id })}
+                others={exchanges
+                  .filter((exchange) => exchange.request.id !== stagedExchange.request.id)
+                  .map((exchange) => ({ id: exchange.request.id, instruction: exchange.request.instruction }))}
+                onPickOther={(requestId) => go({ search: requestId, moment: null })}
+                muted={muted}
+                onMutedChange={setMuted}
+              />
+              <div className="mx-auto mt-10 w-full max-w-[640px]">
+                <FollowUpComposer
+                  video={video}
+                  promptValue={promptDraft}
+                  onPromptChange={setPromptDraft}
+                  onSubmit={handleNext}
+                  disabled={busy}
+                  searching={searchRunning}
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {screen === "moment" && stagedExchange && openMoment && (
+            <motion.div
+              key={`moment-${openMoment.match.id}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: EASE }}
+              className="mx-auto w-full max-w-[1040px] px-4 pt-2 pb-10 sm:px-8"
+            >
+              <MomentConversation
+                moment={openMoment}
+                exchange={stagedExchange}
+                video={video}
+                moments={stagedMoments}
+                followUp={stagedIndex > 0}
+                searching={searchRunning}
+                backHref={resultsHref}
+                onBack={() => go({ moment: null })}
+                onAsk={(instruction) => (searchRunning ? false : startSearch(instruction))}
+                onReclip={(moment) => reclipMatch(moment.requestId, moment.match.id)}
+                onRateAnswer={rateAnswer}
+                muted={muted}
+                onMutedChange={setMuted}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <PublishDialog clip={publishable} onClose={() => setPublishing(null)} onSignIn={parkVideoForSignIn} />
         <ResumeAfterSignIn onPublish={setResumePublish} />

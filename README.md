@@ -21,8 +21,13 @@ npm run build
   questions answered, clips cut — counted from your rows, never estimated),
   your newest clips playable in place, and the post-performance panel that
   says plainly it fills once a social account is connected.
-- **`/start`** — the theater: upload or paste a YouTube link, watch the video
-  take the stage, and ask it for moments in plain words.
+- **`/start`** — the search screens, three addresses on one page: home
+  (`/start`) is one statement and one composer — attach a video, ask for a
+  moment in plain words; the results (`/start?video=…&search=…`) say what
+  the search said and put the moments on a coverflow with one in the centre
+  playing; a moment (`…&moment=…`) is the player and the conversation about
+  it, where a question is a new search and "re-cut it" reworks the moment.
+  Back walks the three, and a reload lands where it left off.
 - **`/clips`** — the library: every finished clip, playable in place,
   downloadable as a post-ready MP4, paged all the way back.
 - **`/publishing`** — where social account connections will live; clips
