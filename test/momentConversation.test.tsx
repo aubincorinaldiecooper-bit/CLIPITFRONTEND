@@ -329,6 +329,25 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     }
   })
 
+  it("a tap that could not open the sheet is not sprung later, when the screen comes back", async () => {
+    // The keyboard has left no room to rise. The tap does nothing, and must
+    // still be doing nothing once the keyboard closes (Devin's finding on #98).
+    const tall = window.innerHeight
+    window.innerHeight = 120
+    try {
+      renderPage(exchange())
+      await waitFor(() => expect(sheet().style.height).toBe("80px"))
+      fireEvent.click(handle())
+      expect(sheet().dataset.state).toBe("peek")
+      window.innerHeight = tall
+      fireEvent(window, new Event("resize"))
+      await waitFor(() => expect(sheet().style.height).toBe("118px"))
+      expect(sheet().dataset.state).toBe("peek")
+    } finally {
+      window.innerHeight = tall
+    }
+  })
+
   it("a tap on the question beside the handle opens the sheet too", async () => {
     renderPage(exchange())
     await waitFor(() => expect(sheet().dataset.state).toBe("peek"))

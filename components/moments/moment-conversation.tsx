@@ -233,8 +233,10 @@ export function MomentConversation({
   // owner's reference, and the sheet's follows from it.
   const openHeight = stageHeight > 0 ? openSheetHeight(stage, peek) : peek
   const sheetHeight = pulling ?? (sheet === "open" ? openHeight : peek)
-  /** Up, or on its way up: the thread shows. Not when the sheet cannot rise at all (the keyboard leaves no room): then it is a peek in every respect. */
-  const raised = (sheet === "open" || pulling !== null) && openHeight > peek
+  /** Whether there is room to rise at all: the keyboard may leave none. */
+  const canRise = openHeight > peek
+  /** Up, or on its way up: the thread shows. Never when the sheet cannot rise: then it is a peek in every respect. */
+  const raised = (sheet === "open" || pulling !== null) && canRise
   /** The card above the sheet — null until the stage is measured, while CSS holds the whole frame. */
   const card = stageHeight > 0 && stageWidth > 0 ? cardAt(stage, peek, openHeight, sheetHeight) : null
 
@@ -252,7 +254,15 @@ export function MomentConversation({
     if (thread) thread.scrollTop = thread.scrollHeight
   }, [phone, sheet, noteCount])
 
-  const toggleSheet = () => setSheet((current) => (current === "open" ? "peek" : "open"))
+  /**
+   * Where the sheet is to sit. Never "open" while it cannot rise: a tap
+   * that moved nothing must not be remembered and sprung minutes later,
+   * when the keyboard closes and the room comes back (Devin's finding on
+   * #98). A reply still opens it — that one is meant to be seen when the
+   * room returns.
+   */
+  const settleSheet = (next: Sheet) => setSheet(canRise ? next : "peek")
+  const toggleSheet = () => settleSheet(sheet === "open" ? "peek" : "open")
   const onHandleClick = () => {
     if (swallowClick.current) return
     toggleSheet()
@@ -295,7 +305,7 @@ export function MomentConversation({
     const pull = start.y - event.clientY
     const height = clamp(start.height + pull, peek, openHeight)
     const midway = (peek + openHeight) / 2
-    setSheet(pull > DECISIVE_PULL ? "open" : pull < -DECISIVE_PULL ? "peek" : height > midway ? "open" : "peek")
+    settleSheet(pull > DECISIVE_PULL ? "open" : pull < -DECISIVE_PULL ? "peek" : height > midway ? "open" : "peek")
   }
   const onPointerCancel = () => {
     press.current = null
