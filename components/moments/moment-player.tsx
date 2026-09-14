@@ -151,10 +151,17 @@ export interface MomentPlayerProps {
   onMutedChange: (muted: boolean) => void
   /** Start playing as soon as it can (muted — the browser allows nothing else unasked). */
   autoPlay?: boolean
+  /**
+   * The badges, expand, sound and seek. False draws only the picture and
+   * its play button: for a card that shows the frame's middle, which would
+   * crop those out of sight while leaving them in the tab order (Codex's
+   * finding on #98). Whoever asks for that draws the sound control itself.
+   */
+  controls?: boolean
   className?: string
 }
 
-export function MomentPlayer({ moment, video, compact = false, muted, onMutedChange, autoPlay = true, className }: MomentPlayerProps) {
+export function MomentPlayer({ moment, video, compact = false, muted, onMutedChange, autoPlay = true, controls = true, className }: MomentPlayerProps) {
   const label = momentTitle(moment.match)
   const source = moment.preview
   const containerRef = useRef<HTMLDivElement>(null)
@@ -239,7 +246,7 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
           "overflow-hidden bg-neutral-950 select-none fullscreen:aspect-auto fullscreen:h-screen fullscreen:w-screen fullscreen:rounded-none",
           compact
             ? "size-full rounded-[14px]"
-            : "h-[min(54vh,520px)] animate-rise-in rounded-[18px] shadow-[0_14px_40px_rgba(0,0,0,0.18)] max-[860px]:h-full max-[860px]:w-auto max-[860px]:max-w-full",
+            : "h-[min(54vh,520px)] animate-rise-in rounded-[18px] shadow-[0_14px_40px_rgba(0,0,0,0.18)] max-[860px]:size-full max-[860px]:rounded-[inherit] max-[860px]:shadow-none",
           className,
         )}
       >
@@ -280,6 +287,7 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
         </div>
 
         {/* Where the footage is from — with the picture, not below it. */}
+        {controls && (
         <span className={cn("absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5", chrome)}>
           {sourceHref ? (
             <Tooltip>
@@ -312,8 +320,9 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
             </span>
           )}
         </span>
+        )}
 
-        {!compact && (
+        {controls && !compact && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -367,10 +376,11 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
           </div>
         )}
 
-        {!compact && moment.match.reclipStatus === "failed" && moment.match.reclipError && (
+        {controls && !compact && moment.match.reclipStatus === "failed" && moment.match.reclipError && (
           <p className="absolute inset-x-3 bottom-14 z-10 rounded-xl bg-black/70 px-3 py-2 text-xs leading-snug text-white">{moment.match.reclipError}</p>
         )}
 
+        {controls && (
         <div
           className={cn(
             "absolute inset-x-0 bottom-0 z-10 flex items-center gap-3.5 bg-gradient-to-t from-black/40 to-transparent px-3.5 pt-8 pb-3.5",
@@ -421,6 +431,7 @@ export function MomentPlayer({ moment, video, compact = false, muted, onMutedCha
             {source ? `${asClock(playback.current)} / ${asClock(playback.total)}` : asClock(moment.match.durationSeconds)}
           </span>
         </div>
+        )}
       </AspectRatio>
     </TooltipProvider>
   )

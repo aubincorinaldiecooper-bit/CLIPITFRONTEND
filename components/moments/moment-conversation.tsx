@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react"
-import { ArrowLeft, Download, RotateCcw } from "lucide-react"
+import { ArrowLeft, Download, RotateCcw, Volume2, VolumeX } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import { Button, buttonVariants } from "@/components/space/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/space/tooltip"
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { Answer, answerActionClass } from "./answer"
 import { AskComposer } from "./ask-composer"
 import { MomentPlayer } from "./moment-player"
+import { TOP_ROW, cardAt, clamp, openSheetHeight } from "./stage-layout"
 import { useStageFrame } from "./use-stage-frame"
 
 /**
@@ -39,10 +40,17 @@ import { useStageFrame } from "./use-stage-frame"
  * the video plays, without interrupting it). The footage takes the room
  * above; the conversation is a sheet below it, at rest showing only the
  * question and the box, pulled up — by its handle, or with a tap — to show
- * the answer and the thread. Whatever the sheet does, the footage shrinks
- * to the room left and keeps playing; it is never re-mounted. The stage is
- * sized to the part of the screen the keyboard leaves (useStageFrame), so
- * the box sits above the keyboard and the footage above the box.
+ * the answer and the thread. With the sheet down the footage is the
+ * player, edge to edge, filling everything between the way back and the
+ * sheet; with the sheet up it is a card about half the screen wide and 3:4
+ * tall, with the sound control beside it — the owner's reference
+ * (2026-09-14: Instagram's comment view), whose arithmetic is
+ * stage-layout.ts. Either way the picture is the 9:16 frame drawn at the
+ * card's full width and centred, so a card shorter than the picture shows
+ * its middle. Whatever the sheet does, the footage is the same element and
+ * keeps playing; it is never re-mounted. The stage is sized to the part of
+ * the screen the keyboard leaves (useStageFrame), so the box sits above
+ * the keyboard and the footage above the box.
  *
  * Words that ask for THIS moment to be reworked — "tighten this one",
  * "re-cut it" — go to Re-clip; a question is a new search, and the page
@@ -70,20 +78,12 @@ export type AskOutcome = boolean | void
 
 /** The sheet's two resting places. */
 type Sheet = "peek" | "open"
-/** How much of the stage an open sheet takes. */
-const OPEN_SHARE = 0.52
-/** The stage's top row — the way back — in pixels. */
-const TOP_ROW = 40
-/** The least height the footage keeps above an open sheet: still a picture, not a sliver. */
-const MIN_FOOTAGE = 150
 /** The peek's height until it has been measured. */
 const PEEK_FALLBACK = 118
 /** A press that moved less than this many pixels is a tap. */
 const TAP_SLOP = 6
 /** A pull past this many pixels goes where it was pulling, whatever the midpoint says. */
 const DECISIVE_PULL = 40
-
-const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
 export interface MomentConversationProps {
   moment: FeedMoment
@@ -221,16 +221,24 @@ export function MomentConversation({
   }, [phone])
 
   const stageHeight = frame?.height ?? 0
+  const stageWidth = frame?.width ?? 0
+  const stage = { width: stageWidth, height: stageHeight }
   // Neither resting place runs past the room below the top row: a sheet
   // taller than the stage would have its bottom — the box and its send —
   // clipped away (Devin's finding on #97). The box itself has a ceiling on
   // a phone, so a long draft scrolls inside it rather than growing the peek.
   const room = stageHeight > 0 ? Math.max(0, stageHeight - TOP_ROW) : Number.POSITIVE_INFINITY
   const peek = Math.min(peekHeight, room)
-  const openHeight = Math.min(room, Math.max(peek, Math.min(Math.round(stageHeight * OPEN_SHARE), stageHeight - TOP_ROW - MIN_FOOTAGE)))
+  // Up, the sheet takes what the card leaves: the card's size is the
+  // owner's reference, and the sheet's follows from it.
+  const openHeight = stageHeight > 0 ? openSheetHeight(stage, peek) : peek
   const sheetHeight = pulling ?? (sheet === "open" ? openHeight : peek)
-  /** Up, or on its way up: the thread shows. */
-  const raised = sheet === "open" || pulling !== null
+  /** Whether there is room to rise at all: the keyboard may leave none. */
+  const canRise = openHeight > peek
+  /** Up, or on its way up: the thread shows. Never when the sheet cannot rise: then it is a peek in every respect. */
+  const raised = (sheet === "open" || pulling !== null) && canRise
+  /** The card above the sheet — null until the stage is measured, while CSS holds the whole frame. */
+  const card = stageHeight > 0 && stageWidth > 0 ? cardAt(stage, peek, openHeight, sheetHeight) : null
 
   // A reply nobody can see is no reply: the sheet rises to show one, and
   // the thread keeps its newest line in view. While the sheet is down the
@@ -246,7 +254,15 @@ export function MomentConversation({
     if (thread) thread.scrollTop = thread.scrollHeight
   }, [phone, sheet, noteCount])
 
-  const toggleSheet = () => setSheet((current) => (current === "open" ? "peek" : "open"))
+  /**
+   * Where the sheet is to sit. Never "open" while it cannot rise: a tap
+   * that moved nothing must not be remembered and sprung minutes later,
+   * when the keyboard closes and the room comes back (Devin's finding on
+   * #98). A reply still opens it — that one is meant to be seen when the
+   * room returns.
+   */
+  const settleSheet = (next: Sheet) => setSheet(canRise ? next : "peek")
+  const toggleSheet = () => settleSheet(sheet === "open" ? "peek" : "open")
   const onHandleClick = () => {
     if (swallowClick.current) return
     toggleSheet()
@@ -289,7 +305,7 @@ export function MomentConversation({
     const pull = start.y - event.clientY
     const height = clamp(start.height + pull, peek, openHeight)
     const midway = (peek + openHeight) / 2
-    setSheet(pull > DECISIVE_PULL ? "open" : pull < -DECISIVE_PULL ? "peek" : height > midway ? "open" : "peek")
+    settleSheet(pull > DECISIVE_PULL ? "open" : pull < -DECISIVE_PULL ? "peek" : height > midway ? "open" : "peek")
   }
   const onPointerCancel = () => {
     press.current = null
@@ -330,8 +346,41 @@ export function MomentConversation({
       </div>
 
       <div className="flex items-start gap-12 max-[860px]:min-h-0 max-[860px]:flex-1 max-[860px]:flex-col max-[860px]:gap-0">
-        <div className="shrink-0 max-[860px]:flex max-[860px]:min-h-0 max-[860px]:w-full max-[860px]:flex-1 max-[860px]:items-center max-[860px]:justify-center max-[860px]:px-4 max-[860px]:py-2">
-          <MomentPlayer key={moment.match.id} moment={moment} video={video} muted={muted} onMutedChange={onMutedChange} />
+        <div className="relative shrink-0 max-[860px]:flex max-[860px]:min-h-0 max-[860px]:w-full max-[860px]:flex-1 max-[860px]:items-center max-[860px]:justify-center">
+          {/* The card the player fills: with the sheet down, the screen's
+              width and all the room there is, square to the edges; up, the
+              3:4 card with its corners; between them a blend that follows
+              the finger. The player draws the 9:16 picture at this width
+              and clips what will not fit, so a shorter card shows the
+              middle. Until the stage is measured, CSS fills the room. */}
+          <div
+            data-testid="footage-card"
+            style={card ? { width: card.width, height: card.height, borderRadius: card.radius } : undefined}
+            className={cn(
+              "max-[860px]:size-full max-[860px]:overflow-hidden",
+              "max-[860px]:transition-[width,height,border-radius] max-[860px]:duration-300 max-[860px]:ease-[cubic-bezier(0.32,0.72,0,1)]",
+              pulling !== null && "max-[860px]:transition-none",
+            )}
+          >
+            {/* With the sheet up the card is small and the reference keeps it
+                clean: the player draws only the picture, and the sound
+                control beside the card stands in for its own. */}
+            <MomentPlayer key={moment.match.id} moment={moment} video={video} muted={muted} onMutedChange={onMutedChange} controls={!(phone && raised)} />
+          </div>
+          {phone && raised && (
+            // The card shows the frame's middle, so the player's own sound
+            // control is out of view; the reference puts one beside the card.
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={muted ? "Unmute" : "Mute"}
+              data-testid="card-sound"
+              onClick={() => onMutedChange(!muted)}
+              className="absolute right-3 bottom-2 size-10 rounded-full bg-black/60 text-white hover:bg-black/70 hover:text-white"
+            >
+              {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+            </Button>
+          )}
         </div>
 
         <section

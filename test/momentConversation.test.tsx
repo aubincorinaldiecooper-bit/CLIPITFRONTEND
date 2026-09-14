@@ -240,20 +240,43 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     expect(box()).toBeTruthy()
     // The thread is in the page for the sheet to show; the peek's CSS puts it away.
     expect(screen.getByTestId("conversation-thread").className).toContain("max-[860px]:hidden")
-    expect(screen.getByTestId("moment-player").className).toContain("max-[860px]:h-full")
-    // At rest the sheet is exactly the peek tall (jsdom measures nothing, so the fallback stands).
+    // At rest the sheet is exactly the peek tall (jsdom measures nothing, so the
+    // fallback stands), and the footage is the screen's full width and all the
+    // room above the sheet, square to the edges (jsdom's window is 1024 by 768).
     expect(sheet().style.height).toBe("118px")
+    const card = screen.getByTestId("footage-card")
+    expect([card.style.width, card.style.height, card.style.borderRadius]).toEqual(["1024px", "610px", "0px"])
+    expect(screen.getByTestId("moment-player").className).toContain("max-[860px]:size-full")
+    expect(screen.queryByTestId("card-sound")).toBeNull()
+    // Down, the card is the whole frame and the player's own controls are in it.
+    expect(screen.getByRole("button", { name: "Expand" })).toBeTruthy()
+    expect(screen.getAllByRole("button", { name: /^(Mute|Unmute)$/ })).toHaveLength(1)
   })
 
-  it("the handle opens and closes the sheet; open, it takes its share of the stage", async () => {
+  it("the handle opens and closes the sheet; open, the footage is the reference's card and the sheet has the rest", async () => {
     const user = userEvent.setup()
-    renderPage(exchange())
+    const onMutedChange = vi.fn()
+    renderPage(exchange(), { muted: false, onMutedChange })
     await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
     await user.click(handle())
     expect(sheet().dataset.state).toBe("open")
     expect(handle().getAttribute("aria-expanded")).toBe("true")
-    // jsdom's window is 768 tall: 52% of it, with the footage keeping its minimum.
-    expect(sheet().style.height).toBe("399px")
+    // Up, the card is the 3:4 window at its ceiling width, and the sheet has what it leaves
+    // of the 768px: 768 − 40 (top row) − 16 (margins) − 373 (the card).
+    expect(sheet().style.height).toBe("339px")
+    const card = screen.getByTestId("footage-card")
+    expect([card.style.width, card.style.height, card.style.borderRadius]).toEqual(["280px", "373px", "18px"])
+    // The sound control sits beside the card, since the card shows the frame's middle.
+    const sound = screen.getByTestId("card-sound")
+    expect(sound.getAttribute("aria-label")).toBe("Mute")
+    await user.click(sound)
+    expect(onMutedChange).toHaveBeenCalledWith(true)
+    // The card crops the player's own controls out of sight, so they are not
+    // there to take focus: the one sound control is the card's, and there is
+    // no expand, seek or time.
+    expect(screen.getAllByRole("button", { name: /^(Mute|Unmute)$/ })).toHaveLength(1)
+    expect(screen.queryByRole("button", { name: "Expand" })).toBeNull()
+    expect(screen.queryByTestId("moment-time")).toBeNull()
     await user.click(handle())
     expect(sheet().dataset.state).toBe("peek")
   })
@@ -269,7 +292,7 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     expect(sheet().style.height).toBe("218px")
     fireEvent.pointerUp(head, { clientY: 600, pointerId: 1 })
     expect(sheet().dataset.state).toBe("open")
-    expect(sheet().style.height).toBe("399px")
+    expect(sheet().style.height).toBe("339px")
 
     fireEvent.pointerDown(head, { clientY: 300, pointerId: 1, button: 0 })
     fireEvent.pointerMove(head, { clientY: 400, pointerId: 1 })
@@ -301,6 +324,25 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
       renderPage(exchange())
       await waitFor(() => expect(sheet().dataset.state).toBe("peek"))
       await waitFor(() => expect(sheet().style.height).toBe("80px"))
+    } finally {
+      window.innerHeight = tall
+    }
+  })
+
+  it("a tap that could not open the sheet is not sprung later, when the screen comes back", async () => {
+    // The keyboard has left no room to rise. The tap does nothing, and must
+    // still be doing nothing once the keyboard closes (Devin's finding on #98).
+    const tall = window.innerHeight
+    window.innerHeight = 120
+    try {
+      renderPage(exchange())
+      await waitFor(() => expect(sheet().style.height).toBe("80px"))
+      fireEvent.click(handle())
+      expect(sheet().dataset.state).toBe("peek")
+      window.innerHeight = tall
+      fireEvent(window, new Event("resize"))
+      await waitFor(() => expect(sheet().style.height).toBe("118px"))
+      expect(sheet().dataset.state).toBe("peek")
     } finally {
       window.innerHeight = tall
     }

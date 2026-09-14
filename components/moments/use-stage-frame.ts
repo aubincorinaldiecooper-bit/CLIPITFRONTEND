@@ -22,6 +22,11 @@ export interface StageFrame {
   shift: number
 }
 
+/** What the hook hands the stage: its frame, and the width of the screen it is on. */
+export interface StageMetrics extends StageFrame {
+  width: number
+}
+
 /** The part of the page on screen: its top in page pixels, and its height. */
 export interface VisibleArea {
   top: number
@@ -49,8 +54,8 @@ function pageTop(element: HTMLElement): number {
  * visible part of the page changes — the keyboard, a rotation, a pan.
  * Null while inactive, so a wide screen is left to its own layout.
  */
-export function useStageFrame(stage: RefObject<HTMLElement | null>, active: boolean): StageFrame | null {
-  const [frame, setFrame] = useState<StageFrame | null>(null)
+export function useStageFrame(stage: RefObject<HTMLElement | null>, active: boolean): StageMetrics | null {
+  const [frame, setFrame] = useState<StageMetrics | null>(null)
 
   useEffect(() => {
     if (!active) {
@@ -68,8 +73,10 @@ export function useStageFrame(stage: RefObject<HTMLElement | null>, active: bool
       const visible: VisibleArea = viewport
         ? { top: viewport.pageTop, height: viewport.height }
         : { top: window.scrollY, height: window.innerHeight }
-      const next = stageFrame(visible, pageTop(element))
-      setFrame((current) => (current && current.height === next.height && current.shift === next.shift ? current : next))
+      const next: StageMetrics = { ...stageFrame(visible, pageTop(element)), width: Math.round(viewport?.width ?? window.innerWidth) }
+      setFrame((current) =>
+        current && current.height === next.height && current.shift === next.shift && current.width === next.width ? current : next,
+      )
     }
     // One measure per frame, however many events a pan fires.
     const schedule = () => {
