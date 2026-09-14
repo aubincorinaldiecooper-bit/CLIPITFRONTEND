@@ -426,18 +426,34 @@ async function request<T>(path: string, init: RequestInit = {}, retryOn401 = tru
 }
 
 
+/** What a stopped upload rejects with — the same shape a stopped fetch uses. */
+export function uploadCancelled(): DOMException {
+  return new DOMException("The upload was stopped.", "AbortError")
+}
+
 /**
  * One PUT, by XHR — the only way to watch upload progress — resolving with
  * the response's ETag (a part-by-part upload's receipt; harmless otherwise).
+ * A `signal` that aborts stops the transfer where it is: the bytes not yet
+ * sent stay unsent (Devin's finding on #96: a replaced upload kept going).
  */
 function putOnce(
   url: string,
   body: Blob,
   headers: Record<string, string>,
   onProgress: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? uploadCancelled())
+      return
+    }
     const xhr = new XMLHttpRequest()
+    const stop = () => xhr.abort()
+    signal?.addEventListener("abort", stop, { once: true })
+    xhr.addEventListener("loadend", () => signal?.removeEventListener("abort", stop))
+    xhr.addEventListener("abort", () => reject(signal?.reason ?? uploadCancelled()))
     xhr.open("PUT", url, true)
     for (const [header, value] of Object.entries(headers)) {
       xhr.setRequestHeader(header, value)
@@ -532,6 +548,8 @@ export const api = {
     target: UploadTarget,
     file: File,
     onProgress: (fraction: number) => void,
+    /** Stops the transfer where it is; a part-by-part upload is then abandoned in storage too. */
+    signal?: AbortSignal,
   ): Promise<{ multipart?: { uploadId: string; parts: Array<{ partNumber: number; etag: string }> } }> {
     // A big file goes in pieces. Each slice's URL is asked for FRESH just
     // before the slice is sent — presigning the whole set up front gave every
@@ -542,11 +560,17 @@ export const api = {
       const parts: Array<{ partNumber: number; etag: string }> = []
       try {
         for (let index = 0; index < partCount; index += 1) {
+          if (signal?.aborted) throw signal.reason ?? uploadCancelled()
           const slice = file.slice(index * partSizeBytes, (index + 1) * partSizeBytes)
           const { url } = await api.createPartUploadUrl(videoId, uploadId, index + 1, slice.size)
-          const etag = await putOnce(url, slice, {}, (fraction) =>
-            // Whole-file progress: the slices already sent, plus this one's own.
-            onProgress((index * partSizeBytes + fraction * slice.size) / file.size),
+          const etag = await putOnce(
+            url,
+            slice,
+            {},
+            (fraction) =>
+              // Whole-file progress: the slices already sent, plus this one's own.
+              onProgress((index * partSizeBytes + fraction * slice.size) / file.size),
+            signal,
           )
           parts.push({ partNumber: index + 1, etag })
         }
@@ -559,7 +583,7 @@ export const api = {
       return { multipart: { uploadId, parts } }
     }
     if (!target.url) throw new ApiError(500, "bad_upload_target", "The upload target carries no URL.")
-    await putOnce(target.url, file, target.headers, onProgress)
+    await putOnce(target.url, file, target.headers, onProgress, signal)
     return {}
   },
 

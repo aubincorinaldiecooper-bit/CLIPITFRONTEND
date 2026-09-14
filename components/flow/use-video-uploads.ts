@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
-import { api, ApiError } from "@/lib/api"
+import { api, ApiError, uploadCancelled } from "@/lib/api"
 import type { Video } from "@/lib/types"
 import { MAX_FILES, MAX_FILE_BYTES, type UploadEntry } from "@/components/flow/upload-package"
 
@@ -72,12 +72,30 @@ export function useVideoUploads({
   }, [])
 
   /**
+   * One handle per transfer in flight, so taking a row off the list stops
+   * its bytes — a replaced 4 GB upload used to carry on to the end and put
+   * its video in the library anyway (Devin's finding on #96).
+   */
+  const transfers = useRef(new Map<string, AbortController>())
+  const stopTransfer = useCallback((id: string) => {
+    transfers.current.get(id)?.abort(uploadCancelled())
+    transfers.current.delete(id)
+  }, [])
+
+  /**
    * Carry one file all the way: ask for a slot, send the bytes — in one PUT,
    * or part by part for a big file — seal a part-by-part upload, then tell
    * the server it landed. Every failure is written onto that file's own row.
+   * A transfer stopped on the way is not a failure and is not marked as
+   * landed: the server never hears that its bytes arrived, because they did
+   * not.
    */
   const runUpload = useCallback(
     async (entry: UploadEntry) => {
+      const controller = new AbortController()
+      transfers.current.get(entry.id)?.abort(uploadCancelled())
+      transfers.current.set(entry.id, controller)
+      const { signal } = controller
       patchUpload(entry.id, { phase: "uploading", progress: 0, error: undefined })
       try {
         const { video: created, upload } = await api.createUpload(
@@ -85,22 +103,34 @@ export function useVideoUploads({
           entry.file.type || undefined,
           entry.file.size,
         )
+        if (signal.aborted) return null
         patchUpload(entry.id, { videoId: created.id })
-        const outcome = await api.uploadFile(created.id, upload, entry.file, (fraction) =>
-          patchUpload(entry.id, { progress: fraction }),
+        const outcome = await api.uploadFile(
+          created.id,
+          upload,
+          entry.file,
+          (fraction) => patchUpload(entry.id, { progress: fraction }),
+          signal,
         )
+        if (signal.aborted) return null
         if (outcome.multipart) {
           await api.completeMultipartUpload(created.id, outcome.multipart.uploadId, outcome.multipart.parts)
         }
+        if (signal.aborted) return null
         const { video: queued } = await api.markUploaded(created.id)
         patchUpload(entry.id, { phase: "ready", progress: 1, videoId: queued.id })
         return queued
       } catch (cause) {
+        // Stopped, not failed: the row is already gone, and there is nothing
+        // to say on it.
+        if (signal.aborted) return null
         patchUpload(entry.id, {
           phase: "failed",
           error: cause instanceof ApiError ? cause.message : "Upload failed. Try again.",
         })
         return null
+      } finally {
+        if (transfers.current.get(entry.id) === controller) transfers.current.delete(entry.id)
       }
     },
     [patchUpload],
@@ -194,9 +224,20 @@ export function useVideoUploads({
     [runUpload],
   )
 
-  const removeUpload = useCallback((id: string) => {
-    setUploads((current) => current.filter((entry) => entry.id !== id))
-  }, [])
+  /** Take a row off the list, and stop its transfer if one is still going. */
+  const removeUpload = useCallback(
+    (id: string) => {
+      stopTransfer(id)
+      setUploads((current) => current.filter((entry) => entry.id !== id))
+    },
+    [stopTransfer],
+  )
+
+  /** Empty the list, stopping every transfer still going. */
+  const clearUploads = useCallback(() => {
+    for (const id of Array.from(transfers.current.keys())) stopTransfer(id)
+    setUploads([])
+  }, [stopTransfer])
 
   return {
     uploads,
@@ -205,6 +246,7 @@ export function useVideoUploads({
     startUploads,
     retryUpload,
     removeUpload,
+    clearUploads,
     overLimit,
     clearOverLimit,
   }

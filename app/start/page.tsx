@@ -164,7 +164,7 @@ export default function StartPage() {
    */
   const {
     uploads,
-    setUploads,
+    clearUploads,
     startUploads,
     retryUpload,
     removeUpload,
@@ -660,19 +660,26 @@ export default function StartPage() {
   )
 
   /**
-   * Nothing attached, nothing asked: home, empty. The tray goes too — a
-   * row whose upload had already landed would otherwise sit there with no
-   * way of becoming the video searched, its landing having already been
-   * reported (Devin's finding on #95).
+   * Another video takes the place of the one attached. Everything about the
+   * old one goes — its rows (their transfers stopped), its conversation, its
+   * address — and the question typed stays: it was about to be asked of the
+   * new video, and clearing it made a person type it twice (Devin's finding
+   * on #96). The tray goes with the video so a landed row is never left with
+   * no way of becoming the video searched (Devin's finding on #95).
    */
-  const reset = useCallback(() => {
+  const replaceVideo = useCallback(() => {
+    clearUploads()
     setVideo(null)
     setExchanges([])
-    setUploads([])
     setError(null)
-    setPromptDraft("")
     go({ video: null, search: null, moment: null }, "replace")
-  }, [go, setUploads])
+  }, [clearUploads, go])
+
+  /** Nothing attached, nothing asked: home, empty. */
+  const reset = useCallback(() => {
+    replaceVideo()
+    setPromptDraft("")
+  }, [replaceVideo])
 
   const openFromLibrary = useCallback(
     async (videoIdToOpen: string) => {
@@ -771,6 +778,7 @@ export default function StartPage() {
                 onRemove={dropUpload}
                 onRetry={retryUpload}
                 onSubmit={handleNext}
+                onReplace={replaceVideo}
                 onDetach={reset}
                 disabled={busy}
               />

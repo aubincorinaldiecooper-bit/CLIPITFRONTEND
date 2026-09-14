@@ -79,8 +79,12 @@ Every control ships laid out properly, and nothing moves when you use it.
 
 Settled decisions — hold every screen to these:
 
-- **Two type voices, one job each.** Instrument Serif is the wordmark's
-  voice and nothing else's. Every other word in the interface is Geist.
+- **Two type voices, one job each.** The wordmark is the Logo component
+  (components/brand/logo.tsx): Inter ExtraBold, to the owner's spec, drawn
+  by the landing header and footer and by the search shell, and that voice
+  belongs to nothing else. Every other word in the interface is Geist.
+  (This line used to name Instrument Serif; no font by that name is loaded
+  anywhere, and the wordmark never wore it.)
 - **A contrast floor for grey text.** On the dark ground, body-size text
   never drops below 60% foreground opacity; display-size text may go to
   50%. Anything fainter is decoration and must not carry words.
