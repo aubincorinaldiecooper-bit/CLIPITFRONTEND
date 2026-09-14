@@ -25,6 +25,10 @@ export const CARD_ASPECT = 3 / 4
 export const FRAME_ASPECT = 9 / 16
 /** The card's side margins when it is the whole frame. */
 const FRAME_GUTTER = 16
+/** The least thread an open sheet is worth: under this, a reply is a sliver between the question and the box. */
+export const MIN_THREAD = 120
+/** The least card worth keeping above an open sheet — still a picture. */
+export const MIN_CARD = 120
 
 export const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
@@ -34,14 +38,22 @@ export function cardRoom(stageHeight: number, sheetHeight: number): number {
 }
 
 /**
- * The sheet's height when it is up: what is left once the card has its room
- * — never under the peek, never past the room below the top row. The card's
- * size is the reference; the sheet's is what follows from it.
+ * The sheet's height when it is up. The card's size is the reference and
+ * the sheet has what it leaves — as long as that holds a thread worth
+ * reading. When it does not (the keyboard has taken most of the screen),
+ * the thread keeps its least height and the card shrinks to what is left,
+ * down to the least card worth keeping; past that the sheet cannot rise
+ * at all and stays at its peek (Devin's finding on #98). Never past the
+ * room below the top row.
  */
 export function openSheetHeight(stage: Size, peek: number): number {
-  const width = Math.min(stage.width * CARD_SHARE, CARD_MAX_WIDTH)
   const room = Math.max(0, stage.height - TOP_ROW)
-  return Math.round(clamp(stage.height - TOP_ROW - CARD_MARGIN * 2 - width / CARD_ASPECT, Math.min(peek, room), room))
+  const width = Math.min(stage.width * CARD_SHARE, CARD_MAX_WIDTH)
+  const withCard = room - CARD_MARGIN * 2 - width / CARD_ASPECT
+  const least = peek + MIN_THREAD
+  if (withCard >= least) return Math.round(withCard)
+  if (room - CARD_MARGIN * 2 - MIN_CARD >= least) return Math.round(least)
+  return Math.round(Math.min(peek, room))
 }
 
 /** With the sheet down: the whole frame, as large as the room allows. */

@@ -358,7 +358,10 @@ export function MomentConversation({
                 pulling !== null && "max-[860px]:transition-none",
               )}
             >
-              <MomentPlayer key={moment.match.id} moment={moment} video={video} muted={muted} onMutedChange={onMutedChange} />
+              {/* With the sheet up the card crops the player's own controls out of
+                  sight; they go, so nothing unseen takes focus, and the sound
+                  control beside the card stands in. */}
+              <MomentPlayer key={moment.match.id} moment={moment} video={video} muted={muted} onMutedChange={onMutedChange} controls={!(phone && raised)} />
             </div>
           </div>
           {phone && raised && (

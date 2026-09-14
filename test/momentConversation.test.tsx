@@ -247,6 +247,9 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     expect([card.style.width, card.style.height]).toEqual(["334px", "594px"])
     expect(screen.getByTestId("moment-player").className).toContain("max-[860px]:size-full")
     expect(screen.queryByTestId("card-sound")).toBeNull()
+    // Down, the card is the whole frame and the player's own controls are in it.
+    expect(screen.getByRole("button", { name: "Expand" })).toBeTruthy()
+    expect(screen.getAllByRole("button", { name: /^(Mute|Unmute)$/ })).toHaveLength(1)
   })
 
   it("the handle opens and closes the sheet; open, the footage is the reference's card and the sheet has the rest", async () => {
@@ -267,6 +270,12 @@ describe("On a phone: the footage above, the conversation a sheet below", () => 
     expect(sound.getAttribute("aria-label")).toBe("Mute")
     await user.click(sound)
     expect(onMutedChange).toHaveBeenCalledWith(true)
+    // The card crops the player's own controls out of sight, so they are not
+    // there to take focus: the one sound control is the card's, and there is
+    // no expand, seek or time.
+    expect(screen.getAllByRole("button", { name: /^(Mute|Unmute)$/ })).toHaveLength(1)
+    expect(screen.queryByRole("button", { name: "Expand" })).toBeNull()
+    expect(screen.queryByTestId("moment-time")).toBeNull()
     await user.click(handle())
     expect(sheet().dataset.state).toBe("peek")
   })

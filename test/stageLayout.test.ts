@@ -36,11 +36,23 @@ describe("stage layout", () => {
     expect(midway.height).toBe(442)
   })
 
-  it("with the keyboard up the sheet cannot rise above the peek, and the card is the whole frame in the room left", () => {
-    // 508px visible, 444 of it the stage.
+  it("with the keyboard up, the thread keeps its least height and the card shrinks to what is left", () => {
+    // iOS, panned: the stage is the whole 508px visible. The reference card
+    // would leave the thread 40px; instead the thread gets 120 and the card
+    // the 206 that remain, still 3:4.
+    const panned = { width: 390, height: 508 }
+    expect(openSheetHeight(panned, peek)).toBe(246)
+    expect(openCard(panned, 246)).toEqual({ width: 155, height: 206 })
+    // The same rule, with 444 of it the stage.
     const short = { width: 390, height: 444 }
-    expect(openSheetHeight(short, peek)).toBe(peek)
-    expect(cardAt(short, peek, peek, peek)).toEqual({ width: 147, height: 262 })
+    expect(openSheetHeight(short, peek)).toBe(246)
+    expect(openCard(short, 246)).toEqual({ width: 107, height: 142 })
+  })
+
+  it("when not even the least card fits above the least thread, the sheet cannot rise, and the card is the whole frame", () => {
+    const cramped = { width: 390, height: 300 }
+    expect(openSheetHeight(cramped, peek)).toBe(peek)
+    expect(cardAt(cramped, peek, peek, peek)).toEqual(peekCard(cramped, peek))
   })
 
   it("the frame behind the card is the whole 9:16 picture at the card's width", () => {
