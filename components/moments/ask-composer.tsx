@@ -110,7 +110,10 @@ export function AskComposer({
           rows={1}
           className={cn(
             "resize-none border-0 bg-transparent shadow-none focus-visible:border-0 focus-visible:ring-0 disabled:bg-transparent",
-            home ? "min-h-16 rounded-[20px] px-[18px] pt-4 pb-1 text-[15px] md:text-[15px]" : "min-h-[42px] px-3 py-2.5 text-sm",
+            // Sixteen-pixel words on a phone: anything smaller makes Safari on
+            // iOS zoom the whole page in when the box is focused, and the
+            // footage with it.
+            home ? "min-h-16 rounded-[20px] px-[18px] pt-4 pb-1 text-base md:text-[15px]" : "min-h-[42px] px-3 py-2.5 text-base md:text-sm",
           )}
         />
         {!home && (

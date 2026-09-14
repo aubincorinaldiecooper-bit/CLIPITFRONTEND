@@ -24,23 +24,33 @@ import { useWorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
  * unchanged.
  */
 
-interface ProfileLink {
+export interface ProfileLink {
   label: string
   href: string
   icon: React.ReactNode
   value?: string
 }
 
-// The library has its own first-class destination in the app rail, so this
-// menu stays about the account rather than duplicating navigation.
-const LINKS: ProfileLink[] = []
-
 function initialsOf(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2)
   return parts.map((part) => part.charAt(0).toUpperCase()).join("") || "G"
 }
 
-export function ProfileDropdown({ compact = false }: { compact?: boolean }) {
+export interface ProfileDropdownProps {
+  compact?: boolean
+  /**
+   * Destinations the menu carries, for everyone — signed in or not. Inside
+   * the workspace rail there are none: the rail is the navigation, and the
+   * menu stays about the account. The search shell has no rail (the owner,
+   * 2026-09-14: the mark and the account, nothing else), so it hands the
+   * menu the library and the shared rooms.
+   */
+  links?: ProfileLink[]
+  /** Which edge of the button the menu lines up with: the rail's menu opens rightward, a header's right-hand one leftward. */
+  align?: "start" | "end"
+}
+
+export function ProfileDropdown({ compact = false, links = [], align = "start" }: ProfileDropdownProps) {
   const { data: session, isPending } = authClient.useSession()
   const { askToSignIn } = useWorkspaceSignInGate()
   const [configured, setConfigured] = useState<boolean | null>(null)
@@ -97,10 +107,10 @@ export function ProfileDropdown({ compact = false }: { compact?: boolean }) {
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" sideOffset={6} className="shadcn-scope w-64 rounded-2xl p-2">
-        {user ? (
+      <DropdownMenuContent align={align} sideOffset={6} className="shadcn-scope w-64 rounded-2xl p-2">
+        {links.length > 0 && (
           <>
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <DropdownMenuItem asChild key={link.label}>
                 <Link href={link.href} className="cursor-pointer rounded-xl p-3">
                   {link.icon}
@@ -113,9 +123,11 @@ export function ProfileDropdown({ compact = false }: { compact?: boolean }) {
                 </Link>
               </DropdownMenuItem>
             ))}
-
-            {LINKS.length > 0 && <DropdownMenuSeparator className="my-2" />}
-
+            <DropdownMenuSeparator className="my-2" />
+          </>
+        )}
+        {user ? (
+          <>
             <DropdownMenuItem
               className="cursor-pointer rounded-xl p-3 text-destructive focus:text-destructive"
               onClick={() => {

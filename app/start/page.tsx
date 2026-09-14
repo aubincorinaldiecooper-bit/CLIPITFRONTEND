@@ -830,7 +830,7 @@ export default function StartPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22, ease: EASE }}
-              className="mx-auto w-full max-w-[1040px] px-4 pt-2 pb-10 sm:px-8"
+              className="mx-auto w-full max-w-[1040px] px-4 pt-2 pb-10 sm:px-8 max-[860px]:px-0 max-[860px]:pt-0 max-[860px]:pb-0"
             >
               <MomentConversation
                 moment={openMoment}

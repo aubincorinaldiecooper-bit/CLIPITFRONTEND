@@ -141,11 +141,14 @@ export function Answer({ text, quote, streamed = true, metadata, requestId, onRa
         </p>
       )}
 
-      <div className="mt-3.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span className="inline-flex min-w-0 items-baseline gap-1.5 truncate text-[11.5px]" data-testid="answer-metadata">
+      {/* Beside each other on a wide screen; on a phone the line would be cut
+          off mid-word by the actions, so it takes the first row and the
+          actions the next, at the right. */}
+      <div className="mt-3.5 flex items-center justify-between gap-3 text-xs text-muted-foreground max-[860px]:flex-wrap max-[860px]:gap-y-2">
+        <span className="inline-flex min-w-0 items-baseline gap-1.5 truncate text-[11.5px] max-[860px]:basis-full" data-testid="answer-metadata">
           {metadata}
         </span>
-        <span className="flex items-center gap-0.5 opacity-70 transition-opacity group-hover/answer:opacity-100 focus-within:opacity-100">
+        <span className="flex items-center gap-0.5 opacity-70 transition-opacity group-hover/answer:opacity-100 focus-within:opacity-100 max-[860px]:ml-auto">
           <TooltipProvider delay={400}>
             <Tooltip>
               <TooltipTrigger
