@@ -582,3 +582,17 @@ export interface InvitePreview {
   workspaceName: string | null
   email: string | null
 }
+
+/**
+ * Something the internet search found worth watching: a page, not a file.
+ * The browser runtime opens it and the model watches the result, so there is
+ * no media URL here to download.
+ */
+export interface InternetCandidate {
+  id: string
+  query: string
+  title: string
+  pageUrl: string
+  thumbnailUrl: string | null
+  source: string | null
+}

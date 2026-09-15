@@ -20,6 +20,7 @@ import type {
   WorkspaceSummary,
   WorkspacesPage,
   UploadTarget,
+  InternetCandidate,
   Video,
 } from "./types"
 
@@ -667,6 +668,17 @@ export const api = {
 
   async getClipRequest(requestId: string): Promise<{ clipRequest: ClipRequest; clips: Clip[] }> {
     return request(`/api/clip-requests/${requestId}`)
+  },
+
+  /**
+   * Ask the internet, rather than a video you uploaded. Whatever was typed is
+   * what is searched, passed through as it was written.
+   */
+  async internetSearch(query: string): Promise<{ query: string; candidates: InternetCandidate[] }> {
+    return request(`/api/internet-search`, {
+      method: "POST",
+      body: JSON.stringify({ query }),
+    })
   },
 
   /**
