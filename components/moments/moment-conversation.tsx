@@ -6,7 +6,7 @@ import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import { Button, buttonVariants } from "@/components/space/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/space/tooltip"
 import { acknowledgeLine, candidatesLine, progressLine } from "@/components/start/answer-words"
-import { askGate } from "@/components/start/ask-gate"
+import { askAboutVideoGate } from "@/components/start/ask-gate"
 import { isEditRequest, isSearching, reclipNoteText, referencedIndex, sourceWords } from "@/components/start/conversation"
 import { evidenceWords, formatRange, momentTitle, type FeedMoment } from "@/components/start/moments"
 import { StreamedText } from "@/components/start/streamed-text"
@@ -312,7 +312,7 @@ export function MomentConversation({
     setPulling(null)
   }
 
-  const gate = askGate(video)
+  const gate = askAboutVideoGate(video)
   const disabled = searching || !gate.accepting
   const placeholder = searching ? "Still looking…" : (gate.placeholder ?? "Ask about this moment…")
 

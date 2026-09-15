@@ -66,7 +66,8 @@ function Typed({ video, onPromptChange }: { video: Video | null; onPromptChange:
 
 afterEach(cleanup)
 
-const box = () => screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Search your footage" })
+const box = () =>
+  screen.getByRole<HTMLTextAreaElement>("textbox", { name: /^Search (your footage|the internet)$/ })
 const search = () => screen.getByRole<HTMLButtonElement>("button", { name: "Search" })
 
 describe("the box while a video is still being prepared", () => {
@@ -104,14 +105,22 @@ describe("the box while a video is still being prepared", () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it("accepts a question before a video is picked, while keeping Search off and promising nothing", async () => {
+  it("searches the internet when nothing is attached, and says so", async () => {
     const onPromptChange = vi.fn()
     render(<Typed video={null} onPromptChange={onPromptChange} />)
-    expect(box().placeholder).toBe("Ask for a moment…")
+    // With no toggle to read, the box itself says what it will search.
+    expect(box().placeholder).toBe("Search the internet for a moment…")
+    expect(box().getAttribute("aria-label")).toBe("Search the internet")
     await userEvent.type(box(), "find the introduction")
     expect(onPromptChange).toHaveBeenLastCalledWith("find the introduction")
-    expect(search().disabled).toBe(true)
+    // Words alone are enough: there is no file to wait for.
+    expect(search().disabled).toBe(false)
     expect(screen.queryByText(/still uploading/)).toBeNull()
+  })
+
+  it("keeps Search off with empty words, even for the internet", () => {
+    renderHome({ video: null, promptValue: "" })
+    expect(search().disabled).toBe(true)
   })
 
   it("opens the moment a file is picked, before its bytes have landed, and says what it is waiting on", () => {
@@ -237,7 +246,10 @@ describe("home is the box alone, and the box still takes video", () => {
     expect(box().placeholder).toBe("Drop the video to attach it…")
     fireEvent.drop(card, { dataTransfer: { types: ["Files"], files: [file] } })
     expect(onAdd).toHaveBeenCalledWith([file])
-    expect(box().placeholder).toBe("Ask for a moment…")
+    // The drop hint goes when the drag does. What it goes back to depends on
+    // what is attached, and here the page owns that — onAdd is a stub, so
+    // nothing has actually been attached yet.
+    expect(box().placeholder).not.toBe("Drop the video to attach it…")
   })
 
   it("shows the file itself while it goes up, not a line of text about it", () => {

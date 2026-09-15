@@ -4,20 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { AnimatePresence } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { ChatSignal, Clip, ClipMatch, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import type { ChatSignal, Clip, ClipMatch, InternetCandidate, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 
 import type { UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { SearchShell } from "@/components/moments/search-shell"
 import { FollowUpComposer, SearchHome } from "@/components/moments/search-home"
+import { InternetResults } from "@/components/moments/internet-results"
 import { ResultsStage } from "@/components/moments/results-stage"
 import { MomentConversation } from "@/components/moments/moment-conversation"
 import { PublishDialog } from "@/components/start/publish-dialog"
 import { clipRowFor, needsKeep, publishableFor } from "@/components/start/production"
 import { oneAtATime, runKeep } from "@/components/start/keep-flow"
 import { feedMoments, type FeedMoment } from "@/components/start/moments"
-import { askGate } from "@/components/start/ask-gate"
+import { askGate, askTarget } from "@/components/start/ask-gate"
 import type { Exchange } from "@/components/start/types"
 import { consumeSearchParams, matchForClip, restoreConversation } from "@/components/start/restore"
 import { writeSearchParams } from "@/lib/search-params"
@@ -87,6 +88,10 @@ export default function StartPage() {
   keepingRef.current = keepingIds
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** What the last internet search found. Null until one has been run. */
+  const [internetFindings, setInternetFindings] = useState<
+    { query: string; candidates: InternetCandidate[] } | null
+  >(null)
   const [promptDraft, setPromptDraft] = useState("")
   /** The address, mirrored: which screen, and which question and moment it is about. */
   const [address, setAddress] = useState<Address>({ video: null, search: null, moment: null })
@@ -374,17 +379,55 @@ export default function StartPage() {
     [video, busy, fail, go],
   )
 
+  /**
+   * The same question, asked of the internet instead of a video. It answers
+   * in one step, so there is no waiting screen and nothing to poll.
+   */
+  const startInternetSearch = useCallback(
+    async (query: string): Promise<boolean> => {
+      if (busy) return false
+      setError(null)
+      setBusy(true)
+      try {
+        const found = await api.internetSearch(query)
+        setInternetFindings(found)
+        return true
+      } catch (cause) {
+        // A search that could not run has told us nothing about what is out
+        // there. Leaving the last findings on screen, or showing an empty
+        // list, would both say something we did not find out.
+        setInternetFindings(null)
+        fail(cause)
+        return false
+      } finally {
+        setBusy(false)
+      }
+    },
+    [busy, fail],
+  )
+
   const handleNext = useCallback(() => {
     // One search at a time: the box under the results holds a second
     // question back while one runs, and this holds the line if it did not.
     if (searchRunning) return
     const instruction = promptDraft.trim()
+    if (!instruction || busy) return
+
+    // Anything in the tray means a video was meant, even a pick that failed.
+    const attaching = uploads.length > 0
+    // Nothing attached and nothing coming: the question is for the internet.
+    if (askTarget(video, { attaching }) === "internet") {
+      setPromptDraft("")
+      void startInternetSearch(instruction)
+      return
+    }
+
     // A question goes as soon as the upload has landed; the answer waits for
     // the rest inside the search, and the results say what it is waiting on.
-    if (!instruction || !askGate(video).accepting || busy) return
+    if (!askGate(video, { attaching }).accepting) return
     setPromptDraft("")
     void startSearch(instruction)
-  }, [promptDraft, video, busy, searchRunning, startSearch])
+  }, [promptDraft, video, busy, searchRunning, startSearch, startInternetSearch, uploads])
 
   /**
    * Taking a file off the list takes it off the screen too: a video that was
@@ -782,6 +825,9 @@ export default function StartPage() {
                 onDetach={reset}
                 disabled={busy}
               />
+              {internetFindings && (
+                <InternetResults query={internetFindings.query} candidates={internetFindings.candidates} />
+              )}
             </motion.div>
           )}
 

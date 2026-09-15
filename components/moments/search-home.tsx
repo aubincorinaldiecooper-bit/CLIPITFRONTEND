@@ -5,7 +5,7 @@ import { Paperclip } from "lucide-react"
 import { VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
 import { Button } from "@/components/space/button"
 import { ThumbFrame, UploadTray } from "@/components/start/composer-attachments"
-import { askGate } from "@/components/start/ask-gate"
+import { askAboutVideoGate, askGate, askTarget } from "@/components/start/ask-gate"
 import { videoLabel } from "@/components/start/moments"
 import type { Video } from "@/lib/types"
 import { AskComposer } from "./ask-composer"
@@ -101,17 +101,28 @@ export function SearchHome({
   const box = useRef<HTMLTextAreaElement>(null)
   const [dragging, setDragging] = useState(false)
 
-  const gate = askGate(video)
+  // Anything in the tray — on its way, or a pick that failed — means someone
+  // meant to ask about a video. The box waits for it rather than quietly
+  // searching the web with the words that were meant for their footage.
+  const attaching = entries.length > 0
+  const gate = askGate(video, { attaching })
+  const target = askTarget(video, { attaching })
   const ready = gate.accepting && !disabled
   // "Still uploading" is only true of a file that IS uploading: with nothing
   // picked yet, or only a refused pick in the tray, nothing is promised.
-  const onItsWay = Boolean(video) || entries.some((entry) => entry.phase === "queued" || entry.phase === "uploading")
+  const onItsWay =
+    Boolean(video) || entries.some((entry) => entry.phase === "queued" || entry.phase === "uploading")
   // A video in the tray is shown by its row; one that is not — opened from
   // the library, or the row taken away — is shown as itself.
   const attached = video && !entries.some((entry) => entry.videoId === video.id) ? video : null
   const waitingOn = !ready && onItsWay ? gate.waitingOn : null
 
-  const placeholder = dragging ? "Drop the video to attach it…" : (onItsWay && gate.placeholder) || "Ask for a moment…"
+  // With nothing attached there is no toggle to read, so the box itself says
+  // what the question will be asked of.
+  const placeholder = dragging
+    ? "Drop the video to attach it…"
+    : (onItsWay && gate.placeholder) ||
+      (target === "internet" ? "Search the internet for a moment…" : "Ask for a moment…")
 
   // One video: the first file picked or dropped takes the place of whatever
   // was attached — the page lets the old one go, rows and all, and keeps the
@@ -168,7 +179,7 @@ export function SearchHome({
             if (ready) onSubmit?.()
           }}
           placeholder={placeholder}
-          label="Search your footage"
+          label={target === "internet" ? "Search the internet" : "Search your footage"}
           sendLabel="Search"
           disabled={disabled}
           canSend={ready}
@@ -242,7 +253,7 @@ export function FollowUpComposer({
   disabled?: boolean
   searching: boolean
 }) {
-  const gate = askGate(video)
+  const gate = askAboutVideoGate(video)
   const ready = gate.accepting && !disabled && !searching
   return (
     <AskComposer
