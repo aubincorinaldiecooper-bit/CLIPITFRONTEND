@@ -417,8 +417,13 @@ export default function StartPage() {
     const attaching = uploads.length > 0
     // Nothing attached and nothing coming: the question is for the internet.
     if (askTarget(video, { attaching }) === "internet") {
-      setPromptDraft("")
-      void startInternetSearch(instruction)
+      // The words stay in the box until there is something to show for them.
+      // This search answers in place, so clearing first would leave someone
+      // whose connection dropped staring at an error and an empty box with
+      // their question gone.
+      void startInternetSearch(instruction).then((found) => {
+        if (found) setPromptDraft("")
+      })
       return
     }
 
@@ -810,23 +815,33 @@ export default function StartPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2, ease: EASE }}
-              className="flex w-full flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6"
+              className="flex w-full flex-1 flex-col px-4 py-10 sm:px-6"
             >
-              <SearchHome
-                entries={uploads}
-                video={video}
-                promptValue={promptDraft}
-                onPromptChange={setPromptDraft}
-                onAdd={startUploads}
-                onRemove={dropUpload}
-                onRetry={retryUpload}
-                onSubmit={handleNext}
-                onReplace={replaceVideo}
-                onDetach={reset}
-                disabled={busy}
-              />
+              {/*
+                The composer keeps this whole region to itself — basis-full and
+                no shrinking — so results arriving underneath cannot move it.
+                Centring the two together would slide the box upward by half
+                the height of whatever came back, the moment Search was used.
+              */}
+              <div className="flex w-full shrink-0 basis-full flex-col items-center justify-center">
+                <SearchHome
+                  entries={uploads}
+                  video={video}
+                  promptValue={promptDraft}
+                  onPromptChange={setPromptDraft}
+                  onAdd={startUploads}
+                  onRemove={dropUpload}
+                  onRetry={retryUpload}
+                  onSubmit={handleNext}
+                  onReplace={replaceVideo}
+                  onDetach={reset}
+                  disabled={busy}
+                />
+              </div>
               {internetFindings && (
-                <InternetResults query={internetFindings.query} candidates={internetFindings.candidates} />
+                <div className="flex w-full flex-col items-center">
+                  <InternetResults query={internetFindings.query} candidates={internetFindings.candidates} />
+                </div>
               )}
             </motion.div>
           )}
