@@ -19,6 +19,7 @@ import { clipRowFor, needsKeep, publishableFor } from "@/components/start/produc
 import { oneAtATime, runKeep } from "@/components/start/keep-flow"
 import { feedMoments, type FeedMoment } from "@/components/start/moments"
 import { askGate, askTarget } from "@/components/start/ask-gate"
+import { nextRead, RETRY_MS } from "@/components/start/search-polling"
 import type { Exchange } from "@/components/start/types"
 import { consumeSearchParams, matchForClip, restoreConversation } from "@/components/start/restore"
 import { writeSearchParams } from "@/lib/search-params"
@@ -453,12 +454,21 @@ export default function StartPage() {
       try {
         const state = await api.internetSearch(searchId)
         if (stopped) return
+        setError(null)
         setInternetSearch(state)
-        if (state.phase !== "answered") timer = window.setTimeout(read, POLL_MS)
+        const again = nextRead({ failed: false, phase: state.phase })
+        if (again !== null) timer = window.setTimeout(read, again)
       } catch (cause) {
         if (stopped) return
-        // A search we cannot read is not a search that found nothing.
+        // A search we cannot read is not a search that found nothing — and a
+        // search still running does not stop because one read failed. The
+        // scouts are working either way; giving up here would leave the
+        // screen frozen at whatever it last saw for the rest of the search,
+        // with every later moment missed. So the trouble is said out loud and
+        // the next read goes out anyway, a little further apart in case what
+        // failed needs a moment. A read that succeeds clears the notice.
         fail(cause)
+        timer = window.setTimeout(read, nextRead({ failed: true }) ?? RETRY_MS)
       }
     }
     let timer = window.setTimeout(read, internetSearch?.searchId === searchId ? POLL_MS : 0)

@@ -98,7 +98,15 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
     const taken: Slot[] = found.map((moment) => ({ kind: "moment", key: moment.id, moment }))
     if (phase !== "searching") return taken
     const open = Math.max(0, MAX_SLOTS - taken.length)
-    return [...taken, ...Array.from({ length: open }, (_, index) => ({ kind: "pending" as const, key: `pending-${index}` }))]
+    // Named for where they stand in the band, not for their place in the
+    // queue of empties. A moment arriving shifts every relative name one to
+    // the right, so someone watching the next slot to fill would be carried
+    // sideways onto the skeleton beyond it instead of seeing the card that
+    // landed where they were looking (Codex's finding on #101).
+    return [
+      ...taken,
+      ...Array.from({ length: open }, (_, index) => ({ kind: "pending" as const, key: `pending@${taken.length + index}` })),
+    ]
   }, [found, phase])
 
   /*
@@ -131,16 +139,23 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
   const activeMoment = active?.kind === "moment" ? active.moment : null
 
   // The list re-ranked under the ring: bring the same card back to the centre.
+  // Only a real position is remembered; -1 means the slot has gone, and the
+  // effect below needs to know where it was, not that it is missing.
   const lastIndex = useRef(activeIndex)
   useEffect(() => {
-    if (activeIndex >= 0 && activeIndex !== lastIndex.current) apiRef.current?.goTo(activeIndex)
+    if (activeIndex < 0) return
+    if (activeIndex !== lastIndex.current) apiRef.current?.goTo(activeIndex)
     lastIndex.current = activeIndex
   }, [activeIndex])
 
-  // Nothing centred yet, or the slot that was centred has gone — a skeleton
-  // taken away when the swarm ended: fall back to the first.
+  // The slot that was centred has gone: a skeleton the moment now standing in
+  // its place filled, or one taken away when the swarm ended. Stay where the
+  // person was looking — which is how watching a slot fill shows them the
+  // card that filled it — rather than jumping to the front of the band.
   useEffect(() => {
-    if (activeIndex < 0 && slots.length > 0) setActiveKey(slots[0]!.key)
+    if (activeIndex >= 0 || slots.length === 0) return
+    const at = Math.min(Math.max(0, lastIndex.current), slots.length - 1)
+    setActiveKey(slots[at]!.key)
   }, [activeIndex, slots])
 
   const slides = useMemo(

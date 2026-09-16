@@ -119,6 +119,23 @@ describe("the internet results stage", () => {
     expect(screen.getByTestId("internet-caption").textContent).not.toContain("Moment A")
   })
 
+  it("shows the moment that fills the slot you were watching", async () => {
+    // Centre the first empty slot, then let a moment land in it. The person
+    // was watching that place in the band; what arrives there is what they
+    // should see, not the skeleton that shuffled along behind it.
+    const { rerender } = render(<InternetStage query="q" phase="searching" moments={many(1)} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "Next moment" }))
+    await waitFor(() => expect(screen.queryByTestId("internet-caption-words")).toBeNull())
+
+    const arriving = moment({ id: "new", description: "The moment that landed here" })
+    rerender(<InternetStage query="q" phase="searching" moments={[...many(1), arriving]} />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId("internet-caption").textContent).toContain("The moment that landed here"),
+    )
+  })
+
   it("keeps the caption's room and the arrows when a skeleton is in the centre", async () => {
     render(<InternetStage query="q" phase="searching" moments={many(1)} />)
 
