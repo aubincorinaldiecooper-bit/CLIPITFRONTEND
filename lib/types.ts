@@ -598,6 +598,29 @@ export interface InternetCandidate {
 }
 
 /**
+ * How an internet search is doing, and what it has found so far.
+ *
+ * The three states the results screen draws. `loading` is every search's
+ * first state, before it is known whether there is anything to watch at all.
+ * `searching` means pages were found and are being watched, which is what
+ * puts the slots up. `answered` means the scouts are done and `moments` is
+ * everything they found, which may be none.
+ *
+ * `candidatesFound` is a count and never a list: the pages a search is
+ * looking through are where to look, not what was found, and the screen is
+ * never given them.
+ */
+export interface InternetSearchState {
+  searchId: string
+  query: string
+  phase: "loading" | "searching" | "answered"
+  moments: InternetMoment[]
+  candidatesFound: number
+  /** Pages the search could not watch. Not the same as finding nothing. */
+  unexamined?: number
+}
+
+/**
  * A moment the internet search approved: a stretch of a page's video that
  * was actually watched and judged to fit the question.
  *

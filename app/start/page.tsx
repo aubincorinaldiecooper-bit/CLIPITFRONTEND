@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { AnimatePresence } from "motion/react"
 import { api, ApiError } from "@/lib/api"
-import type { ChatSignal, Clip, ClipMatch, InternetCandidate, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
+import type { ChatSignal, Clip, ClipMatch, InternetSearchState, MatchFeedback, MatchFeedbackReason, Video } from "@/lib/types"
 
 import type { UploadEntry } from "@/components/flow/upload-package"
 import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { SearchShell } from "@/components/moments/search-shell"
 import { FollowUpComposer, SearchHome } from "@/components/moments/search-home"
-import { InternetResults } from "@/components/moments/internet-results"
+import { InternetStage } from "@/components/moments/internet-stage"
 import { ResultsStage } from "@/components/moments/results-stage"
 import { MomentConversation } from "@/components/moments/moment-conversation"
 import { PublishDialog } from "@/components/start/publish-dialog"
@@ -47,11 +47,23 @@ interface Address {
   video: string | null
   search: string | null
   moment: string | null
+  /**
+   * A question asked of the internet. It has no video and no request of its
+   * own, so it gets its own name in the address — which is what makes the
+   * results a screen you can reload, link to, and come back to with Back,
+   * rather than something that only exists until you look away.
+   */
+  ask: string | null
 }
 
 function readAddress(): Address {
   const params = new URL(window.location.href).searchParams
-  return { video: params.get("video"), search: params.get("search"), moment: params.get("moment") }
+  return {
+    video: params.get("video"),
+    search: params.get("search"),
+    moment: params.get("moment"),
+    ask: params.get("ask"),
+  }
 }
 
 /**
@@ -88,13 +100,11 @@ export default function StartPage() {
   keepingRef.current = keepingIds
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** What the last internet search found. Null until one has been run. */
-  const [internetFindings, setInternetFindings] = useState<
-    { query: string; candidates: InternetCandidate[] } | null
-  >(null)
+  /** The internet search on screen: how it is doing and what it has found. */
+  const [internetSearch, setInternetSearch] = useState<InternetSearchState | null>(null)
   const [promptDraft, setPromptDraft] = useState("")
   /** The address, mirrored: which screen, and which question and moment it is about. */
-  const [address, setAddress] = useState<Address>({ video: null, search: null, moment: null })
+  const [address, setAddress] = useState<Address>({ video: null, search: null, moment: null, ask: null })
   /** Move between the screens: write the address, then read it back. */
   const go = useCallback((changes: Partial<Address>, mode: "push" | "replace" = "push") => {
     writeSearchParams(changes, mode)
@@ -107,7 +117,7 @@ export default function StartPage() {
    * scrolled past its own heading and its way back.
    */
   const screenRoot = useRef<HTMLDivElement>(null)
-  const screenKey = `${address.search ?? ""}/${address.moment ?? ""}`
+  const screenKey = `${address.ask ?? ""}/${address.search ?? ""}/${address.moment ?? ""}`
   useEffect(() => {
     window.scrollTo({ top: 0 })
     for (let node = screenRoot.current?.parentElement ?? null; node; node = node.parentElement) {
@@ -339,7 +349,21 @@ export default function StartPage() {
   )
   const stagedMoments = useMemo(() => (stagedExchange ? feedMoments([stagedExchange], video) : []), [stagedExchange, video])
   const openMoment = address.moment ? stagedMoments.find((moment) => moment.match.id === address.moment) : undefined
-  const screen: "home" | "results" | "moment" = !stagedExchange ? "home" : openMoment ? "moment" : "results"
+  /**
+   * Which screen, from the address alone.
+   *
+   * A question asked of the internet has no video and no request, so it is
+   * named in the address in its own right. A video question wins if somehow
+   * both are named: the video is the thing on screen, and the ask would be
+   * one left behind.
+   */
+  const screen: "home" | "results" | "moment" | "internet" = stagedExchange
+    ? openMoment
+      ? "moment"
+      : "results"
+    : address.ask
+      ? "internet"
+      : "home"
 
   // What a problem reported from this page is about: the video, and the
   // question on stage — the one that owns the moment on screen (Devin's
@@ -389,22 +413,60 @@ export default function StartPage() {
       setError(null)
       setBusy(true)
       try {
-        const found = await api.internetSearch(query)
-        setInternetFindings(found)
+        // The search answers at once with somewhere to follow it, not with an
+        // answer: watching pages takes minutes, and the results screen fills
+        // as they are watched.
+        const started = await api.startInternetSearch(query)
+        setInternetSearch(started)
+        // Its own address, so the screen survives a reload and Back returns
+        // to the empty box rather than leaving the page altogether.
+        go({ ask: started.searchId, video: null, search: null, moment: null })
         return true
       } catch (cause) {
-        // A search that could not run has told us nothing about what is out
-        // there. Leaving the last findings on screen, or showing an empty
-        // list, would both say something we did not find out.
-        setInternetFindings(null)
+        // A search that could not start has told us nothing about what is out
+        // there. Leaving the last one on screen, or showing an empty result,
+        // would both say something we did not find out.
+        setInternetSearch(null)
         fail(cause)
         return false
       } finally {
         setBusy(false)
       }
     },
-    [busy, fail],
+    [busy, fail, go],
   )
+
+  /**
+   * Follow the search on screen until it is done.
+   *
+   * Every reply carries everything found so far, not just what is new, so a
+   * poll that is missed or arrives out of order can never leave the screen
+   * permanently short a moment.
+   */
+  useEffect(() => {
+    const searchId = address.ask
+    if (!searchId) return
+    if (internetSearch?.searchId === searchId && internetSearch.phase === "answered") return
+
+    let stopped = false
+    const read = async () => {
+      try {
+        const state = await api.internetSearch(searchId)
+        if (stopped) return
+        setInternetSearch(state)
+        if (state.phase !== "answered") timer = window.setTimeout(read, POLL_MS)
+      } catch (cause) {
+        if (stopped) return
+        // A search we cannot read is not a search that found nothing.
+        fail(cause)
+      }
+    }
+    let timer = window.setTimeout(read, internetSearch?.searchId === searchId ? POLL_MS : 0)
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+    }
+  }, [address.ask, internetSearch?.searchId, internetSearch?.phase, fail])
 
   const handleNext = useCallback(() => {
     // One search at a time: the box under the results holds a second
@@ -793,11 +855,12 @@ export default function StartPage() {
 
   const stagedIndex = stagedExchange ? exchanges.findIndex((exchange) => exchange.request.id === stagedExchange.request.id) : -1
   /** A screen's own address, for the links that lead to it. */
-  const addressOf = (parts: Address) => {
+  const addressOf = (parts: Partial<Address>) => {
     const params = new URLSearchParams()
     if (parts.video) params.set("video", parts.video)
     if (parts.search) params.set("search", parts.search)
     if (parts.moment) params.set("moment", parts.moment)
+    if (parts.ask) params.set("ask", parts.ask)
     const query = params.toString()
     return query ? `/start?${query}` : "/start"
   }
@@ -838,11 +901,30 @@ export default function StartPage() {
                   disabled={busy}
                 />
               </div>
-              {internetFindings && (
-                <div className="flex w-full flex-col items-center">
-                  <InternetResults query={internetFindings.query} candidates={internetFindings.candidates} />
-                </div>
-              )}
+            </motion.div>
+          )}
+
+          {screen === "internet" && (
+            <motion.div
+              key={`internet-${address.ask}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: EASE }}
+              className="flex w-full flex-1 flex-col pb-16"
+            >
+              {/*
+                Until the first reply arrives there is a question and nothing
+                else, which is the loading state anyway — so the screen shows
+                it rather than a blank frame while the first poll is in
+                flight. The question is the one that was typed; the search
+                returns its own copy, which takes over once it lands.
+              */}
+              <InternetStage
+                query={internetSearch?.query ?? promptDraft}
+                phase={internetSearch?.searchId === address.ask ? internetSearch.phase : "loading"}
+                moments={internetSearch?.searchId === address.ask ? internetSearch.moments : []}
+              />
             </motion.div>
           )}
 

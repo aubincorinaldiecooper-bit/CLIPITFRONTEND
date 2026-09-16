@@ -20,7 +20,7 @@ import type {
   WorkspaceSummary,
   WorkspacesPage,
   UploadTarget,
-  InternetCandidate,
+  InternetSearchState,
   Video,
 } from "./types"
 
@@ -674,11 +674,23 @@ export const api = {
    * Ask the internet, rather than a video you uploaded. Whatever was typed is
    * what is searched, passed through as it was written.
    */
-  async internetSearch(query: string): Promise<{ query: string; candidates: InternetCandidate[] }> {
-    return request(`/api/internet-search`, {
+  /**
+   * Ask the internet a question, and get back where to follow it.
+   *
+   * Watching pages takes minutes, so this answers at once with an id rather
+   * than waiting for an answer. The moments arrive through `internetSearch`
+   * below as the scouts find them.
+   */
+  async startInternetSearch(query: string): Promise<InternetSearchState> {
+    return request(`/api/internet-searches`, {
       method: "POST",
       body: JSON.stringify({ query }),
     })
+  },
+
+  /** How that search is doing, and everything it has found so far. */
+  async internetSearch(searchId: string): Promise<InternetSearchState> {
+    return request(`/api/internet-searches/${encodeURIComponent(searchId)}`)
   },
 
   /**
