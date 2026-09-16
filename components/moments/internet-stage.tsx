@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import { Badge } from "@/components/space/badge"
 import { Button } from "@/components/space/button"
 import { CoverflowCarousel, type CoverflowApi } from "@/components/space/coverflow-carousel"
 import { Skeleton } from "@/components/space/skeleton"
@@ -42,7 +41,8 @@ import { cn } from "@/lib/utils"
  * in three places is one card offering three places to jump to: three cards
  * would be the same video three times, eating a band that holds five. The
  * band is ordered by how often a video was approved, so answering repeatedly
- * makes a video stand higher rather than stand more often.
+ * makes a video stand higher rather than stand more often — which the order
+ * says on its own, without a number on the picture claiming to measure it.
  */
 
 /** The most slots the band ever shows. A ceiling, not a quota. */
@@ -67,12 +67,6 @@ export interface InternetStageProps {
 /** What a video is called: its own title, or what the watcher saw in it. */
 function titleOf(moment: InternetMoment): string {
   return moment.title || moment.marks[0]?.description || "A video from this site"
-}
-
-/** How many places in this video were approved, said plainly. */
-function placesIn(moment: InternetMoment): string {
-  const count = moment.marks.length
-  return count === 1 ? "1 place" : `${count} places`
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -255,15 +249,6 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
                   ) : (
                     <p className="flex size-full items-center justify-center px-4 text-center text-xs text-white/70"><span className="line-clamp-6">{titleOf(moment)}</span></p>
                   )}
-                  {/* What the card is worth, not one stretch of it: the
-                      video is the result, and the number of places the
-                      watcher approved is why it stands where it stands. */}
-                  <Badge
-                    variant="ghost"
-                    className="absolute top-2.5 left-2.5 h-auto bg-black/32 px-2 py-1 text-[11px] font-normal text-white/85 backdrop-blur-md hover:bg-black/32 hover:text-white/85"
-                  >
-                    {placesIn(moment)}
-                  </Badge>
                 </div>
               )
             }}

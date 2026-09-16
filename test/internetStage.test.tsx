@@ -124,9 +124,8 @@ describe("the internet results stage", () => {
     // the five slots and bury whatever else the search found.
     expect(filled()).toHaveLength(1)
     expect(screen.getByTestId("internet-words").textContent).toBe("1 video fits your search.")
-    // The picture says why it stands where it stands. The places themselves
-    // are offered on the video, not listed under the band.
-    expect(screen.getByTestId("moment-slot-filled").textContent).toContain("3 places")
+    // Where it stands in the band is what says how strongly it answered.
+    // Nothing on the picture claims to measure that.
     const caption = screen.getByTestId("internet-caption").textContent ?? ""
     expect(caption).toContain("The whole show")
     expect(caption).not.toMatch(/\d+:\d\d/)
@@ -172,11 +171,6 @@ describe("the internet results stage", () => {
     expect(title!.className).toContain("line-clamp-2")
     expect(places!.className).toContain("truncate")
     expect(places!.className).not.toContain("flex-wrap")
-  })
-
-  it("says one place, not 1 places, for a video approved once", () => {
-    render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
-    expect(screen.getByTestId("moment-slot-filled").textContent).toContain("1 place")
   })
 
   it("keeps the moment you are looking at when a stronger one lands above it", async () => {
