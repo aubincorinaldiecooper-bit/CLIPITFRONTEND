@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import { Badge } from "@/components/space/badge"
@@ -84,7 +84,6 @@ type Slot = { kind: "moment"; key: string; moment: InternetMoment } | { kind: "p
 export function InternetStage({ query, phase, moments }: InternetStageProps) {
   const compact = useMediaQuery(PHONE)
   const apiRef = useRef<CoverflowApi | null>(null)
-  const [selected, setSelected] = useState(0)
 
   const found = useMemo(() => moments.slice(0, MAX_SLOTS), [moments])
 
@@ -102,15 +101,47 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
     return [...taken, ...Array.from({ length: open }, (_, index) => ({ kind: "pending" as const, key: `pending-${index}` }))]
   }, [found, phase])
 
-  const onSelect = useCallback((index: number) => setSelected(index), [])
+  /*
+   * Which slot is centred, held as the SLOT rather than a number.
+   *
+   * Moments arrive while the band is on screen and the list is strongest
+   * first, so a stronger one landing takes a place above the centred card
+   * and pushes it down. A number would keep pointing at the place and the
+   * centre would silently become whatever moved into it — the same bug the
+   * video results stage carries a note about (Devin's and Codex's finding
+   * on #87, and Codex again here on #101).
+   */
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+
+  // Read the slots through a ref, so this is the same function for the life
+  // of the ring: the ring calls it when ITS index changes, and a new
+  // function every render made it call again with a stale index.
+  const slotsRef = useRef(slots)
+  slotsRef.current = slots
+  const onSelect = useCallback((index: number) => {
+    const slot = slotsRef.current[index]
+    if (slot) setActiveKey(slot.key)
+  }, [])
   const onApi = useCallback((api: CoverflowApi) => {
     apiRef.current = api
   }, [])
 
-  // The centre can be a slot that has gone — the skeletons left when the
-  // swarm ended — so the caption reads the list, not the last index seen.
-  const active = slots[selected] ?? slots[0]
+  const activeIndex = activeKey ? slots.findIndex((slot) => slot.key === activeKey) : -1
+  const active = activeIndex >= 0 ? slots[activeIndex] : slots[0]
   const activeMoment = active?.kind === "moment" ? active.moment : null
+
+  // The list re-ranked under the ring: bring the same card back to the centre.
+  const lastIndex = useRef(activeIndex)
+  useEffect(() => {
+    if (activeIndex >= 0 && activeIndex !== lastIndex.current) apiRef.current?.goTo(activeIndex)
+    lastIndex.current = activeIndex
+  }, [activeIndex])
+
+  // Nothing centred yet, or the slot that was centred has gone — a skeleton
+  // taken away when the swarm ended: fall back to the first.
+  useEffect(() => {
+    if (activeIndex < 0 && slots.length > 0) setActiveKey(slots[0]!.key)
+  }, [activeIndex, slots])
 
   const slides = useMemo(
     () => slots.map((slot) => ({ alt: slot.kind === "moment" ? titleOf(slot.moment) : "A moment still being looked for" })),
@@ -208,30 +239,42 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
             }}
           />
 
-          {activeMoment && (
-            <div
-              key={activeMoment.id}
-              className="-mt-2 flex flex-col items-center px-6 text-center duration-200 animate-in fade-in max-[860px]:mt-0"
-              data-testid="internet-caption"
-            >
-              <p className="max-w-[44ch] text-[17px] leading-snug tracking-[-0.01em] text-foreground">{titleOf(activeMoment)}</p>
-              <p className="mt-2 text-[13px] text-muted-foreground">
-                <span className="tabular-nums">{formatRange(activeMoment)}</span>
-                {activeMoment.source ? ` · ${activeMoment.source}` : ""}
-              </p>
-
-              {slots.length > 1 && (
-                <div className="mt-5 flex items-center gap-3">
-                  <Button variant="outline" size="icon-sm" aria-label="Previous moment" onClick={() => apiRef.current?.prev()} className="rounded-full">
-                    <ChevronLeft className="size-4" />
-                  </Button>
-                  <Button variant="outline" size="icon-sm" aria-label="Next moment" onClick={() => apiRef.current?.next()} className="rounded-full">
-                    <ChevronRight className="size-4" />
-                  </Button>
+          {/*
+            * The caption and the arrows, mounted for as long as the band is.
+            *
+            * Centring a slot that is still a skeleton leaves nothing to
+            * caption. If the block went with it, the band would jump up the
+            * screen and the arrows needed to get back would be the thing that
+            * disappeared — "nothing reflows when actioned", and reserve the
+            * space the waiting state needs (AGENTS.md).
+            */}
+          <div
+            className="-mt-2 flex flex-col items-center px-6 text-center max-[860px]:mt-0"
+            data-testid="internet-caption"
+          >
+            <div className="flex min-h-15 flex-col items-center justify-start">
+              {activeMoment && (
+                <div key={activeMoment.id} className="duration-200 animate-in fade-in" data-testid="internet-caption-words">
+                  <p className="max-w-[44ch] text-[17px] leading-snug tracking-[-0.01em] text-foreground">{titleOf(activeMoment)}</p>
+                  <p className="mt-2 text-[13px] text-muted-foreground">
+                    <span className="tabular-nums">{formatRange(activeMoment)}</span>
+                    {activeMoment.source ? ` · ${activeMoment.source}` : ""}
+                  </p>
                 </div>
               )}
             </div>
-          )}
+
+            {/* Kept in place rather than unmounted when there is only one
+                card, so the row below the band never changes height. */}
+            <div className={cn("mt-5 flex items-center gap-3", slots.length < 2 && "invisible")}>
+              <Button variant="outline" size="icon-sm" aria-label="Previous moment" onClick={() => apiRef.current?.prev()} className="rounded-full">
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button variant="outline" size="icon-sm" aria-label="Next moment" onClick={() => apiRef.current?.next()} className="rounded-full">
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { InternetStage, MAX_SLOTS } from "../components/moments/internet-stage"
 import type { InternetMoment } from "../lib/types"
 
@@ -98,6 +99,38 @@ describe("the internet results stage", () => {
     expect(caption).toContain("Kai Cenat walks the runway")
     expect(caption).toContain("0:10–0:34")
     expect(caption).toContain("youtube.com")
+  })
+
+  it("keeps the moment you are looking at when a stronger one lands above it", async () => {
+    // Moments arrive while the band is on screen, strongest first. A
+    // stronger one taking a place above the centred card must not make the
+    // centre silently become whatever moved into that position.
+    const a = moment({ id: "a", description: "Moment A" })
+    const b = moment({ id: "b", description: "Moment B" })
+    const { rerender } = render(<InternetStage query="q" phase="searching" moments={[a, b]} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "Next moment" }))
+    await waitFor(() => expect(screen.getByTestId("internet-caption").textContent).toContain("Moment B"))
+
+    const stronger = moment({ id: "c", description: "Moment C" })
+    rerender(<InternetStage query="q" phase="searching" moments={[stronger, a, b]} />)
+
+    expect(screen.getByTestId("internet-caption").textContent).toContain("Moment B")
+    expect(screen.getByTestId("internet-caption").textContent).not.toContain("Moment A")
+  })
+
+  it("keeps the caption's room and the arrows when a skeleton is in the centre", async () => {
+    render(<InternetStage query="q" phase="searching" moments={many(1)} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "Next moment" }))
+
+    // The centred slot is a skeleton, so there is nothing to caption — but
+    // the block keeps its room and the arrows stay, or the band jumps up the
+    // screen and the way back disappears with it.
+    await waitFor(() => expect(screen.queryByTestId("internet-caption-words")).toBeNull())
+    expect(screen.getByTestId("internet-caption")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Next moment" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Previous moment" })).toBeTruthy()
   })
 
   it("never shows a skeleton that claims to know anything", () => {
