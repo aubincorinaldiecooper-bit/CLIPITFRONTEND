@@ -127,6 +127,48 @@ describe("the internet results stage", () => {
     for (const range of ["0:10–0:14", "0:40–0:43", "1:10–1:15"]) expect(caption).toContain(range)
   })
 
+  it("gives the caption the same room whatever is in it, so the arrows never move", () => {
+    // The arrows sit directly under the caption. A caption that grew with a
+    // longer title or with more approved places would move them every time
+    // the band was turned — the reflow AGENTS.md rules out.
+    const room = (moments: InternetMoment[]) => {
+      render(<InternetStage query="the runway" phase="answered" moments={moments} />)
+      const box = screen.getByTestId("internet-caption-room")
+      const lines = screen.getByTestId("internet-caption-words").querySelectorAll("p")
+      const shape = { className: box.className, lines: lines.length }
+      cleanup()
+      return shape
+    }
+
+    const one = room([moment()])
+    const crowded = room([
+      moment({
+        title: "A title long enough to run past two lines on any screen this band is ever going to be looked at on, and then some",
+        marks: Array.from({ length: 9 }, (_, index) => ({
+          startSeconds: index * 30,
+          endSeconds: index * 30 + 4,
+          description: `Place ${index + 1}`,
+        })),
+      }),
+    ])
+
+    // Same box, same number of lines in it, however much there is to say.
+    expect(crowded.className).toBe(one.className)
+    expect(crowded.lines).toBe(one.lines)
+    expect(one.lines).toBe(2)
+
+    // And the two lines cannot become four. jsdom does no layout, so the
+    // only way to hold this is on the rules that decide it: the title is
+    // clamped and the places are cut off rather than wrapped onto a second
+    // row. A wrapping row here is the bug, and it looks fine until a video
+    // with several approved places reaches a narrow screen.
+    render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
+    const [title, places] = Array.from(screen.getByTestId("internet-caption-words").querySelectorAll("p"))
+    expect(title!.className).toContain("line-clamp-2")
+    expect(places!.className).toContain("truncate")
+    expect(places!.className).not.toContain("flex-wrap")
+  })
+
   it("says one place, not 1 places, for a video approved once", () => {
     render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
     expect(screen.getByTestId("moment-slot-filled").textContent).toContain("1 place")

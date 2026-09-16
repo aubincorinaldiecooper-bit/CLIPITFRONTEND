@@ -69,6 +69,11 @@ function titleOf(moment: InternetMoment): string {
   return moment.title || moment.marks[0]?.description || "A video from this site"
 }
 
+/** Every approved place and what the watcher saw there, for the hover. */
+function placesUnder(moment: InternetMoment): string {
+  return moment.marks.map((mark) => `${formatRange(mark)} — ${mark.description}`).join("\n")
+}
+
 /** How many places in this video were approved, said plainly. */
 function placesIn(moment: InternetMoment): string {
   const count = moment.marks.length
@@ -282,22 +287,33 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
             className="-mt-2 flex flex-col items-center px-6 text-center max-[860px]:mt-0"
             data-testid="internet-caption"
           >
-            <div className="flex min-h-15 flex-col items-center justify-start">
+            {/*
+              * Two lines, at a height that does not depend on what is in
+              * them. Videos differ in how long their titles are and in how
+              * many places were approved in them, and the arrows sit right
+              * underneath: a caption that grew with its contents would move
+              * the controls every time the band was turned, which is the
+              * reflow AGENTS.md rules out (Codex's finding on #104).
+              *
+              * So the title takes at most two lines and the row below takes
+              * exactly one, both cut with an ellipsis rather than wrapped.
+              * What is cut is not lost — the whole of it is the element's
+              * title, and every place is offered in full on the video itself.
+              */}
+            <div className="flex h-20 flex-col items-center justify-start" data-testid="internet-caption-room">
               {activeMoment && (
-                <div key={activeMoment.id} className="duration-200 animate-in fade-in" data-testid="internet-caption-words">
-                  <p className="max-w-[44ch] text-[17px] leading-snug tracking-[-0.01em] text-foreground">{titleOf(activeMoment)}</p>
+                <div key={activeMoment.id} className="w-full max-w-[44ch] duration-200 animate-in fade-in" data-testid="internet-caption-words">
+                  <p className="line-clamp-2 text-[17px] leading-snug tracking-[-0.01em] text-foreground" title={titleOf(activeMoment)}>
+                    {titleOf(activeMoment)}
+                  </p>
                   {/*
                     * Where in this video to look, earliest first. Each one is
                     * a stretch the watcher approved, so the row says what the
                     * card is offering rather than repeating its title.
                     */}
-                  <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
-                    {activeMoment.marks.map((mark) => (
-                      <span key={mark.startSeconds} className="tabular-nums whitespace-nowrap" title={mark.description}>
-                        {formatRange(mark)}
-                      </span>
-                    ))}
-                    {activeMoment.source ? <span>· {activeMoment.source}</span> : null}
+                  <p className="mt-2 truncate text-[13px] text-muted-foreground" title={placesUnder(activeMoment)}>
+                    <span className="tabular-nums">{activeMoment.marks.map((mark) => formatRange(mark)).join("   ")}</span>
+                    {activeMoment.source ? ` · ${activeMoment.source}` : ""}
                   </p>
                 </div>
               )}
