@@ -37,6 +37,12 @@ import { cn } from "@/lib/utils"
  *
  * The pages the provider returned are not results and never appear here. A
  * page is somewhere to look; a moment is something that was looked at.
+ *
+ * A card is a VIDEO, not a finding inside one. A video the watcher approved
+ * in three places is one card offering three places to jump to: three cards
+ * would be the same video three times, eating a band that holds five. The
+ * band is ordered by how often a video was approved, so answering repeatedly
+ * makes a video stand higher rather than stand more often.
  */
 
 /** The most slots the band ever shows. A ceiling, not a quota. */
@@ -58,9 +64,15 @@ export interface InternetStageProps {
   moments: InternetMoment[]
 }
 
-/** What a moment is called when the watcher gave it no words. */
+/** What a video is called: its own title, or what the watcher saw in it. */
 function titleOf(moment: InternetMoment): string {
-  return moment.description || "A moment from this page"
+  return moment.title || moment.marks[0]?.description || "A video from this site"
+}
+
+/** How many places in this video were approved, said plainly. */
+function placesIn(moment: InternetMoment): string {
+  const count = moment.marks.length
+  return count === 1 ? "1 place" : `${count} places`
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -73,7 +85,7 @@ function words(phase: InternetSearchPhase, found: number, shown: number): string
   if (phase === "searching") return "Watching what the search turned up."
   // The scouts ran to the end. Zero is an answer, and one is an answer.
   if (found === 0) return "No results fit your search."
-  const fit = `${found} ${plural(found, "moment fits", "moments fit")} your search.`
+  const fit = `${found} ${plural(found, "video fits", "videos fit")} your search.`
   // More were found than the band can hold. Saying only the five would
   // undercount what the search actually came back with.
   return found > shown ? `${fit} The strongest ${shown} are here.` : fit
@@ -243,11 +255,14 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
                   ) : (
                     <p className="flex size-full items-center justify-center px-4 text-center text-xs text-white/70">{titleOf(moment)}</p>
                   )}
+                  {/* What the card is worth, not one stretch of it: the
+                      video is the result, and the number of places the
+                      watcher approved is why it stands where it stands. */}
                   <Badge
                     variant="ghost"
                     className="absolute top-2.5 left-2.5 h-auto bg-black/32 px-2 py-1 text-[11px] font-normal text-white/85 backdrop-blur-md hover:bg-black/32 hover:text-white/85"
                   >
-                    {formatRange(moment)}
+                    {placesIn(moment)}
                   </Badge>
                 </div>
               )
@@ -271,9 +286,18 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
               {activeMoment && (
                 <div key={activeMoment.id} className="duration-200 animate-in fade-in" data-testid="internet-caption-words">
                   <p className="max-w-[44ch] text-[17px] leading-snug tracking-[-0.01em] text-foreground">{titleOf(activeMoment)}</p>
-                  <p className="mt-2 text-[13px] text-muted-foreground">
-                    <span className="tabular-nums">{formatRange(activeMoment)}</span>
-                    {activeMoment.source ? ` · ${activeMoment.source}` : ""}
+                  {/*
+                    * Where in this video to look, earliest first. Each one is
+                    * a stretch the watcher approved, so the row says what the
+                    * card is offering rather than repeating its title.
+                    */}
+                  <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+                    {activeMoment.marks.map((mark) => (
+                      <span key={mark.startSeconds} className="tabular-nums whitespace-nowrap" title={mark.description}>
+                        {formatRange(mark)}
+                      </span>
+                    ))}
+                    {activeMoment.source ? <span>· {activeMoment.source}</span> : null}
                   </p>
                 </div>
               )}
