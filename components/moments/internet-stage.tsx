@@ -258,7 +258,7 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={moment.still} alt="" draggable={false} className="size-full object-cover" />
                   ) : (
-                    <p className="flex size-full items-center justify-center px-4 text-center text-xs text-white/70">{titleOf(moment)}</p>
+                    <p className="flex size-full items-center justify-center px-4 text-center text-xs text-white/70"><span className="line-clamp-6">{titleOf(moment)}</span></p>
                   )}
                   {/* What the card is worth, not one stretch of it: the
                       video is the result, and the number of places the
@@ -312,7 +312,9 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
                     * card is offering rather than repeating its title.
                     */}
                   <p className="mt-2 truncate text-[13px] text-muted-foreground" title={placesUnder(activeMoment)}>
-                    <span className="tabular-nums">{activeMoment.marks.map((mark) => formatRange(mark)).join("   ")}</span>
+                    {/* Parted by a middot rather than by spacing: run
+                        together, three clocks read as one long number. */}
+                    <span className="tabular-nums">{activeMoment.marks.map((mark) => formatRange(mark)).join(" · ")}</span>
                     {activeMoment.source ? ` · ${activeMoment.source}` : ""}
                   </p>
                 </div>
