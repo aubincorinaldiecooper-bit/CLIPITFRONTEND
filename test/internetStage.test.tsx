@@ -99,7 +99,9 @@ describe("the internet results stage", () => {
 
     const caption = screen.getByTestId("internet-caption").textContent ?? ""
     expect(caption).toContain("Kai Cenat walks the runway")
-    expect(caption).toContain("youtube.com")
+    // The site the video is on, named the way a person says it — not the
+    // search engine that turned it up, which is what `source` carries.
+    expect(caption).toContain("YouTube")
     // Where in the video to look belongs on the video, where it can be
     // jumped to. A row of raw clocks beside the picture is not what this
     // line is for (the owner, 2026-09-16).

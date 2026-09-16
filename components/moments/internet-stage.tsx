@@ -9,6 +9,7 @@ import { CoverflowCarousel, type CoverflowApi } from "@/components/space/coverfl
 import { Skeleton } from "@/components/space/skeleton"
 import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { InternetMoment } from "@/lib/types"
+import { siteName } from "@/lib/video-embed"
 import { cn } from "@/lib/utils"
 
 /**
@@ -308,8 +309,16 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
                     * and the places themselves belong on the video, where
                     * they can be jumped to rather than only read.
                     */}
+                  {/*
+                    * The site the video is ON, worked out from its address.
+                    * `source` is the search ENGINE that turned it up, which is
+                    * not the same thing: a result found through a general
+                    * video engine can be a page on any site at all, and the
+                    * finder's name tells the reader nothing about where they
+                    * would be going.
+                    */}
                   <p className="mt-2 truncate text-[13px] text-muted-foreground">
-                    {activeMoment.source ?? ""}
+                    {siteName(activeMoment.pageUrl) ?? activeMoment.source ?? ""}
                   </p>
                 </div>
               )}
