@@ -620,23 +620,8 @@ export interface InternetSearchState {
   unexamined?: number
 }
 
-/**
- * A moment the internet search approved: a stretch of a page's video that
- * was actually watched and judged to fit the question.
- *
- * A candidate is not one of these. A candidate is a page worth opening; a
- * moment exists only once something has watched that page and approved
- * what it saw. Nothing on the results band is built from a candidate, so
- * an unwatched page can never be shown as though it were a result.
- *
- * The fields are what a card can honestly carry at that point: what
- * happens, where in the video it happens, a frame from the moment itself,
- * and the site it came from.
- */
-export interface InternetMoment {
-  id: string
-  /** What happens in it, in the watcher's words. */
-  description: string
+/** Somewhere in a video the watcher approved, for jumping to. */
+export interface InternetMark {
   /**
    * Both ends are real numbers, never open: the coordinator refuses a
    * proposal whose end does not come after its start, or that runs past the
@@ -644,8 +629,35 @@ export interface InternetMoment {
    */
   startSeconds: number
   endSeconds: number
-  /** A frame from the moment; null until one has been taken. */
+  /** What the watcher said was happening there. */
+  description: string
+}
+
+/**
+ * A video the internet search approved: one that was actually watched, with
+ * something in it judged to fit the question.
+ *
+ * The video is the result. A video that answers three times over is one card
+ * with three places to jump to — the same video three times would eat a band
+ * that holds five and bury the others. Answering repeatedly makes it a
+ * stronger answer, which is the order the band arrives in, not a more
+ * numerous one.
+ *
+ * A candidate is not one of these. A candidate is a page worth opening; a
+ * video becomes a result only once something has watched it and approved
+ * what it saw. Nothing on the band is built from a candidate, so a page
+ * nothing was found in can never be shown as though it were a result.
+ */
+export interface InternetMoment {
+  id: string
+  /** Where the video plays, so the card can open it and seek in it. */
+  pageUrl: string
+  /** The video's title, as the site gives it. */
+  title: string
+  /** A frame the site already publishes; null when it publishes none. */
   still: string | null
   /** The site it came from, for attribution. */
   source: string | null
+  /** Everywhere the watcher approved, earliest first. Never empty. */
+  marks: InternetMark[]
 }
