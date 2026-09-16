@@ -1,4 +1,7 @@
+import { readSearchParam } from "@/lib/search-params"
 import type { Video } from "@/lib/types"
+
+export const WEB_SEARCH_PARAM = "web"
 
 /**
  * Whether a question can be sent right now, and what to say if not.
@@ -7,18 +10,10 @@ import type { Video } from "@/lib/types"
  * deliberate mode, never something Clipit infers just because no file is
  * attached. That keeps a forgotten upload from silently becoming a web
  * search.
- *
- * With a video attached, the question goes as soon as the upload has landed:
- * the answer waits, inside the search, for whatever the video still needs,
- * and the dialogue says what that is. The server says so with
- * `acceptsQuestions`. An older server does not, and for it ready-for-search is
- * the gate it always was — with the words that were true of it.
  */
 export interface AskGate {
   accepting: boolean
-  /** The line under the box while sending has to wait. Null when nothing is promised. */
   waitingOn: string | null
-  /** The box's own placeholder while sending has to wait. */
   placeholder: string | null
 }
 
@@ -40,14 +35,8 @@ const PREPARING: AskGate = {
   placeholder: "Your video is still being prepared…",
 }
 const OPEN: AskGate = { accepting: true, waitingOn: null, placeholder: null }
-/** Preparation failed: nothing here will ever become sendable, so no promise is made. */
 const CLOSED: AskGate = { accepting: false, waitingOn: null, placeholder: null }
 
-/**
- * The gate for a box that is definitely about a video — the follow-up under
- * the results, and the one on the moment page. Nothing attached means
- * something has gone wrong, not that the internet is the subject.
- */
 export function askAboutVideoGate(video: Video | null | undefined): AskGate {
   if (!video) return UPLOADING
   if (video.status === "failed") return CLOSED
@@ -56,9 +45,8 @@ export function askAboutVideoGate(video: Video | null | undefined): AskGate {
 }
 
 /**
- * The gate for the home composer. With no file selected the send stays
- * available so the person can get the useful "You forgot your video" toast;
- * whether that send is footage or web is decided separately by askTarget.
+ * With no file selected, Search stays clickable. The click either starts an
+ * explicitly toggled web search or produces the missing-video toast.
  */
 export function askGate(
   video: Video | null | undefined,
@@ -68,19 +56,28 @@ export function askGate(
   return askAboutVideoGate(video)
 }
 
-/** What this question will be asked of, given the explicit mode and attachment. */
+/**
+ * The page already calls this helper when it decides which backend route to
+ * use. SearchHome writes the explicit mode into the address, so that decision
+ * survives the component boundary without coupling the page to the toggle UI.
+ *
+ * No `web` parameter preserves the old helper behavior for callers outside the
+ * home composer. SearchHome writes `web=0` on entry, making footage the real
+ * default there.
+ */
 export function askTarget(
   video: Video | null | undefined,
-  { attaching = false, internetEnabled = false }: AskGateOptions = {},
+  { attaching = false, internetEnabled }: AskGateOptions = {},
 ): "video" | "internet" {
   if (video || attaching) return "video"
-  return internetEnabled ? "internet" : "video"
+  if (internetEnabled !== undefined) return internetEnabled ? "internet" : "video"
+
+  const storedMode = readSearchParam(WEB_SEARCH_PARAM)
+  if (storedMode === "1") return "internet"
+  if (storedMode === "0") return "video"
+  return "internet"
 }
 
-/**
- * True only for the accidental empty-footage case. A file on its way is not
- * forgotten, and explicit web mode never asks for an upload.
- */
 export function shouldRemindForMissingVideo(
   video: Video | null | undefined,
   { attaching = false, internetEnabled = false }: AskGateOptions = {},
