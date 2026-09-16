@@ -94,13 +94,16 @@ describe("the internet results stage", () => {
     expect(screen.getByTestId("internet-words").textContent).toBe("7 videos fit your search. The strongest 5 are here.")
   })
 
-  it("captions the video in the centre with its title, where to look and the site", () => {
+  it("captions the video in the centre with its title and its site, and no clocks", () => {
     render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
 
     const caption = screen.getByTestId("internet-caption").textContent ?? ""
     expect(caption).toContain("Kai Cenat walks the runway")
-    expect(caption).toContain("0:10–0:34")
     expect(caption).toContain("youtube.com")
+    // Where in the video to look belongs on the video, where it can be
+    // jumped to. A row of raw clocks beside the picture is not what this
+    // line is for (the owner, 2026-09-16).
+    expect(caption).not.toMatch(/\d+:\d\d/)
   })
 
   it("gives a video approved in several places one card offering all of them", () => {
@@ -119,12 +122,12 @@ describe("the internet results stage", () => {
     // the five slots and bury whatever else the search found.
     expect(filled()).toHaveLength(1)
     expect(screen.getByTestId("internet-words").textContent).toBe("1 video fits your search.")
-    // The picture says why it stands where it stands, and the caption says
-    // where inside it to look.
+    // The picture says why it stands where it stands. The places themselves
+    // are offered on the video, not listed under the band.
     expect(screen.getByTestId("moment-slot-filled").textContent).toContain("3 places")
     const caption = screen.getByTestId("internet-caption").textContent ?? ""
     expect(caption).toContain("The whole show")
-    for (const range of ["0:10–0:14", "0:40–0:43", "1:10–1:15"]) expect(caption).toContain(range)
+    expect(caption).not.toMatch(/\d+:\d\d/)
   })
 
   it("gives the caption the same room whatever is in it, so the arrows never move", () => {

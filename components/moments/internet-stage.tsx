@@ -7,7 +7,6 @@ import { Badge } from "@/components/space/badge"
 import { Button } from "@/components/space/button"
 import { CoverflowCarousel, type CoverflowApi } from "@/components/space/coverflow-carousel"
 import { Skeleton } from "@/components/space/skeleton"
-import { formatRange } from "@/components/start/moments"
 import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { InternetMoment } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -67,11 +66,6 @@ export interface InternetStageProps {
 /** What a video is called: its own title, or what the watcher saw in it. */
 function titleOf(moment: InternetMoment): string {
   return moment.title || moment.marks[0]?.description || "A video from this site"
-}
-
-/** Every approved place and what the watcher saw there, for the hover. */
-function placesUnder(moment: InternetMoment): string {
-  return moment.marks.map((mark) => `${formatRange(mark)} — ${mark.description}`).join("\n")
 }
 
 /** How many places in this video were approved, said plainly. */
@@ -307,15 +301,15 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
                     {titleOf(activeMoment)}
                   </p>
                   {/*
-                    * Where in this video to look, earliest first. Each one is
-                    * a stretch the watcher approved, so the row says what the
-                    * card is offering rather than repeating its title.
+                    * The site, and nothing else. A row of clocks under the
+                    * band was a list of raw numbers next to a picture, which
+                    * is not what this line is for (the owner, 2026-09-16).
+                    * How many places were approved is already on the picture,
+                    * and the places themselves belong on the video, where
+                    * they can be jumped to rather than only read.
                     */}
-                  <p className="mt-2 truncate text-[13px] text-muted-foreground" title={placesUnder(activeMoment)}>
-                    {/* Parted by a middot rather than by spacing: run
-                        together, three clocks read as one long number. */}
-                    <span className="tabular-nums">{activeMoment.marks.map((mark) => formatRange(mark)).join(" · ")}</span>
-                    {activeMoment.source ? ` · ${activeMoment.source}` : ""}
+                  <p className="mt-2 truncate text-[13px] text-muted-foreground">
+                    {activeMoment.source ?? ""}
                   </p>
                 </div>
               )}
