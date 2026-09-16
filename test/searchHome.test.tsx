@@ -64,7 +64,10 @@ function Typed({ video, onPromptChange }: { video: Video | null; onPromptChange:
   )
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  window.history.replaceState({}, "", "/")
+})
 
 const box = () =>
   screen.getByRole<HTMLTextAreaElement>("textbox", { name: /^Search (your footage|the internet)$/ })
@@ -105,20 +108,30 @@ describe("the box while a video is still being prepared", () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it("searches the internet when nothing is attached, and says so", async () => {
+  it("defaults to footage, and only searches the internet after Web search is toggled", async () => {
+    const onSubmit = vi.fn()
     const onPromptChange = vi.fn()
-    render(<Typed video={null} onPromptChange={onPromptChange} />)
-    // With no toggle to read, the box itself says what it will search.
+    renderHome({ video: null, promptValue: "find the introduction", onSubmit, onPromptChange })
+
+    expect(box().placeholder).toBe("Ask for a moment…")
+    expect(box().getAttribute("aria-label")).toBe("Search your footage")
+    expect(screen.getByRole("button", { name: "Web search" }).getAttribute("aria-pressed")).toBe("false")
+    expect(search().disabled).toBe(false)
+
+    // Search without footage does not silently become a web search.
+    await userEvent.click(search())
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole("button", { name: "Web search" }))
     expect(box().placeholder).toBe("Search the internet for a moment…")
     expect(box().getAttribute("aria-label")).toBe("Search the internet")
-    await userEvent.type(box(), "find the introduction")
-    expect(onPromptChange).toHaveBeenLastCalledWith("find the introduction")
-    // Words alone are enough: there is no file to wait for.
-    expect(search().disabled).toBe(false)
-    expect(screen.queryByText(/still uploading/)).toBeNull()
+    expect(screen.getByRole("button", { name: "Web search" }).getAttribute("aria-pressed")).toBe("true")
+
+    await userEvent.click(search())
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps Search off with empty words, even for the internet", () => {
+  it("keeps Search off with empty words", () => {
     renderHome({ video: null, promptValue: "" })
     expect(search().disabled).toBe(true)
   })
@@ -127,7 +140,6 @@ describe("the box while a video is still being prepared", () => {
     renderHome({ video: null, entries: [uploading()] })
     expect(box().disabled).toBe(false)
     expect(search().disabled).toBe(true)
-    // The file is on screen as itself while it goes up.
     expect(screen.getByRole("button", { name: /^film\.mp4 — uploading/ })).toBeTruthy()
     expect(screen.getByText(/still uploading/)).toBeTruthy()
   })
@@ -162,7 +174,6 @@ describe("the box while a video is still being prepared", () => {
     expect(search().disabled).toBe(true)
     expect(screen.queryByText(/still being prepared/)).toBeNull()
   })
-
 })
 
 describe("home is the box alone, and the box still takes video", () => {
@@ -185,11 +196,6 @@ describe("home is the box alone, and the box still takes video", () => {
   })
 
   it("holds one video: picking another replaces the one on its way up, and keeps the question", async () => {
-    // A question is asked of one video. Two in the tray with only the first
-    // ever searched was a row nobody could choose (Codex's finding on #95).
-    // Replacing is the page's own act — not a remove and not a detach, both
-    // of which start over and would throw the typed question away (Devin's
-    // finding on #96).
     const onAdd = vi.fn()
     const onRemove = vi.fn()
     const onReplace = vi.fn()
@@ -246,9 +252,6 @@ describe("home is the box alone, and the box still takes video", () => {
     expect(box().placeholder).toBe("Drop the video to attach it…")
     fireEvent.drop(card, { dataTransfer: { types: ["Files"], files: [file] } })
     expect(onAdd).toHaveBeenCalledWith([file])
-    // The drop hint goes when the drag does. What it goes back to depends on
-    // what is attached, and here the page owns that — onAdd is a stub, so
-    // nothing has actually been attached yet.
     expect(box().placeholder).not.toBe("Drop the video to attach it…")
   })
 
@@ -256,8 +259,6 @@ describe("home is the box alone, and the box still takes video", () => {
     renderHome({ video: null, entries: [uploading()] })
     const thumb = screen.getByRole("button", { name: /^film\.mp4 — uploading/ })
     expect(thumb.querySelector("video")).toBeTruthy()
-    // The percentage is not drawn — a spinner is — but it stays in the
-    // label, the one thing a spinning circle cannot tell a screen reader.
     expect(thumb.getAttribute("aria-label")).toBe("film.mp4 — uploading, 30%")
   })
 
@@ -284,9 +285,6 @@ describe("home is the box alone, and the box still takes video", () => {
   })
 
   it("shows a video that arrived without the tray — opened from the library, or come back to — and offers to take it off", async () => {
-    // Back from the results lands here with the video still attached; a
-    // video opened from the library never had a row in the tray at all.
-    // Either way the box must show what the question is about.
     const onDetach = vi.fn()
     const opened = {
       id: "video-1", sourceType: "upload", sourceUrl: null, title: "harbour.mp4", originalFilename: "harbour.mp4", status: "ready",
@@ -301,7 +299,6 @@ describe("home is the box alone, and the box still takes video", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove harbour.mp4" }))
     expect(onDetach).toHaveBeenCalledTimes(1)
     cleanup()
-    // A video whose upload is in the tray is shown by its row, once.
     render(
       <SearchHome entries={[{ ...uploading(), phase: "ready", videoId: "video-1" }]} video={opened} promptValue="" onPromptChange={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} onSubmit={vi.fn()} onDetach={onDetach} />,
     )
