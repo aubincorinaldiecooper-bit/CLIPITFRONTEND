@@ -19,7 +19,7 @@ import { clipRowFor, needsKeep, publishableFor } from "@/components/start/produc
 import { oneAtATime, runKeep } from "@/components/start/keep-flow"
 import { feedMoments, type FeedMoment } from "@/components/start/moments"
 import { askGate, askTarget } from "@/components/start/ask-gate"
-import { nextRead, RETRY_MS } from "@/components/start/search-polling"
+import { nextRead } from "@/components/start/search-polling"
 import type { Exchange } from "@/components/start/types"
 import { consumeSearchParams, matchForClip, restoreConversation } from "@/components/start/restore"
 import { writeSearchParams } from "@/lib/search-params"
@@ -450,10 +450,14 @@ export default function StartPage() {
     if (internetSearch?.searchId === searchId && internetSearch.phase === "answered") return
 
     let stopped = false
+    // Reads that have failed in a row. A good one puts it back to nothing,
+    // so only an unbroken run of trouble ever reaches the limit.
+    let failures = 0
     const read = async () => {
       try {
         const state = await api.internetSearch(searchId)
         if (stopped) return
+        failures = 0
         setError(null)
         setInternetSearch(state)
         const again = nextRead({ failed: false, phase: state.phase })
@@ -461,14 +465,18 @@ export default function StartPage() {
       } catch (cause) {
         if (stopped) return
         // A search we cannot read is not a search that found nothing — and a
-        // search still running does not stop because one read failed. The
-        // scouts are working either way; giving up here would leave the
-        // screen frozen at whatever it last saw for the rest of the search,
-        // with every later moment missed. So the trouble is said out loud and
-        // the next read goes out anyway, a little further apart in case what
-        // failed needs a moment. A read that succeeds clears the notice.
+        // search still running does not stop because one read hiccuped. The
+        // scouts are working either way, so the trouble is said out loud and
+        // the next read goes out anyway, a little further apart.
+        //
+        // But a search that is never coming back answers the same way every
+        // time, and asking it how it is doing every few seconds until the tab
+        // closes helps nobody. After enough failures in a row the page stops
+        // asking and leaves the trouble on screen.
+        failures += 1
         fail(cause)
-        timer = window.setTimeout(read, nextRead({ failed: true }) ?? RETRY_MS)
+        const again = nextRead({ failed: true, consecutiveFailures: failures })
+        if (again !== null) timer = window.setTimeout(read, again)
       }
     }
     let timer = window.setTimeout(read, internetSearch?.searchId === searchId ? POLL_MS : 0)

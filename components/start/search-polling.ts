@@ -3,20 +3,46 @@ export const POLL_MS = 2000
 
 /**
  * A read that failed waits longer than one that worked, in case whatever
- * went wrong needs a moment. It still happens.
+ * went wrong needs a moment.
  */
 export const RETRY_MS = POLL_MS * 3
 
 /**
- * When to read a search again — or never, because it is finished.
+ * How many failures in a row before the page stops asking.
  *
- * The rule worth stating: a read that failed schedules the next one anyway.
- * A search runs for minutes, and the scouts carry on whether or not one
- * request got through. Giving up on a single failure would freeze the screen
- * at whatever it last saw and lose every moment found after it, until someone
- * thought to reload.
+ * Enough to ride out a blip — about half a minute of trying — and few enough
+ * that a search which is never coming back is let go of rather than asked
+ * after every few seconds for as long as the tab is open.
  */
-export function nextRead(outcome: { failed: boolean; phase?: "loading" | "searching" | "answered" }): number | null {
-  if (outcome.failed) return RETRY_MS
+export const MAX_FAILURES = 5
+
+/**
+ * When to read a search again — or never.
+ *
+ * Two different silences, and they need different answers. A read that failed
+ * because the network hiccuped should be tried again: the scouts carry on
+ * whether or not one request got through, and giving up would freeze the
+ * screen at whatever it last saw and lose every moment found after it.
+ *
+ * A search that is never coming back is the other one. The server reports a
+ * failed search as an error on every read, so retrying forever means asking
+ * a dead search how it is doing every few seconds until the tab closes —
+ * work nobody benefits from, on both ends. After enough failures in a row the
+ * page stops asking and leaves the trouble on screen.
+ *
+ * Counting failures rather than reading the error is deliberate. A search
+ * that died and a server that is briefly unreachable answer the same way, so
+ * there is nothing in one reply to tell them apart; what tells them apart is
+ * that one of them recovers.
+ */
+export function nextRead(outcome: {
+  failed: boolean
+  phase?: "loading" | "searching" | "answered"
+  /** Reads that have failed in a row, this one included. */
+  consecutiveFailures?: number
+}): number | null {
+  if (outcome.failed) {
+    return (outcome.consecutiveFailures ?? 1) >= MAX_FAILURES ? null : RETRY_MS
+  }
   return outcome.phase === "answered" ? null : POLL_MS
 }
