@@ -596,3 +596,56 @@ export interface InternetCandidate {
   thumbnailUrl: string | null
   source: string | null
 }
+
+/**
+ * How an internet search is doing, and what it has found so far.
+ *
+ * The three states the results screen draws. `loading` is every search's
+ * first state, before it is known whether there is anything to watch at all.
+ * `searching` means pages were found and are being watched, which is what
+ * puts the slots up. `answered` means the scouts are done and `moments` is
+ * everything they found, which may be none.
+ *
+ * `candidatesFound` is a count and never a list: the pages a search is
+ * looking through are where to look, not what was found, and the screen is
+ * never given them.
+ */
+export interface InternetSearchState {
+  searchId: string
+  query: string
+  phase: "loading" | "searching" | "answered"
+  moments: InternetMoment[]
+  candidatesFound: number
+  /** Pages the search could not watch. Not the same as finding nothing. */
+  unexamined?: number
+}
+
+/**
+ * A moment the internet search approved: a stretch of a page's video that
+ * was actually watched and judged to fit the question.
+ *
+ * A candidate is not one of these. A candidate is a page worth opening; a
+ * moment exists only once something has watched that page and approved
+ * what it saw. Nothing on the results band is built from a candidate, so
+ * an unwatched page can never be shown as though it were a result.
+ *
+ * The fields are what a card can honestly carry at that point: what
+ * happens, where in the video it happens, a frame from the moment itself,
+ * and the site it came from.
+ */
+export interface InternetMoment {
+  id: string
+  /** What happens in it, in the watcher's words. */
+  description: string
+  /**
+   * Both ends are real numbers, never open: the coordinator refuses a
+   * proposal whose end does not come after its start, or that runs past the
+   * longest moment it allows. Nothing open-ended reaches the band.
+   */
+  startSeconds: number
+  endSeconds: number
+  /** A frame from the moment; null until one has been taken. */
+  still: string | null
+  /** The site it came from, for attribution. */
+  source: string | null
+}
