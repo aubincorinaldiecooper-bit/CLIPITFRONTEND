@@ -57,6 +57,157 @@ not reading the code. This is a standing rule, not a per-message request.
 Commit messages and pull request descriptions are the place for precision.
 Chat is the place for being understood.
 
+
+# Reference fidelity is a release gate
+
+When the owner supplies visual references for a screen, those references are not
+"mood", "inspiration", or a loose art direction. They are the visual target for
+that screen unless the owner explicitly says otherwise.
+
+This rule exists because the search UI was repeatedly rebuilt into a generic
+dashboard even after reference screens had been supplied. Functional correctness
+was treated as enough, and each pass inherited the same wrong structure. That
+loop stops here.
+
+## Freeze the visual contract before coding
+
+Before changing a referenced screen:
+
+1. Identify the exact reference(s) that govern the screen.
+2. Write down the visible structure:
+   - page frame;
+   - hierarchy;
+   - major regions;
+   - alignment;
+   - density;
+   - spacing rhythm;
+   - image/video treatment;
+   - typography scale;
+   - controls;
+   - empty/loading/result states.
+3. Identify what must **not** appear because it is absent from the reference.
+4. State any unavoidable product-specific additions separately.
+
+Do not start implementation until that contract is clear.
+
+If the reference itself is unavailable, do not invent from memory and do not
+substitute a generic dashboard pattern. Ask for the reference or locate the
+approved source first.
+
+## References outrank existing UI patterns for the touched screen
+
+For a screen explicitly governed by supplied references:
+
+- do not preserve an existing shell merely because it already exists;
+- do not introduce a sidebar, card grid, dashboard rail, toolbar, tabs, badges,
+  or chrome unless the reference or product requirement calls for it;
+- do not default to "SaaS dashboard" structure;
+- do not reinterpret a minimal composition into a more conventional app layout;
+- do not add decorative UI to make the page feel "finished";
+- do not use a design-system component simply because it is available if its
+  visual result conflicts with the reference.
+
+The reference controls the composition. The component system is an
+implementation tool, not a reason to change the composition.
+
+## Build one screen at a time
+
+Do not redesign several referenced screens in one speculative pass.
+
+For each screen:
+
+```text
+reference
+→ visual contract
+→ implementation
+→ rendered comparison
+→ correction
+→ approval
+→ next screen
+```
+
+Do not propagate an unapproved shell or layout into adjacent screens.
+
+## Visual comparison is required before "done"
+
+A referenced screen is not complete because:
+
+- it compiles;
+- tests pass;
+- interactions work;
+- it uses the right component library;
+- it feels cleaner than before.
+
+It is complete only after the rendered result has been compared against the
+reference at the actual target viewport.
+
+The comparison must inspect at minimum:
+
+- overall silhouette;
+- header height and weight;
+- horizontal margins;
+- content width;
+- vertical rhythm;
+- element scale;
+- thumbnail/media proportions;
+- relative visual emphasis;
+- control placement;
+- whitespace;
+- typography hierarchy.
+
+If the result is obviously recognisable as a different layout family, it fails
+the visual gate even if every feature works.
+
+## No reinterpretation without approval
+
+If an implementation agent believes a reference should be changed for usability,
+technical feasibility, responsiveness, or product reasons, do not silently
+"improve" it.
+
+Instead:
+
+1. preserve the current target;
+2. explain the specific conflict;
+3. propose the smallest deviation;
+4. wait for approval before changing the visual contract.
+
+"Closer to our design system", "more standard", "cleaner", "more scalable", and
+"more dashboard-like" are not valid reasons to override an approved reference.
+
+## Preserve the approved Clipit search direction
+
+For Clipit's search experience, keep the established direction:
+
+- minimal, not dashboard-heavy;
+- video-first;
+- not YouTube-like;
+- not a generic UGC library;
+- search and recent activity are visually subordinate to the content itself;
+- search screens use the approved light Shadcn Space/Base UI direction;
+- avoid unnecessary rails, utility chrome, dense card furniture, and corporate
+  SaaS framing;
+- thumbnails/media should feel editorial and intentional, not like a feed grid;
+- keep the interaction simple enough to feel closer to a search product than a
+  workspace product.
+
+When a newer explicit reference conflicts with any line above, the newer
+reference wins.
+
+## PR acceptance requirement
+
+Any PR that materially changes a referenced screen must include:
+
+- the reference(s) used;
+- a short visual-contract summary;
+- which screen(s) changed;
+- screenshots or equivalent rendered evidence at the target viewport;
+- a note describing any intentional deviation from the reference.
+
+If those are missing, the PR is not ready for visual approval.
+
+Never describe a referenced UI as "matched", "faithful", "done", or "aligned"
+without comparing the rendered result against the actual reference.
+
 # Controls have to look finished
 
 Every control ships laid out properly, and nothing moves when you use it.
