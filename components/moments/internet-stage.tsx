@@ -134,7 +134,6 @@ function words(
     : `${strongest} It did not watch every second, so there may be more.`
 }
 
-type Slot = { kind: "moment"; key: string; moment: InternetMoment } | { kind: "pending"; key: string }
 
 export function InternetStage({
   query,
