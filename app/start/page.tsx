@@ -447,7 +447,7 @@ export default function StartPage() {
   useEffect(() => {
     const searchId = address.ask
     if (!searchId) return
-    if (internetSearch?.searchId === searchId && internetSearch.phase === "answered") return
+    if (internetSearch?.searchId === searchId && (internetSearch.phase === "answered" || internetSearch.phase === "failed")) return
 
     let stopped = false
     // Reads that have failed in a row. A good one puts it back to nothing,
@@ -942,6 +942,10 @@ export default function StartPage() {
                 query={internetSearch?.query ?? promptDraft}
                 phase={internetSearch?.searchId === address.ask ? internetSearch.phase : "loading"}
                 moments={internetSearch?.searchId === address.ask ? internetSearch.moments : []}
+                outcome={internetSearch?.searchId === address.ask ? internetSearch.outcome : undefined}
+                failure={internetSearch?.searchId === address.ask ? internetSearch.failure : undefined}
+                candidatesFound={internetSearch?.searchId === address.ask ? internetSearch.candidatesFound : 0}
+                candidatesWatched={internetSearch?.searchId === address.ask ? internetSearch.candidatesWatched : undefined}
               />
             </motion.div>
           )}
