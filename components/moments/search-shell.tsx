@@ -10,7 +10,7 @@ import { WorkspaceSignInGate } from "@/components/workspace/sign-in-gate"
 import { cn } from "@/lib/utils"
 
 const primaryGradient =
-  "bg-[linear-gradient(135deg,#d8f6ff_0%,#a9e3ff_48%,#bfcbff_100%)] text-[#102033] shadow-[0_8px_24px_rgba(121,199,255,0.20)] hover:brightness-[0.985]"
+  "bg-[linear-gradient(135deg,#d8f6ff_0%,#a9e3ff_48%,#bfcbff_100%)] text-[#102033] shadow-[0_6px_18px_rgba(121,199,255,0.18)] hover:brightness-[0.985]"
 
 export function SearchShell({ children }: { children: React.ReactNode }) {
   return (
@@ -23,11 +23,13 @@ export function SearchShell({ children }: { children: React.ReactNode }) {
           Skip to content
         </a>
 
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[#edf1f5] bg-white/90 px-4 backdrop-blur-xl sm:px-6">
-          <div className="flex items-center gap-3">
-            <a href="/start" aria-label="Clipit home" className="flex items-center text-foreground">
-              <Logo size={19} />
+        <header className="sticky top-0 z-30 flex h-14 w-full items-center border-b border-[#eef0f2] bg-white/92 px-4 backdrop-blur-xl sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <a href="/start" aria-label="Clipit — new chat" className="flex shrink-0 items-center text-foreground">
+              <Logo size={18} className="max-[860px]:hidden" />
+              <Logo variant="mark" size={18} className="hidden max-[860px]:inline-flex" />
             </a>
+
             <motion.a
               href="/start"
               whileHover={{ y: -1 }}
@@ -35,7 +37,7 @@ export function SearchShell({ children }: { children: React.ReactNode }) {
               className={cn(
                 buttonVariants({ variant: "default", size: "sm" }),
                 primaryGradient,
-                "h-9 rounded-xl border-0 px-3 font-medium",
+                "h-8 rounded-xl border-0 px-3 text-[13px] font-medium max-[860px]:hidden",
               )}
             >
               <Plus className="size-3.5" />
@@ -43,10 +45,12 @@ export function SearchShell({ children }: { children: React.ReactNode }) {
             </motion.a>
           </div>
 
-          <ProfileDropdown compact align="end" links={[]} />
+          <div className="ml-auto flex w-12 shrink-0 items-center justify-end" data-testid="account-slot">
+            <ProfileDropdown compact align="end" links={[]} />
+          </div>
         </header>
 
-        <main id="content" className="flex min-h-[calc(100dvh-4rem)] w-full flex-col overflow-x-hidden">
+        <main id="content" className="flex min-h-[calc(100dvh-3.5rem)] w-full flex-col overflow-x-hidden">
           {children}
         </main>
 
