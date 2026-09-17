@@ -377,13 +377,21 @@ describe("a search that did not finish", () => {
     expect(said).not.toContain(nothingMatched)
   })
 
-  it("never says nothing matched on a failed search, whatever the outcome says", () => {
-    // The guard that matters most: a future outcome value, or one this build
-    // has not heard of, must not reopen the original bug.
+  it("makes no claim about the videos on a failed search, whatever the outcome says", () => {
+    // The first version of this test only checked that the exact phrase "No
+    // results fit your search" was absent, and passed while `no_candidates`
+    // returned "The search turned up no videos to watch" — every bit as
+    // conclusive, on a search that never finished. Codex caught it on #111.
+    //
+    // So this asserts what the sentence DOES say, not merely one thing it
+    // avoids. There is no wording a conclusive answer could take that would
+    // also say the search did not finish.
     for (const outcome of [undefined, "no_matches", "matched", "no_candidates"] as const) {
       cleanup()
       render(<InternetStage query="q" phase="failed" moments={[]} outcome={outcome} candidatesFound={7} />)
-      expect(screen.getByTestId("internet-words").textContent ?? "").not.toContain(nothingMatched)
+      const said = screen.getByTestId("internet-words").textContent ?? ""
+      expect(said).toContain("did not finish")
+      expect(said).toContain("not an answer about what is in the videos")
     }
   })
 

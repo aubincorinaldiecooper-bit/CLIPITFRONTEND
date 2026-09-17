@@ -96,6 +96,20 @@ function words(
     return `${becauseOf(failure)} Clipit's search stopped before it finished, so ${some}this is not an answer about what is in the videos.`
   }
 
+  // Everything below this line makes a claim about the world — that there were
+  // no videos, or that the ones there were did not have it in them. A search
+  // that did not finish has not earned any of them, so it stops here.
+  //
+  // It sits above `no_candidates` rather than further down because that is
+  // where the first version put it, and it was wrong: a failed search carrying
+  // `no_candidates` still returned "The search turned up no videos to watch",
+  // which is every bit as conclusive as the sentence the guard was written to
+  // prevent. The test passed anyway, because it only checked for the absence
+  // of that one phrase. Caught by Codex on #111.
+  if (phase === "failed") {
+    return `${becauseOf(failure)} Clipit's search did not finish, so this is not an answer about what is in the videos.`
+  }
+
   if (outcome === "no_candidates") return "The search turned up no videos to watch."
 
   // Two different gaps, and they need different sentences. `missed` is videos
@@ -107,14 +121,6 @@ function words(
   const partial = outcome === "partly_watched"
 
   if (found === 0) {
-    // The guard, not the belt. Every ending that means "we could not look" is
-    // handled above and returns before here — but a sixth outcome added later,
-    // or one this build has not heard of yet, would otherwise fall through to
-    // the one sentence a search that did not finish must never say. A failed
-    // search is never an empty answer, whatever else is or is not known.
-    if (phase === "failed") {
-      return `${becauseOf(failure)} Clipit's search did not finish, so this is not an answer about what is in the videos.`
-    }
     if (!partial) return "No results fit your search."
     return missed > 0
       ? `Nothing fit in what Clipit could watch. ${missed} ${plural(missed, "video", "videos")} could not be watched, so there may be more.`
