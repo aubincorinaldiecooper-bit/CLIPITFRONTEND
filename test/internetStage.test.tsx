@@ -336,3 +336,60 @@ describe("what the band is allowed to claim", () => {
     expect(screen.queryAllByTestId("moment-slot-pending")).toHaveLength(0)
   })
 })
+
+/**
+ * A search that stopped rather than ended.
+ *
+ * On 17 September a candidate page with no video in it killed the worker, the
+ * job ran again and killed it again, and the person was shown BullMQ's own
+ * words — "job stalled more than allowable limit" — after a ten-minute
+ * spinner. Neither that sentence nor an empty list is an answer about the
+ * videos.
+ */
+describe("a search that did not finish", () => {
+  const nothingMatched = "No results fit your search."
+
+  it("says it stopped, rather than that nothing was there", () => {
+    render(
+      <InternetStage
+        query="a dog on a skateboard"
+        phase="failed"
+        moments={[]}
+        outcome="search_failed"
+        failure={{ kind: "browser_unavailable", count: 1 }}
+        candidatesFound={7}
+      />,
+    )
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).not.toContain(nothingMatched)
+    expect(said).toContain("stopped before it finished")
+    expect(said).toContain("not an answer about what is in the videos")
+  })
+
+  it("keeps showing what it had already found when it stopped", () => {
+    render(
+      <InternetStage query="q" phase="failed" moments={many(2)} outcome="search_failed" candidatesFound={7} />,
+    )
+    // The moments were verified footage before the worker died. They stay.
+    expect(screen.queryAllByTestId("moment-slot-filled")).toHaveLength(2)
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).toContain("2 videos turned up before it stopped")
+    expect(said).not.toContain(nothingMatched)
+  })
+
+  it("never says nothing matched on a failed search, whatever the outcome says", () => {
+    // The guard that matters most: a future outcome value, or one this build
+    // has not heard of, must not reopen the original bug.
+    for (const outcome of [undefined, "no_matches", "matched", "no_candidates"] as const) {
+      cleanup()
+      render(<InternetStage query="q" phase="failed" moments={[]} outcome={outcome} candidatesFound={7} />)
+      expect(screen.getByTestId("internet-words").textContent ?? "").not.toContain(nothingMatched)
+    }
+  })
+
+  it("does not repeat internal wording to the person", () => {
+    render(<InternetStage query="q" phase="failed" moments={[]} outcome="search_failed" candidatesFound={7} />)
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    for (const leak of ["stalled", "BullMQ", "job", "Modal", "queue"]) expect(said).not.toContain(leak)
+  })
+})

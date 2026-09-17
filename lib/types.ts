@@ -628,6 +628,8 @@ export type InternetSearchOutcome =
   | "partly_watched"
   /** Videos were found and not one could be watched. Nothing was looked at. */
   | "watch_failed"
+  /** The search stopped part-way and never decided anything. */
+  | "search_failed"
 
 /** What went wrong, in the coarsest terms the screen can say something about. */
 export type InternetSearchFailureKind =

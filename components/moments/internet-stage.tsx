@@ -91,6 +91,11 @@ function words(
     return `${becauseOf(failure)} Clipit found ${videos} to watch and could not watch any of them, so this is not an answer about what is in them.`
   }
 
+  if (outcome === "search_failed") {
+    const some = found > 0 ? `${found} ${plural(found, "video", "videos")} turned up before it stopped, and ` : ""
+    return `${becauseOf(failure)} Clipit's search stopped before it finished, so ${some}this is not an answer about what is in the videos.`
+  }
+
   if (outcome === "no_candidates") return "The search turned up no videos to watch."
 
   // Two different gaps, and they need different sentences. `missed` is videos
@@ -102,6 +107,14 @@ function words(
   const partial = outcome === "partly_watched"
 
   if (found === 0) {
+    // The guard, not the belt. Every ending that means "we could not look" is
+    // handled above and returns before here — but a sixth outcome added later,
+    // or one this build has not heard of yet, would otherwise fall through to
+    // the one sentence a search that did not finish must never say. A failed
+    // search is never an empty answer, whatever else is or is not known.
+    if (phase === "failed") {
+      return `${becauseOf(failure)} Clipit's search did not finish, so this is not an answer about what is in the videos.`
+    }
     if (!partial) return "No results fit your search."
     return missed > 0
       ? `Nothing fit in what Clipit could watch. ${missed} ${plural(missed, "video", "videos")} could not be watched, so there may be more.`
