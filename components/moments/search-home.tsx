@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type DragEvent } from "react"
 import { Globe2, Paperclip } from "lucide-react"
 import { motion } from "motion/react"
 import { toast } from "sonner"
+import { Logo } from "@/components/brand/logo"
 import { VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
 import { Button } from "@/components/space/button"
 import { ThumbFrame, UploadTray } from "@/components/start/composer-attachments"
@@ -97,7 +98,7 @@ export function SearchHome({
 
   const placeholder = dragging
     ? "Drop the video to attach it…"
-    : (onItsWay && gate.placeholder) || (target === "internet" ? "Search the internet for a moment…" : "Ask for a moment…")
+    : (onItsWay && gate.placeholder) || (target === "internet" ? "Search the internet for a moment…" : "Ask anything…")
 
   const pick = (files: File[]) => {
     const file = files[0]
@@ -129,22 +130,26 @@ export function SearchHome({
   }
 
   return (
-    <div className="w-full max-w-[760px]" data-testid="search-home">
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-        <p className="mb-3 text-center text-[12px] font-medium tracking-[0.14em] text-[#7f91a4] uppercase">Clipit</p>
-        <h1 className="mx-auto max-w-[680px] text-center text-[clamp(34px,5vw,54px)] font-medium leading-[1.05] tracking-[-0.035em] text-[#122033]">
+    <div className="w-full max-w-[660px] px-4 sm:px-0" data-testid="search-home">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28 }}
+        className="mb-6 flex flex-col items-center text-center"
+      >
+        <div className="mb-4 flex size-10 items-center justify-center rounded-full bg-[#f1f4f6] text-[#111827] ring-1 ring-[#e5e7eb]">
+          <Logo variant="mark" size={16} />
+        </div>
+        <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.025em] text-[#111827] sm:text-[26px]">
           What do you want to find?
         </h1>
-        <p className="mx-auto mt-4 max-w-[520px] text-center text-[15px] leading-relaxed text-[#718197]">
-          Search what happens in video — from your footage or across the web.
-        </p>
+        <p className="mt-1.5 text-[14px] text-[#667085]">Ask a question about your footage or search across the web.</p>
       </motion.div>
 
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.05 }}
-        className="mt-9"
+        transition={{ duration: 0.3, delay: 0.03 }}
         onDragOver={onDragOver}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
@@ -196,7 +201,7 @@ export function SearchHome({
                 variant="ghost"
                 disabled={disabled}
                 onClick={() => picker.current?.click()}
-                className="h-9 rounded-full px-3 text-[13px] font-normal text-[#718197] hover:bg-[#f1f7fc] hover:text-[#26374a]"
+                className="h-8 rounded-lg px-2.5 text-[13px] font-normal text-[#596579] hover:bg-[#f1f3f5] hover:text-[#1f2937]"
               >
                 <Paperclip className="size-[15px]" />
                 {entries.length > 0 || attached ? "Replace video" : "Attach video"}
@@ -208,8 +213,8 @@ export function SearchHome({
                 onClick={toggleWebSearch}
                 className={
                   webSearchEnabled
-                    ? "h-9 rounded-full border border-[#c7e8ff] bg-[#eaf7ff] px-3 text-[13px] font-medium text-[#265476] hover:bg-[#e1f3ff]"
-                    : "h-9 rounded-full px-3 text-[13px] font-normal text-[#718197] hover:bg-[#f1f7fc] hover:text-[#26374a]"
+                    ? "h-8 rounded-lg border border-[#dbe4ec] bg-white px-2.5 text-[13px] font-medium text-[#344054] hover:bg-[#f8fafc]"
+                    : "h-8 rounded-lg px-2.5 text-[13px] font-normal text-[#596579] hover:bg-[#f1f3f5] hover:text-[#1f2937]"
                 }
               >
                 <Globe2 className="size-[15px]" />
@@ -220,13 +225,13 @@ export function SearchHome({
         />
       </motion.div>
 
-      <p className="mt-3 min-h-5 text-center text-[13px] text-[#8797a8]" aria-live="polite">
+      <p className="mt-2 min-h-5 text-center text-[12px] text-[#8a94a3]" aria-live="polite">
         {waitingOn}
       </p>
 
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         {EXAMPLES.map((example, index) => (
-          <motion.div key={example} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + index * 0.04 }}>
+          <motion.div key={example} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 + index * 0.035 }}>
             <Button
               variant="outline"
               size="sm"
@@ -235,7 +240,7 @@ export function SearchHome({
                 onPromptChange(example)
                 box.current?.focus()
               }}
-              className="rounded-full border-[#dfe8f1] bg-white px-3.5 font-normal text-[#687b8f] shadow-[0_4px_14px_rgba(61,90,120,0.04)] hover:border-[#cbe5f8] hover:bg-[#f9fcff] hover:text-[#2e4157]"
+              className="h-8 rounded-full border-[#e2e5e9] bg-white px-3.5 text-[12.5px] font-normal text-[#4b5565] shadow-none hover:bg-[#f7f8fa] hover:text-[#1f2937]"
             >
               {example}
             </Button>
