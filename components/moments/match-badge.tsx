@@ -3,7 +3,6 @@
 import NumberFlow from "@number-flow/react"
 import { Sparkles } from "lucide-react"
 import { motion } from "motion/react"
-
 import { Badge } from "@/components/space/badge"
 import { cn } from "@/lib/utils"
 
@@ -18,30 +17,26 @@ export function MatchBadge({ value, className }: MatchBadgeProps) {
       variant="outline"
       aria-label={`${value}% match`}
       className={cn(
-        "h-auto gap-1.5 rounded-full border-white/25 bg-black/35 px-3 py-1 text-sm font-semibold text-white backdrop-blur-md",
+        "h-auto gap-1.5 rounded-full border border-white/35 bg-white/88 px-3 py-1.5 text-[12px] font-semibold text-[#17314a] shadow-[0_8px_24px_rgba(13,38,63,0.12)] backdrop-blur-xl",
         className,
       )}
     >
       <motion.span
-        animate={{
-          scale: [1, 1.12, 0.96, 1.06, 1],
-          rotate: [0, -4, 3, -2, 0],
-        }}
-        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+        initial={{ scale: 0.7, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 320, damping: 22 }}
         className="flex items-center justify-center"
       >
-        <Sparkles className="size-3.5 fill-white/20 text-white" />
+        <Sparkles className="size-3.5 fill-[#8ed9ff]/35 text-[#55bdf4]" />
       </motion.span>
-
       <NumberFlow
         value={value}
         suffix="%"
-        transformTiming={{ duration: 700, easing: "ease-out" }}
-        spinTiming={{ duration: 700, easing: "ease-out" }}
-        opacityTiming={{ duration: 700, easing: "ease-out" }}
+        transformTiming={{ duration: 650, easing: "ease-out" }}
+        spinTiming={{ duration: 650, easing: "ease-out" }}
+        opacityTiming={{ duration: 650, easing: "ease-out" }}
       />
-
-      <span className="font-normal text-white/70">match</span>
+      <span className="font-normal text-[#698198]">match</span>
     </Badge>
   )
 }

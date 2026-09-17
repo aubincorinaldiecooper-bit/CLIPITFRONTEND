@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, Play } from "lucide-react"
+import { motion } from "motion/react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import { Badge } from "@/components/space/badge"
 import { Button, buttonVariants } from "@/components/space/button"
@@ -13,54 +14,29 @@ import type { Exchange } from "@/components/start/types"
 import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { MatchBadge } from "./match-badge"
 import { MomentPlayer } from "./moment-player"
 
-/**
- * The results — the second screen of the owner's prototype (2026-09-14):
- * what was asked, what came of it, and the moments on a coverflow with one
- * in the centre playing.
- *
- * One canonical active moment: the coverflow reports its centred card, this
- * component holds it, and playback, the caption and "Open moment" all read
- * from it. Only the active card plays; neighbours are stills.
- *
- * The words above the stage are the search's own, from the state the
- * server reports — while it runs, what it is doing; once it has answered,
- * the count it finished with, a stretch it could not look at, moments it
- * saw but was not sure of. A count is only ever what the server returned.
- */
 export interface ResultsStageProps {
-  /** The question on stage and what it produced. */
   exchange: Exchange
   video: Video | null
-  /** The question's moments, strongest first. */
   moments: FeedMoment[]
-  /** Whether this question was asked after another of this video. */
   followUp: boolean
-  /** The moment to open on — the one that was on stage before, when coming back. */
   initialMomentId?: string | null
-  /** The moment in the centre, whenever it changes. */
   onActiveChange?: (moment: FeedMoment | undefined) => void
-  /** Where a moment's own page is, for the link. */
   momentHref: (moment: FeedMoment) => string
-  /** Open the moment's page. */
   onOpen: (moment: FeedMoment) => void
-  /** The other questions asked of this video, to put on stage instead. */
   others?: Array<{ id: string; instruction: string }>
   onPickOther?: (requestId: string) => void
   muted: boolean
   onMutedChange: (muted: boolean) => void
 }
 
-/** The card that stands where the first moment will: a search is running and nothing has been found yet. */
 function SearchingCard() {
   return (
-    <div
-      className="mx-auto flex aspect-[9/16] w-[clamp(150px,18vw,224px)] flex-col items-center justify-center gap-3 rounded-[20px] border bg-shcard p-6 text-center shadow-[0_2px_14px_rgba(0,0,0,0.06)]"
-      data-testid="stage-searching"
-    >
-      <span aria-hidden className="h-2.5 w-2.5 animate-pulse rounded-full bg-foreground/60" />
-      <p className="text-sm leading-relaxed text-muted-foreground">Moments land here once they&apos;re found.</p>
+    <div className="mx-auto flex aspect-[4/3] w-[clamp(260px,42vw,520px)] flex-col items-center justify-center gap-3 rounded-[24px] border border-[#dfe9f3] bg-white p-6 text-center shadow-[0_18px_50px_rgba(71,111,153,0.09)]">
+      <span aria-hidden className="size-2.5 animate-pulse rounded-full bg-[#91d7ff]" />
+      <p className="text-sm text-[#7b8da0]">Moments land here once they&apos;re found.</p>
     </div>
   )
 }
@@ -74,8 +50,6 @@ export function ResultsStage({
   onActiveChange,
   momentHref,
   onOpen,
-  others = [],
-  onPickOther,
   muted,
   onMutedChange,
 }: ResultsStageProps) {
@@ -83,22 +57,13 @@ export function ResultsStage({
   const searching = isSearching(exchange)
   const compact = useMediaQuery(PHONE)
   const apiRef = useRef<CoverflowApi | null>(null)
-
-  // Held as the MOMENT in the centre rather than a number: the list is
-  // rebuilt on every poll, strongest first, and a number would point at
-  // whatever landed in that place (Devin's and Codex's finding on #87).
   const initialIndex = Math.max(0, initialMomentId ? moments.findIndex((moment) => moment.match.id === initialMomentId) : 0)
   const [activeId, setActiveId] = useState<string | null>(moments[initialIndex]?.match.id ?? null)
   const activeIndex = activeId ? moments.findIndex((moment) => moment.match.id === activeId) : -1
   const active = activeIndex >= 0 ? moments[activeIndex] : moments[0]
-
-  // Read through a ref, so the callback is the same function for the life
-  // of the ring. The ring calls it when ITS index changes; a new function on
-  // every poll made it call again with a stale index, and with the list
-  // re-sorted underneath that named the wrong moment and the two chased
-  // each other round the ring.
   const momentsRef = useRef(moments)
   momentsRef.current = moments
+
   const onSelect = useCallback((index: number) => {
     const moment = momentsRef.current[index]
     if (moment) setActiveId(moment.match.id)
@@ -107,19 +72,14 @@ export function ResultsStage({
     apiRef.current = api
   }, [])
 
-  // The list re-sorted under the ring (a stronger moment landed above): keep
-  // the same moment in the centre rather than whatever took its place.
   const lastIndex = useRef(activeIndex)
   useEffect(() => {
     if (activeIndex >= 0 && activeIndex !== lastIndex.current) apiRef.current?.goTo(activeIndex)
     lastIndex.current = activeIndex
   }, [activeIndex])
-
-  // Moments that land while nothing was on stage bring the first one on.
   useEffect(() => {
     if (activeIndex < 0 && moments.length > 0) setActiveId(moments[0]!.match.id)
   }, [activeIndex, moments])
-
   useEffect(() => {
     onActiveChange?.(active)
     return () => onActiveChange?.(undefined)
@@ -128,125 +88,86 @@ export function ResultsStage({
   const lines = useMemo(() => exchangeLines(exchange, video?.index?.readThroughSeconds, followUp), [exchange, video, followUp])
   const candidates = searching ? candidatesLine(request) : null
   const count = moments.length
-  // The ring closes once there are three: the centred card then has a
-  // neighbour on each side, wherever it is in the list, and the band runs
-  // both ways to the edge of the screen. With two the ring would show the
-  // same card twice.
-  const loop = count > 2
   const slides = useMemo(() => moments.map((moment) => ({ alt: momentTitle(moment.match) })), [moments])
-  /** The words and the caption sit in a measure; the band runs past it. */
-  const measure = "mx-auto w-full max-w-[1100px] px-4 sm:px-10"
 
   return (
-    <div className="w-full" data-testid="results-stage">
-      <div className={measure}>
-      <p className="pt-6 pb-2 text-[10px] tracking-[0.14em] text-muted-foreground uppercase max-[860px]:pt-3">{searching ? "Looking for" : "Found for"}</p>
-      <h2 className="max-w-[760px] text-[27px] leading-[1.35] font-medium tracking-[-0.01em] text-foreground max-[860px]:text-[19px] max-[860px]:leading-snug" data-testid="stage-question">
-        {request.instruction}
-      </h2>
-
-      <div className="pt-3 pb-2 text-sm text-muted-foreground" data-testid="stage-words">
-        {searching ? (
-          <>
-            <TextShimmer as="p">{progressLine(request, video)}</TextShimmer>
-            {candidates && <p className="mt-1">{candidates}</p>}
-          </>
-        ) : (
-          // The search's own words: the count it finished with, in a sentence,
-          // then a stretch it could not look at, then the maybes. No separate
-          // number — a count the sentence does not say is one it disagrees with.
-          lines.map((line, index) => (
-            <p key={`${request.id}-${index}`} className={cn("max-w-[640px]", index > 0 && "mt-1")}>
-              {line}
-            </p>
-          ))
-        )}
-      </div>
+    <div className="w-full py-6" data-testid="results-stage">
+      <div className="mx-auto w-full max-w-[900px] px-5 text-center sm:px-8">
+        <p className="text-[11px] font-medium tracking-[0.14em] text-[#8b9bad] uppercase">{searching ? "Looking for" : "Found for"}</p>
+        <h2 className="mx-auto mt-2 max-w-[720px] text-[clamp(22px,3vw,32px)] leading-tight font-medium tracking-[-0.025em] text-[#152337]" data-testid="stage-question">
+          {request.instruction}
+        </h2>
+        <div className="mx-auto mt-3 max-w-[640px] text-sm leading-relaxed text-[#76889b]" data-testid="stage-words">
+          {searching ? (
+            <>
+              <TextShimmer as="p">{progressLine(request, video)}</TextShimmer>
+              {candidates && <p className="mt-1">{candidates}</p>}
+            </>
+          ) : (
+            lines.map((line, index) => <p key={`${request.id}-${index}`} className={index > 0 ? "mt-1" : undefined}>{line}</p>)
+          )}
+        </div>
       </div>
 
       {count > 0 ? (
-        <div className="w-full">
-          {/*
-            * The band. On a desk the cards run across the whole screen and the
-            * outer ones clip at its edge: the centred one matters by where it
-            * stands and how far forward, not because the rest were shrunk
-            * away — a gentle rake, neighbours nearly full size and only a
-            * little fainter. On a phone it is one card with a peek of each
-            * neighbour and almost no rake, sized so the caption and Open
-            * moment are on screen with it.
-            */}
+        <div className="mt-3 w-full">
           <CoverflowCarousel
             key={request.id}
             slides={slides}
             initialIndex={initialIndex}
             onSelect={onSelect}
             onApi={onApi}
-            loop={loop}
+            loop={count > 2}
             label="Moments found"
-            cardWidth={compact ? "clamp(190px, 60vw, 250px)" : "clamp(176px, 15vw, 236px)"}
-            cardHeight={compact ? "calc(clamp(190px, 60vw, 250px) * 16 / 9)" : "calc(clamp(176px, 15vw, 236px) * 16 / 9)"}
-            rotate={compact ? 5 : 26}
-            depth={compact ? 0.05 : 0.2}
-            perspective={compact ? 7 : 4.5}
-            falloff={compact ? 1 : 0.75}
-            fade={compact ? 0.18 : 0.07}
-            gap={compact ? 0.06 : 0.1}
-            frameClassName={compact ? "py-4" : "py-10"}
-            cardClassName="rounded-[20px] border bg-shcard p-2.5 shadow-[0_2px_14px_rgba(0,0,0,0.06)]"
+            cardWidth={compact ? "clamp(260px,78vw,360px)" : "clamp(360px,38vw,520px)"}
+            cardHeight={compact ? "calc(clamp(260px,78vw,360px) * 3 / 4)" : "calc(clamp(360px,38vw,520px) * 3 / 4)"}
+            rotate={compact ? 2 : 8}
+            depth={compact ? 0.03 : 0.08}
+            perspective={7}
+            falloff={0.9}
+            fade={0.12}
+            gap={0.08}
+            frameClassName={compact ? "py-5" : "py-8"}
+            cardClassName="rounded-[26px] border border-[#dfe9f3] bg-white p-2.5 shadow-[0_18px_50px_rgba(71,111,153,0.10)]"
             renderSlide={(_slide, index, isActive) => {
               const entry = moments[index]!
+              const match = Math.round(entry.match.confidence * 100)
               return (
-                <div
-                  className={cn(
-                    "relative size-full overflow-hidden rounded-[14px] bg-neutral-950 transition-shadow duration-200",
-                    isActive && "shadow-[0_18px_48px_rgba(0,0,0,0.18)]",
-                  )}
+                <motion.div
+                  animate={{ y: isActive ? -2 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className={cn("relative size-full overflow-hidden rounded-[19px] bg-neutral-950", isActive && "shadow-[0_20px_52px_rgba(27,50,73,0.18)]")}
                 >
                   {isActive ? (
                     <MomentPlayer compact moment={entry} video={video} muted={muted} onMutedChange={onMutedChange} />
+                  ) : entry.still ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={entry.still} alt="" draggable={false} className="size-full object-cover" />
                   ) : (
+                    <p className="flex size-full items-center justify-center px-5 text-center text-xs text-white/70">{momentTitle(entry.match)}</p>
+                  )}
+                  <MatchBadge value={match} className="absolute top-3 left-3" />
+                  {!isActive && (
                     <>
-                      {entry.still ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={entry.still} alt="" draggable={false} className="size-full object-cover" />
-                      ) : (
-                        <p className="flex size-full items-center justify-center px-4 text-center text-xs text-white/70">{momentTitle(entry.match)}</p>
-                      )}
-                      <Badge variant="ghost" className="absolute top-2.5 left-2.5 h-auto bg-black/32 px-2 py-1 text-[11px] font-normal text-white/85 backdrop-blur-md hover:bg-black/32 hover:text-white/85">
+                      <Badge variant="ghost" className="absolute right-3 bottom-3 h-auto bg-black/36 px-2.5 py-1 text-[11px] font-normal text-white/85 backdrop-blur-md hover:bg-black/36">
                         {formatRange(entry.match)}
                       </Badge>
-                      <span className="absolute top-1/2 left-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm">
+                      <span className="absolute top-1/2 left-1/2 flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/14 text-white backdrop-blur-sm">
                         <Play className="ml-0.5 size-4 fill-current" />
                       </span>
                     </>
                   )}
-                </div>
+                </motion.div>
               )
             }}
           />
 
-          {/* The caption follows the active moment: what happens, then when, then how it was found. */}
           {active && (
-            <div key={active.match.id} className="-mt-2 flex flex-col items-center px-6 text-center duration-200 animate-in fade-in max-[860px]:mt-0" data-testid="stage-caption">
-              <p className="max-w-[44ch] text-[17px] leading-snug tracking-[-0.01em] text-foreground">{momentTitle(active.match)}</p>
-              <p className="mt-2 text-[13px] text-muted-foreground">
-                <span className="tabular-nums">{formatRange(active.match)}</span> · {evidenceWords(active.match)}
-              </p>
-
+            <motion.div key={active.match.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mx-auto flex max-w-[620px] flex-col items-center px-6 text-center" data-testid="stage-caption">
+              <p className="max-w-[48ch] text-[17px] leading-snug text-[#1d2b3d]">{momentTitle(active.match)}</p>
+              <p className="mt-2 text-[13px] text-[#7e8fa2]"><span className="tabular-nums">{formatRange(active.match)}</span> · {evidenceWords(active.match)}</p>
               <div className="mt-5 flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Previous moment"
-                  onClick={() => apiRef.current?.prev()}
-                  className={cn("rounded-full", count < 2 && "invisible")}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-
-                {/* A link, because it is one: it has an address of its own,
-                    and a modifier click opens it in a new tab. A plain click
-                    stays on this page. */}
+                <Button variant="outline" size="icon-sm" aria-label="Previous moment" onClick={() => apiRef.current?.prev()} className={cn("rounded-full border-[#dfe8f1] bg-white", count < 2 && "invisible")}><ChevronLeft className="size-4" /></Button>
                 <a
                   href={momentHref(active)}
                   onClick={(event) => {
@@ -254,46 +175,18 @@ export function ResultsStage({
                     event.preventDefault()
                     onOpen(active)
                   }}
-                  className={cn(buttonVariants({ variant: "default", size: "default" }), "rounded-full px-5")}
+                  className={cn(buttonVariants({ variant: "default", size: "default" }), "rounded-full border-0 bg-[linear-gradient(135deg,#d8f6ff_0%,#a9e3ff_48%,#bfcbff_100%)] px-5 text-[#102033] shadow-[0_10px_28px_rgba(100,190,255,0.24)]")}
                 >
-                  Open moment
+                  Ask about moment
                 </a>
-
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Next moment"
-                  onClick={() => apiRef.current?.next()}
-                  className={cn("rounded-full", count < 2 && "invisible")}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
+                <Button variant="outline" size="icon-sm" aria-label="Next moment" onClick={() => apiRef.current?.next()} className={cn("rounded-full border-[#dfe8f1] bg-white", count < 2 && "invisible")}><ChevronRight className="size-4" /></Button>
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
       ) : searching ? (
-        <div className="py-10">
-          <SearchingCard />
-        </div>
+        <div className="py-10"><SearchingCard /></div>
       ) : null}
-
-      {others.length > 0 && (
-        <div className={cn(measure, "mt-12 flex flex-wrap items-center gap-1.5")} data-testid="stage-others">
-          <span className="mr-1 text-xs text-muted-foreground">Also asked of this video:</span>
-          {others.map((other) => (
-            <Button
-              key={other.id}
-              variant="ghost"
-              size="xs"
-              onClick={() => onPickOther?.(other.id)}
-              className="max-w-[36ch] rounded-full bg-foreground/[0.035] font-normal text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground/80"
-            >
-              <span className="truncate">{other.instruction}</span>
-            </Button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
