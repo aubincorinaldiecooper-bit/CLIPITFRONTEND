@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type DragEvent } from "react"
 import { Globe2, Paperclip } from "lucide-react"
+import { motion } from "motion/react"
 import { toast } from "sonner"
 import { VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
 import { Button } from "@/components/space/button"
@@ -41,7 +42,7 @@ function AttachedVideo({ video, onDetach }: { video: Video; onDetach?: () => voi
         {source ? (
           <video src={source} preload="metadata" muted playsInline disablePictureInPicture aria-hidden className="size-full object-cover" />
         ) : (
-          <span aria-hidden className="flex size-full items-center justify-center bg-shmuted px-1 text-center text-[9px] leading-tight text-muted-foreground">
+          <span aria-hidden className="flex size-full items-center justify-center bg-[#eef6fc] px-1 text-center text-[9px] leading-tight text-[#718197]">
             {name}
           </span>
         )}
@@ -73,15 +74,8 @@ export function SearchHome({
   const box = useRef<HTMLTextAreaElement>(null)
   const [dragging, setDragging] = useState(false)
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
-
   const attaching = entries.length > 0
 
-  /**
-   * Home owns the source choice. With no saved choice, footage is the
-   * default. The small URL bit is deliberate: StartPage already asks
-   * `askTarget` which backend to call, so the mode crosses that boundary
-   * without teaching the page about this control.
-   */
   useEffect(() => {
     if (video || attaching) {
       setWebSearchEnabled(false)
@@ -97,15 +91,13 @@ export function SearchHome({
   const gate = askGate(video, { attaching })
   const target = askTarget(video, { attaching, internetEnabled: webSearchEnabled })
   const ready = gate.accepting && !disabled
-  const onItsWay =
-    Boolean(video) || entries.some((entry) => entry.phase === "queued" || entry.phase === "uploading")
+  const onItsWay = Boolean(video) || entries.some((entry) => entry.phase === "queued" || entry.phase === "uploading")
   const attached = video && !entries.some((entry) => entry.videoId === video.id) ? video : null
   const waitingOn = !ready && onItsWay ? gate.waitingOn : null
 
   const placeholder = dragging
     ? "Drop the video to attach it…"
-    : (onItsWay && gate.placeholder) ||
-      (target === "internet" ? "Search the internet for a moment…" : "Ask for a moment…")
+    : (onItsWay && gate.placeholder) || (target === "internet" ? "Search the internet for a moment…" : "Ask for a moment…")
 
   const pick = (files: File[]) => {
     const file = files[0]
@@ -124,11 +116,11 @@ export function SearchHome({
   }
 
   const onDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (disabled) return
-    if (!Array.from(event.dataTransfer.types).includes("Files")) return
+    if (disabled || !Array.from(event.dataTransfer.types).includes("Files")) return
     event.preventDefault()
     setDragging(true)
   }
+
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     setDragging(false)
     if (disabled) return
@@ -137,12 +129,26 @@ export function SearchHome({
   }
 
   return (
-    <div className="w-full max-w-[640px]" data-testid="search-home">
-      <h1 className="mb-9 text-center text-[clamp(30px,4.5vw,44px)] font-medium leading-[1.15] tracking-[-0.02em] text-foreground">
-        We&rsquo;re teaching search to watch video.
-      </h1>
+    <div className="w-full max-w-[760px]" data-testid="search-home">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+        <p className="mb-3 text-center text-[12px] font-medium tracking-[0.14em] text-[#7f91a4] uppercase">Clipit</p>
+        <h1 className="mx-auto max-w-[680px] text-center text-[clamp(34px,5vw,54px)] font-medium leading-[1.05] tracking-[-0.035em] text-[#122033]">
+          What do you want to find?
+        </h1>
+        <p className="mx-auto mt-4 max-w-[520px] text-center text-[15px] leading-relaxed text-[#718197]">
+          Search what happens in video — from your footage or across the web.
+        </p>
+      </motion.div>
 
-      <div onDragOver={onDragOver} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className="mt-9"
+        onDragOver={onDragOver}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+      >
         <input
           ref={picker}
           type="file"
@@ -156,6 +162,7 @@ export function SearchHome({
             pick(files)
           }}
         />
+
         <AskComposer
           size="home"
           value={promptValue}
@@ -189,7 +196,7 @@ export function SearchHome({
                 variant="ghost"
                 disabled={disabled}
                 onClick={() => picker.current?.click()}
-                className="h-9 rounded-full px-3 text-[13px] font-normal text-muted-foreground hover:text-foreground"
+                className="h-9 rounded-full px-3 text-[13px] font-normal text-[#718197] hover:bg-[#f1f7fc] hover:text-[#26374a]"
               >
                 <Paperclip className="size-[15px]" />
                 {entries.length > 0 || attached ? "Replace video" : "Attach video"}
@@ -199,7 +206,11 @@ export function SearchHome({
                 disabled={disabled || Boolean(video) || attaching}
                 aria-pressed={webSearchEnabled}
                 onClick={toggleWebSearch}
-                className="h-9 rounded-full px-3 text-[13px] font-normal"
+                className={
+                  webSearchEnabled
+                    ? "h-9 rounded-full border border-[#c7e8ff] bg-[#eaf7ff] px-3 text-[13px] font-medium text-[#265476] hover:bg-[#e1f3ff]"
+                    : "h-9 rounded-full px-3 text-[13px] font-normal text-[#718197] hover:bg-[#f1f7fc] hover:text-[#26374a]"
+                }
               >
                 <Globe2 className="size-[15px]" />
                 Web search
@@ -207,27 +218,28 @@ export function SearchHome({
             </>
           }
         />
-      </div>
+      </motion.div>
 
-      <p className="mt-3 min-h-5 text-center text-[13px] text-muted-foreground" aria-live="polite">
+      <p className="mt-3 min-h-5 text-center text-[13px] text-[#8797a8]" aria-live="polite">
         {waitingOn}
       </p>
 
-      <div className="mt-3 flex flex-col items-center gap-0.5">
-        {EXAMPLES.map((example) => (
-          <Button
-            key={example}
-            variant="link"
-            size="sm"
-            disabled={disabled}
-            onClick={() => {
-              onPromptChange(example)
-              box.current?.focus()
-            }}
-            className="font-normal text-muted-foreground no-underline hover:text-foreground hover:no-underline"
-          >
-            {example}
-          </Button>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        {EXAMPLES.map((example, index) => (
+          <motion.div key={example} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + index * 0.04 }}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              onClick={() => {
+                onPromptChange(example)
+                box.current?.focus()
+              }}
+              className="rounded-full border-[#dfe8f1] bg-white px-3.5 font-normal text-[#687b8f] shadow-[0_4px_14px_rgba(61,90,120,0.04)] hover:border-[#cbe5f8] hover:bg-[#f9fcff] hover:text-[#2e4157]"
+            >
+              {example}
+            </Button>
+          </motion.div>
         ))}
       </div>
     </div>
