@@ -9,6 +9,8 @@ describe("when to read a running search again", () => {
 
   it("stops once the search has answered", () => {
     expect(nextRead({ failed: false, phase: "answered" })).toBeNull()
+    // A search that gave up is just as finished as one that answered.
+    expect(nextRead({ failed: false, phase: "failed" })).toBeNull()
   })
 
   it("reads again after a read that failed, rather than giving up", () => {

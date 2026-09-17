@@ -217,3 +217,122 @@ describe("the internet results stage", () => {
     }
   })
 })
+
+/**
+ * The 17 September production failure, from the screen's side.
+ *
+ * Seven videos found, twenty-eight watches attempted, every one refused by a
+ * deployment that had no live-watch method on it. Not one video was opened.
+ * The band said "No results fit your search." These hold the line that it
+ * cannot say that again without the watching behind it.
+ */
+describe("what the band is allowed to claim", () => {
+  const nothingMatched = "No results fit your search."
+
+  it("does not tell the person nothing matched when nothing was watched", () => {
+    render(
+      <InternetStage
+        query="a dog on a skateboard"
+        phase="failed"
+        moments={[]}
+        outcome="watch_failed"
+        failure={{ kind: "video_model_unavailable", count: 28 }}
+        candidatesFound={7}
+        candidatesWatched={0}
+      />,
+    )
+
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).not.toContain(nothingMatched)
+    expect(said).toContain("could not watch any of them")
+    expect(said).toContain("not an answer about what is in them")
+    // And it names the count it actually found, rather than implying none.
+    expect(said).toContain("7 videos")
+  })
+
+  it("says which part of Clipit failed, without repeating an internal error", () => {
+    const lines = ([
+      ["video_model_unavailable", "The part of Clipit that watches video is unavailable."],
+      ["browser_unavailable", "The videos would not open."],
+      ["timed_out", "The watching ran out of time."],
+      ["video_model_failed", "The watching broke partway through."],
+      ["unknown", "Something on our side went wrong."],
+    ] as const).map(([kind, opening]) => {
+      cleanup()
+      render(
+        <InternetStage query="q" phase="failed" moments={[]} outcome="watch_failed" failure={{ kind, count: 4 }} candidatesFound={2} candidatesWatched={0} />,
+      )
+      const said = screen.getByTestId("internet-words").textContent ?? ""
+      return [said.startsWith(opening), said.includes("Modal"), said.includes("VideoChat3")] as const
+    })
+    expect(lines.every(([opens]) => opens)).toBe(true)
+    expect(lines.some(([, modal, videochat]) => modal || videochat)).toBe(false)
+  })
+
+  it("does not claim an empty answer when only some of the videos were watched", () => {
+    render(
+      <InternetStage query="q" phase="answered" moments={[]} outcome="partly_watched" candidatesFound={7} candidatesWatched={3} />,
+    )
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).not.toContain(nothingMatched)
+    expect(said).toContain("4 videos could not be watched")
+    expect(said).toContain("there may be more")
+  })
+
+  it("says the watching was shallow, not that videos were skipped, when all of them were opened", () => {
+    // The ordinary case: every video opened, none watched through, because a
+    // coarse scan samples. Claiming videos "could not be watched" here would
+    // be a new false statement in the course of fixing the old one.
+    render(
+      <InternetStage query="q" phase="answered" moments={[]} outcome="partly_watched" candidatesFound={7} candidatesWatched={7} />,
+    )
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).not.toContain(nothingMatched)
+    expect(said).not.toContain("could not be watched")
+    expect(said).toContain("did not watch every second")
+    expect(said).toContain("there may be more")
+  })
+
+  it("keeps a found result honest about how deep the watching went", () => {
+    render(
+      <InternetStage query="q" phase="answered" moments={many(2)} outcome="partly_watched" candidatesFound={2} candidatesWatched={2} />,
+    )
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).toContain("2 videos fit your search.")
+    expect(said).not.toContain("could not be watched")
+    expect(said).toContain("did not watch every second")
+  })
+
+  it("keeps a partial answer partial even when it did find something", () => {
+    render(
+      <InternetStage query="q" phase="answered" moments={many(2)} outcome="partly_watched" candidatesFound={7} candidatesWatched={5} />,
+    )
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).toContain("2 videos fit your search.")
+    expect(said).toContain("2 videos could not be watched")
+    expect(said).toContain("there may be more")
+  })
+
+  it("separates finding no videos from watching videos and finding nothing", () => {
+    render(<InternetStage query="q" phase="answered" moments={[]} outcome="no_candidates" candidatesFound={0} candidatesWatched={0} />)
+    expect(screen.getByTestId("internet-words").textContent).toBe("The search turned up no videos to watch.")
+
+    cleanup()
+    render(<InternetStage query="q" phase="answered" moments={[]} outcome="no_matches" candidatesFound={4} candidatesWatched={4} />)
+    expect(screen.getByTestId("internet-words").textContent).toBe(nothingMatched)
+  })
+
+  it("still reads as a plain answer when everything was watched and something was found", () => {
+    render(<InternetStage query="q" phase="answered" moments={many(2)} outcome="matched" candidatesFound={2} candidatesWatched={2} />)
+    expect(screen.getByTestId("internet-words").textContent).toBe("2 videos fit your search.")
+  })
+
+  it("stops looking busy once a search has failed", () => {
+    render(
+      <InternetStage query="q" phase="failed" moments={[]} outcome="watch_failed" failure={{ kind: "video_model_unavailable", count: 4 }} candidatesFound={2} candidatesWatched={0} />,
+    )
+    // "Found for" would claim results; a shimmer would claim it is still going.
+    expect(screen.getByTestId("internet-stage").textContent).toContain("Searched for")
+    expect(screen.queryAllByTestId("moment-slot-pending")).toHaveLength(0)
+  })
+})

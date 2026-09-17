@@ -9,17 +9,25 @@ import { CoverflowCarousel, type CoverflowApi } from "@/components/space/coverfl
 import { Skeleton } from "@/components/space/skeleton"
 import { MatchBadge } from "@/components/moments/match-badge"
 import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
-import type { InternetMoment } from "@/lib/types"
+import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
 import { siteName } from "@/lib/video-embed"
 import { cn } from "@/lib/utils"
 
 export const MAX_SLOTS = 5
-export type InternetSearchPhase = "loading" | "searching" | "answered"
+export type InternetSearchPhase = "loading" | "searching" | "answered" | "failed"
 
 export interface InternetStageProps {
   query: string
   phase: InternetSearchPhase
   moments: InternetMoment[]
+  /** Why the search ended. Absent while it is still running. */
+  outcome?: InternetSearchOutcome
+  /** What went wrong, when something did. */
+  failure?: { kind: InternetSearchFailureKind; count: number }
+  /** How many videos the search found to watch. */
+  candidatesFound?: number
+  /** How many of those it managed to watch. */
+  candidatesWatched?: number
 }
 
 function matchPercent(moment: InternetMoment): number | null {
@@ -31,17 +39,86 @@ function titleOf(moment: InternetMoment): string {
   return moment.title || moment.marks[0]?.description || "A video from this site"
 }
 
-function words(phase: InternetSearchPhase, found: number, shown: number): string {
+function plural(count: number, one: string, many: string): string {
+  return count === 1 ? one : many
+}
+
+/**
+ * What we can say about why a watch did not happen, without repeating an
+ * internal error to someone who cannot act on it.
+ */
+function becauseOf(failure: { kind: InternetSearchFailureKind } | undefined): string {
+  switch (failure?.kind) {
+    case "video_model_unavailable":
+      return "The part of Clipit that watches video is unavailable."
+    case "video_model_failed":
+      return "The watching broke partway through."
+    case "browser_unavailable":
+      return "The videos would not open."
+    case "timed_out":
+      return "The watching ran out of time."
+    default:
+      return "Something on our side went wrong."
+  }
+}
+
+/**
+ * What the band says, once the search has stopped.
+ *
+ * The rule this exists to hold: an empty list only means "it is not there"
+ * when the videos were actually watched. On 17 September a search found seven
+ * videos, failed every watch against all seven because the watcher had no
+ * method to call, and this line said "No results fit your search." Nobody had
+ * opened a single video. That sentence was not true, and it is the one thing
+ * this must never say again without the watching behind it.
+ *
+ * So the outcome decides the sentence, and the number of moments never does.
+ */
+function words(
+  phase: InternetSearchPhase,
+  found: number,
+  shown: number,
+  outcome?: InternetSearchOutcome,
+  failure?: { kind: InternetSearchFailureKind; count: number },
+  candidates = 0,
+  watched?: number,
+): string {
   if (phase === "loading") return "Searching the internet."
   if (phase === "searching") return "Watching what the search turned up."
-  if (found === 0) return "No results fit your search."
-  const fit = `${found} ${found === 1 ? "video fits" : "videos fit"} your search.`
-  return found > shown ? `${fit} The strongest ${shown} are here.` : fit
+
+  if (outcome === "watch_failed") {
+    const videos = candidates > 0 ? `${candidates} ${plural(candidates, "video", "videos")}` : "the videos"
+    return `${becauseOf(failure)} Clipit found ${videos} to watch and could not watch any of them, so this is not an answer about what is in them.`
+  }
+
+  if (outcome === "no_candidates") return "The search turned up no videos to watch."
+
+  // Two different gaps, and they need different sentences. `missed` is videos
+  // nobody opened at all. A partial search with `missed` at zero means every
+  // video was opened and none was watched all the way through — the coarse
+  // scan samples a second in every five — so saying videos "could not be
+  // watched" there would be its own small lie.
+  const missed = Math.max(0, candidates - (watched ?? candidates))
+  const partial = outcome === "partly_watched"
+
+  if (found === 0) {
+    if (!partial) return "No results fit your search."
+    return missed > 0
+      ? `Nothing fit in what Clipit could watch. ${missed} ${plural(missed, "video", "videos")} could not be watched, so there may be more.`
+      : "Nothing fit in what Clipit watched, and it did not watch every second — so there may be more."
+  }
+
+  const fit = `${found} ${plural(found, "video fits", "videos fit")} your search.`
+  const strongest = found > shown ? `${fit} The strongest ${shown} are here.` : fit
+  if (!partial) return strongest
+  return missed > 0
+    ? `${strongest} ${missed} ${plural(missed, "video", "videos")} could not be watched, so there may be more.`
+    : `${strongest} It did not watch every second, so there may be more.`
 }
 
 type Slot = { kind: "moment"; key: string; moment: InternetMoment } | { kind: "pending"; key: string }
 
-export function InternetStage({ query, phase, moments }: InternetStageProps) {
+export function InternetStage({ query, phase, moments, outcome, failure, candidatesFound = 0, candidatesWatched }: InternetStageProps) {
   const compact = useMediaQuery(PHONE)
   const apiRef = useRef<CoverflowApi | null>(null)
   const found = useMemo(() => moments.slice(0, MAX_SLOTS), [moments])
@@ -75,17 +152,18 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
   }, [activeIndex, slots])
 
   const slides = useMemo(() => slots.map((slot) => ({ alt: slot.kind === "moment" ? titleOf(slot.moment) : "A moment still being looked for" })), [slots])
-  const line = words(phase, moments.length, found.length)
+  const ended = phase === "answered" || phase === "failed"
+  const line = words(phase, moments.length, found.length, outcome, failure, candidatesFound, candidatesWatched)
 
   return (
     <div className="w-full py-6" data-testid="internet-stage" data-phase={phase}>
       <div className="mx-auto w-full max-w-[900px] px-5 text-center sm:px-8">
-        <p className="text-[11px] font-medium tracking-[0.14em] text-[#8b9bad] uppercase">{phase === "answered" ? "Found for" : "Looking for"}</p>
+        <p className="text-[11px] font-medium tracking-[0.14em] text-[#8b9bad] uppercase">{phase === "answered" ? "Found for" : phase === "failed" ? "Searched for" : "Looking for"}</p>
         <h2 className="mx-auto mt-2 max-w-[720px] text-[clamp(22px,3vw,32px)] leading-tight font-medium tracking-[-0.025em] text-[#152337]" data-testid="internet-question">
           {query}
         </h2>
         <div className="mx-auto mt-3 max-w-[640px] text-sm leading-relaxed text-[#76889b]" aria-live="polite" data-testid="internet-words">
-          {phase === "answered" ? <p>{line}</p> : <TextShimmer as="p">{line}</TextShimmer>}
+          {ended ? <p>{line}</p> : <TextShimmer as="p">{line}</TextShimmer>}
         </div>
       </div>
 

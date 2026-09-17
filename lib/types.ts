@@ -610,14 +610,47 @@ export interface InternetCandidate {
  * looking through are where to look, not what was found, and the screen is
  * never given them.
  */
+/**
+ * Why a search ended, which is the only thing that says what its silence
+ * means. An empty list is not an answer on its own: a search that found seven
+ * videos and could not open one of them comes back just as empty as a search
+ * that watched all seven through and found nothing in them, and those two
+ * must never be drawn the same way.
+ */
+export type InternetSearchOutcome =
+  /** Nothing came back from the search engine. There was nothing to watch. */
+  | "no_candidates"
+  /** Every video found was watched right through. None had the thing in it. */
+  | "no_matches"
+  /** Every video found was watched right through, and something was found. */
+  | "matched"
+  /** Some were watched and some could not be. What is here is partial. */
+  | "partly_watched"
+  /** Videos were found and not one could be watched. Nothing was looked at. */
+  | "watch_failed"
+
+/** What went wrong, in the coarsest terms the screen can say something about. */
+export type InternetSearchFailureKind =
+  | "video_model_unavailable"
+  | "video_model_failed"
+  | "browser_unavailable"
+  | "timed_out"
+  | "unknown"
+
 export interface InternetSearchState {
   searchId: string
   query: string
-  phase: "loading" | "searching" | "answered"
+  phase: "loading" | "searching" | "answered" | "failed"
   moments: InternetMoment[]
   candidatesFound: number
   /** Pages the search could not watch. Not the same as finding nothing. */
   unexamined?: number
+  /** How many of the pages found were actually watched. */
+  candidatesWatched?: number
+  /** Why it ended. Present once it has; the field the screen reads. */
+  outcome?: InternetSearchOutcome
+  /** Present when at least one watch failed, whether or not others worked. */
+  failure?: { kind: InternetSearchFailureKind; count: number }
 }
 
 /** Somewhere in a video the watcher approved, for jumping to. */

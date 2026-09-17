@@ -37,12 +37,15 @@ export const MAX_FAILURES = 5
  */
 export function nextRead(outcome: {
   failed: boolean
-  phase?: "loading" | "searching" | "answered"
+  phase?: "loading" | "searching" | "answered" | "failed"
   /** Reads that have failed in a row, this one included. */
   consecutiveFailures?: number
 }): number | null {
   if (outcome.failed) {
     return (outcome.consecutiveFailures ?? 1) >= MAX_FAILURES ? null : RETRY_MS
   }
-  return outcome.phase === "answered" ? null : POLL_MS
+  // Both ending states are endings. A search that gave up is not going to
+  // start again, and asking it every two seconds until the tab closes helps
+  // nobody.
+  return outcome.phase === "answered" || outcome.phase === "failed" ? null : POLL_MS
 }
