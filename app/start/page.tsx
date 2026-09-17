@@ -886,7 +886,7 @@ export default function StartPage() {
   const resultsHref = addressOf({ video: video?.id ?? null, search: stagedExchange?.request.id ?? null, moment: null })
 
   return (
-    <SearchShell>
+    <SearchShell variant={screen === "home" ? "home" : "app"}>
       <div ref={screenRoot} className="flex w-full flex-1 flex-col">
         <AnimatePresence mode="wait" initial={false}>
           {screen === "home" && (
