@@ -64,10 +64,9 @@ export function AskComposer({
     <motion.div
       data-slot="ask-composer"
       data-size={size}
-      whileFocusWithin={{ y: -1 }}
       transition={{ duration: 0.18 }}
       className={cn(
-        "flex w-full flex-col border border-[#dfe9f3] bg-white/95 backdrop-blur-xl transition-[box-shadow,border-color]",
+        "flex w-full flex-col border border-[#dfe9f3] bg-white/95 backdrop-blur-xl transition-[box-shadow,border-color,transform] focus-within:-translate-y-px",
         home
           ? "rounded-[28px] p-2 shadow-[0_18px_50px_rgba(71,111,153,0.10)] focus-within:border-[#b9dcf7] focus-within:shadow-[0_22px_60px_rgba(71,111,153,0.14)]"
           : "rounded-[22px] p-1.5 shadow-[0_8px_30px_rgba(71,111,153,0.09)] focus-within:border-[#b9dcf7]",
