@@ -900,12 +900,22 @@ export default function StartPage() {
               className="flex w-full flex-1 flex-col px-4 py-10 sm:px-6"
             >
               {/*
-                The composer keeps this whole region to itself — basis-full and
-                no shrinking — so results arriving underneath cannot move it.
+                The composer keeps this whole region to itself, and never
+                shrinks, so results arriving underneath cannot move it.
                 Centring the two together would slide the box upward by half
                 the height of whatever came back, the moment Search was used.
+
+                `grow basis-0` and not `basis-full`: a percentage flex-basis
+                needs a definite main size on the container to resolve
+                against, and does not get one here — the parent is itself a
+                `flex-1` child — so it silently fell back to the content's own
+                height. 426px of composer in an 820px region, the region never
+                kept, and the box sitting at the top with half the screen
+                empty under it. Growing from zero needs no percentage to
+                resolve, so it actually fills. `shrink-0` still holds the
+                floor the comment above is about.
               */}
-              <div className="flex w-full shrink-0 basis-full flex-col items-center justify-center">
+              <div className="flex w-full grow basis-0 shrink-0 flex-col items-center justify-center">
                 <SearchHome
                   entries={uploads}
                   video={video}
