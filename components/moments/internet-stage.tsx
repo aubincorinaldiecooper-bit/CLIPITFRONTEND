@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
+import { Badge } from "@/components/space/badge"
 import { Button } from "@/components/space/button"
 import { CoverflowCarousel, type CoverflowApi } from "@/components/space/coverflow-carousel"
 import { Skeleton } from "@/components/space/skeleton"
@@ -62,6 +63,23 @@ export interface InternetStageProps {
   phase: InternetSearchPhase
   /** Every moment the scouts have found so far, strongest first. */
   moments: InternetMoment[]
+}
+
+/**
+ * How sure the watcher said it was, for the picture — or nothing at all.
+ *
+ * Nothing is the ordinary case: the watcher is asked to say and does not
+ * have to. A badge invented to fill that gap would be the most misleading
+ * thing on the screen, so an absent answer shows no badge rather than a
+ * guess, and zero is a real answer that shows as zero.
+ *
+ * "sure" and not "accuracy": this is the watcher's opinion of its own
+ * reading. Accuracy would be how often it turns out to be right, which
+ * nothing here has measured.
+ */
+function sureness(moment: InternetMoment): string | null {
+  if (moment.confidence === undefined) return null
+  return `${Math.round(moment.confidence * 100)}% sure`
 }
 
 /** What a video is called: its own title, or what the watcher saw in it. */
@@ -248,6 +266,14 @@ export function InternetStage({ query, phase, moments }: InternetStageProps) {
                     <img src={moment.still} alt="" draggable={false} className="size-full object-cover" />
                   ) : (
                     <p className="flex size-full items-center justify-center px-4 text-center text-xs text-white/70"><span className="line-clamp-6">{titleOf(moment)}</span></p>
+                  )}
+                  {sureness(moment) && (
+                    <Badge
+                      variant="ghost"
+                      className="absolute top-2.5 left-2.5 h-auto bg-black/32 px-2 py-1 text-[11px] font-normal text-white/85 backdrop-blur-md hover:bg-black/32 hover:text-white/85"
+                    >
+                      {sureness(moment)}
+                    </Badge>
                   )}
                 </div>
               )

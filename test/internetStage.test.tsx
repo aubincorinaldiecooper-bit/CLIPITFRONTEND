@@ -94,6 +94,30 @@ describe("the internet results stage", () => {
     expect(screen.getByTestId("internet-words").textContent).toBe("7 videos fit your search. The strongest 5 are here.")
   })
 
+  it("badges how sure the watcher said it was, and says nothing when it did not", () => {
+    render(<InternetStage query="the runway" phase="answered" moments={[moment({ confidence: 0.82 })]} />)
+    expect(screen.getByTestId("moment-slot-filled").textContent).toContain("82% sure")
+    cleanup()
+
+    // The ordinary case. The watcher is asked to say and does not have to,
+    // and a number invented to fill that gap would be the most misleading
+    // thing on the screen.
+    render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
+    expect(screen.getByTestId("moment-slot-filled").textContent).not.toContain("sure")
+    cleanup()
+
+    // Zero is an answer, and not the same as saying nothing.
+    render(<InternetStage query="the runway" phase="answered" moments={[moment({ confidence: 0 })]} />)
+    expect(screen.getByTestId("moment-slot-filled").textContent).toContain("0% sure")
+  })
+
+  it("never calls it accuracy, because nothing has measured that", () => {
+    render(<InternetStage query="the runway" phase="answered" moments={[moment({ confidence: 0.82 })]} />)
+    // It is the watcher's opinion of its own reading. Accuracy would be how
+    // often it turns out to be right, which has never been scored here.
+    expect(screen.getByTestId("internet-stage").textContent).not.toMatch(/accura/i)
+  })
+
   it("captions the video in the centre with its title and its site, and no clocks", () => {
     render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
 
