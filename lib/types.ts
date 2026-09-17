@@ -631,6 +631,12 @@ export interface InternetMark {
   endSeconds: number
   /** What the watcher said was happening there. */
   description: string
+  /**
+   * How sure the watcher said it was, 0 to 1. Absent when it did not say,
+   * which is ordinary — it is asked and does not have to answer. Absent is
+   * not zero.
+   */
+  confidence?: number
 }
 
 /**
@@ -660,4 +666,13 @@ export interface InternetMoment {
   source: string | null
   /** Everywhere the watcher approved, earliest first. Never empty. */
   marks: InternetMark[]
+  /**
+   * The surest the watcher was about anything in this video, 0 to 1.
+   *
+   * This is the watcher's opinion of its own reading, not a measure of how
+   * often it turns out to be right: nothing here has been scored against
+   * known answers. So it is shown as how sure it says it is, never as
+   * accuracy.
+   */
+  confidence?: number
 }

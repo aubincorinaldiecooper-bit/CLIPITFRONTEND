@@ -36,8 +36,6 @@ describe("the internet results stage", () => {
     expect(screen.getByTestId("internet-loading")).toBeTruthy()
     expect(screen.getByTestId("internet-question").textContent).toBe("kai cenat's fashion show")
     expect(screen.getByTestId("internet-words").textContent).toBe("Searching the internet.")
-    // No band and no skeletons: a skeleton promises a card is on its way,
-    // and until the search has found a page there is nothing to promise.
     expect(pending()).toHaveLength(0)
     expect(screen.queryByRole("region", { name: "Moments found on the internet" })).toBeNull()
   })
@@ -62,8 +60,6 @@ describe("the internet results stage", () => {
     render(<InternetStage query="a dog on a skateboard" phase="answered" moments={many(2)} />)
 
     expect(filled()).toHaveLength(2)
-    // Two moments are two cards. An empty slot at the end of a search is not
-    // a moment still coming.
     expect(pending()).toHaveLength(0)
     expect(screen.getByTestId("internet-words").textContent).toBe("2 videos fit your search.")
   })
@@ -88,19 +84,36 @@ describe("the internet results stage", () => {
   it("holds five at most, and still says how many were really found", () => {
     render(<InternetStage query="every time someone laughs" phase="answered" moments={many(7)} />)
 
-    // Five is a ceiling on what the band shows, not a cap on what was found,
-    // and the sentence must not quietly report the smaller number.
     expect(filled()).toHaveLength(MAX_SLOTS)
     expect(screen.getByTestId("internet-words").textContent).toBe("7 videos fit your search. The strongest 5 are here.")
   })
 
-  it("captions the video in the centre with its title, where to look and the site", () => {
+  it("shows the animated match badge only when the watcher supplied confidence", () => {
+    render(<InternetStage query="the runway" phase="answered" moments={[moment({ confidence: 0.82 })]} />)
+    expect(screen.getByLabelText("82% match")).toBeTruthy()
+    expect(screen.getByTestId("moment-slot-filled").textContent).toContain("match")
+    cleanup()
+
+    render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
+    expect(screen.queryByText("match")).toBeNull()
+    cleanup()
+
+    render(<InternetStage query="the runway" phase="answered" moments={[moment({ confidence: 0 })]} />)
+    expect(screen.getByLabelText("0% match")).toBeTruthy()
+  })
+
+  it("never calls the confidence badge accuracy", () => {
+    render(<InternetStage query="the runway" phase="answered" moments={[moment({ confidence: 0.82 })]} />)
+    expect(screen.getByTestId("internet-stage").textContent).not.toMatch(/accura/i)
+  })
+
+  it("captions the video in the centre with its title and its site, and no clocks", () => {
     render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
 
     const caption = screen.getByTestId("internet-caption").textContent ?? ""
     expect(caption).toContain("Kai Cenat walks the runway")
-    expect(caption).toContain("0:10–0:34")
-    expect(caption).toContain("youtube.com")
+    expect(caption).toContain("YouTube")
+    expect(caption).not.toMatch(/\d+:\d\d/)
   })
 
   it("gives a video approved in several places one card offering all of them", () => {
@@ -115,22 +128,14 @@ describe("the internet results stage", () => {
     })
     render(<InternetStage query="the runway" phase="answered" moments={[thrice]} />)
 
-    // One card, not three: the same video three times would take three of
-    // the five slots and bury whatever else the search found.
     expect(filled()).toHaveLength(1)
     expect(screen.getByTestId("internet-words").textContent).toBe("1 video fits your search.")
-    // The picture says why it stands where it stands, and the caption says
-    // where inside it to look.
-    expect(screen.getByTestId("moment-slot-filled").textContent).toContain("3 places")
     const caption = screen.getByTestId("internet-caption").textContent ?? ""
     expect(caption).toContain("The whole show")
-    for (const range of ["0:10–0:14", "0:40–0:43", "1:10–1:15"]) expect(caption).toContain(range)
+    expect(caption).not.toMatch(/\d+:\d\d/)
   })
 
   it("gives the caption the same room whatever is in it, so the arrows never move", () => {
-    // The arrows sit directly under the caption. A caption that grew with a
-    // longer title or with more approved places would move them every time
-    // the band was turned — the reflow AGENTS.md rules out.
     const room = (moments: InternetMoment[]) => {
       render(<InternetStage query="the runway" phase="answered" moments={moments} />)
       const box = screen.getByTestId("internet-caption-room")
@@ -152,16 +157,10 @@ describe("the internet results stage", () => {
       }),
     ])
 
-    // Same box, same number of lines in it, however much there is to say.
     expect(crowded.className).toBe(one.className)
     expect(crowded.lines).toBe(one.lines)
     expect(one.lines).toBe(2)
 
-    // And the two lines cannot become four. jsdom does no layout, so the
-    // only way to hold this is on the rules that decide it: the title is
-    // clamped and the places are cut off rather than wrapped onto a second
-    // row. A wrapping row here is the bug, and it looks fine until a video
-    // with several approved places reaches a narrow screen.
     render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
     const [title, places] = Array.from(screen.getByTestId("internet-caption-words").querySelectorAll("p"))
     expect(title!.className).toContain("line-clamp-2")
@@ -169,15 +168,7 @@ describe("the internet results stage", () => {
     expect(places!.className).not.toContain("flex-wrap")
   })
 
-  it("says one place, not 1 places, for a video approved once", () => {
-    render(<InternetStage query="the runway" phase="answered" moments={[moment()]} />)
-    expect(screen.getByTestId("moment-slot-filled").textContent).toContain("1 place")
-  })
-
   it("keeps the moment you are looking at when a stronger one lands above it", async () => {
-    // Moments arrive while the band is on screen, strongest first. A
-    // stronger one taking a place above the centred card must not make the
-    // centre silently become whatever moved into that position.
     const a = moment({ id: "a", title: "Video A" })
     const b = moment({ id: "b", title: "Video B" })
     const { rerender } = render(<InternetStage query="q" phase="searching" moments={[a, b]} />)
@@ -193,9 +184,6 @@ describe("the internet results stage", () => {
   })
 
   it("shows the moment that fills the slot you were watching", async () => {
-    // Centre the first empty slot, then let a moment land in it. The person
-    // was watching that place in the band; what arrives there is what they
-    // should see, not the skeleton that shuffled along behind it.
     const { rerender } = render(<InternetStage query="q" phase="searching" moments={many(1)} />)
 
     await userEvent.click(screen.getByRole("button", { name: "Next moment" }))
@@ -214,9 +202,6 @@ describe("the internet results stage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Next moment" }))
 
-    // The centred slot is a skeleton, so there is nothing to caption — but
-    // the block keeps its room and the arrows stay, or the band jumps up the
-    // screen and the way back disappears with it.
     await waitFor(() => expect(screen.queryByTestId("internet-caption-words")).toBeNull())
     expect(screen.getByTestId("internet-caption")).toBeTruthy()
     expect(screen.getByRole("button", { name: "Next moment" })).toBeTruthy()
