@@ -26,7 +26,7 @@ export interface AskComposerProps {
 }
 
 const gradient =
-  "bg-[linear-gradient(135deg,#d8f6ff_0%,#a9e3ff_48%,#bfcbff_100%)] text-[#102033] shadow-[0_8px_24px_rgba(100,190,255,0.26)] hover:brightness-[0.985]"
+  "bg-[#ffe58a] text-[#273142] shadow-none hover:bg-[#ffdf73]"
 
 export function AskComposer({
   value,
@@ -66,10 +66,10 @@ export function AskComposer({
       data-size={size}
       transition={{ duration: 0.18 }}
       className={cn(
-        "flex w-full flex-col border border-[#dfe9f3] bg-white/95 backdrop-blur-xl transition-[box-shadow,border-color,transform] focus-within:-translate-y-px",
+        "flex w-full flex-col border border-[#dfe2e6] bg-[#fbfbfc] transition-[box-shadow,border-color]",
         home
-          ? "rounded-[28px] p-2 shadow-[0_18px_50px_rgba(71,111,153,0.10)] focus-within:border-[#b9dcf7] focus-within:shadow-[0_22px_60px_rgba(71,111,153,0.14)]"
-          : "rounded-[22px] p-1.5 shadow-[0_8px_30px_rgba(71,111,153,0.09)] focus-within:border-[#b9dcf7]",
+          ? "rounded-[20px] p-2 shadow-[0_2px_5px_rgba(16,24,40,0.05)] focus-within:border-[#cfd3d8] focus-within:shadow-[0_4px_12px_rgba(16,24,40,0.07)]"
+          : "rounded-[18px] p-1.5 shadow-[0_2px_8px_rgba(16,24,40,0.06)] focus-within:border-[#cfd3d8]",
         dragging && "border-[#9ed8ff] shadow-[0_22px_60px_rgba(71,111,153,0.16)]",
         className,
       )}
@@ -87,9 +87,9 @@ export function AskComposer({
           autoFocus={autoFocus}
           rows={1}
           className={cn(
-            "resize-none border-0 bg-transparent text-[#172033] shadow-none placeholder:text-[#9aa9b8] focus-visible:border-0 focus-visible:ring-0 disabled:bg-transparent",
+            "resize-none border-0 bg-transparent text-[#1d2530] shadow-none placeholder:text-[#5f6874] focus-visible:border-0 focus-visible:ring-0 disabled:bg-transparent",
             home
-              ? "min-h-[76px] rounded-[22px] px-4 pt-4 pb-2 text-[15px] max-[860px]:text-base!"
+              ? "min-h-[68px] rounded-[16px] px-4 pt-4 pb-2 text-[15px] max-[860px]:text-base!"
               : "min-h-[46px] max-h-[150px] px-3 py-3 text-[14px] max-[860px]:text-base!",
           )}
         />
