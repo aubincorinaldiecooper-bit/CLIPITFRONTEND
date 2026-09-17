@@ -279,6 +279,30 @@ describe("what the band is allowed to claim", () => {
     expect(said).toContain("there may be more")
   })
 
+  it("says the watching was shallow, not that videos were skipped, when all of them were opened", () => {
+    // The ordinary case: every video opened, none watched through, because a
+    // coarse scan samples. Claiming videos "could not be watched" here would
+    // be a new false statement in the course of fixing the old one.
+    render(
+      <InternetStage query="q" phase="answered" moments={[]} outcome="partly_watched" candidatesFound={7} candidatesWatched={7} />,
+    )
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).not.toContain(nothingMatched)
+    expect(said).not.toContain("could not be watched")
+    expect(said).toContain("did not watch every second")
+    expect(said).toContain("there may be more")
+  })
+
+  it("keeps a found result honest about how deep the watching went", () => {
+    render(
+      <InternetStage query="q" phase="answered" moments={many(2)} outcome="partly_watched" candidatesFound={2} candidatesWatched={2} />,
+    )
+    const said = screen.getByTestId("internet-words").textContent ?? ""
+    expect(said).toContain("2 videos fit your search.")
+    expect(said).not.toContain("could not be watched")
+    expect(said).toContain("did not watch every second")
+  })
+
   it("keeps a partial answer partial even when it did find something", () => {
     render(
       <InternetStage query="q" phase="answered" moments={many(2)} outcome="partly_watched" candidatesFound={7} candidatesWatched={5} />,

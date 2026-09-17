@@ -93,6 +93,11 @@ function words(
 
   if (outcome === "no_candidates") return "The search turned up no videos to watch."
 
+  // Two different gaps, and they need different sentences. `missed` is videos
+  // nobody opened at all. A partial search with `missed` at zero means every
+  // video was opened and none was watched all the way through — the coarse
+  // scan samples a second in every five — so saying videos "could not be
+  // watched" there would be its own small lie.
   const missed = Math.max(0, candidates - (watched ?? candidates))
   const partial = outcome === "partly_watched"
 
@@ -100,7 +105,7 @@ function words(
     if (!partial) return "No results fit your search."
     return missed > 0
       ? `Nothing fit in what Clipit could watch. ${missed} ${plural(missed, "video", "videos")} could not be watched, so there may be more.`
-      : "Nothing fit in what Clipit could watch, but it did not get through all of it — so there may be more."
+      : "Nothing fit in what Clipit watched, and it did not watch every second — so there may be more."
   }
 
   const fit = `${found} ${plural(found, "video fits", "videos fit")} your search.`
@@ -108,7 +113,7 @@ function words(
   if (!partial) return strongest
   return missed > 0
     ? `${strongest} ${missed} ${plural(missed, "video", "videos")} could not be watched, so there may be more.`
-    : `${strongest} Clipit did not get through all of it, so there may be more.`
+    : `${strongest} It did not watch every second, so there may be more.`
 }
 
 type Slot = { kind: "moment"; key: string; moment: InternetMoment } | { kind: "pending"; key: string }
