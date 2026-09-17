@@ -91,6 +91,25 @@ function words(
     return `${becauseOf(failure)} Clipit found ${videos} to watch and could not watch any of them, so this is not an answer about what is in them.`
   }
 
+  if (outcome === "search_failed") {
+    const some = found > 0 ? `${found} ${plural(found, "video", "videos")} turned up before it stopped, and ` : ""
+    return `${becauseOf(failure)} Clipit's search stopped before it finished, so ${some}this is not an answer about what is in the videos.`
+  }
+
+  // Everything below this line makes a claim about the world — that there were
+  // no videos, or that the ones there were did not have it in them. A search
+  // that did not finish has not earned any of them, so it stops here.
+  //
+  // It sits above `no_candidates` rather than further down because that is
+  // where the first version put it, and it was wrong: a failed search carrying
+  // `no_candidates` still returned "The search turned up no videos to watch",
+  // which is every bit as conclusive as the sentence the guard was written to
+  // prevent. The test passed anyway, because it only checked for the absence
+  // of that one phrase. Caught by Codex on #111.
+  if (phase === "failed") {
+    return `${becauseOf(failure)} Clipit's search did not finish, so this is not an answer about what is in the videos.`
+  }
+
   if (outcome === "no_candidates") return "The search turned up no videos to watch."
 
   // Two different gaps, and they need different sentences. `missed` is videos
