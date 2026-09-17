@@ -98,7 +98,7 @@ export function SearchHome({
 
   const placeholder = dragging
     ? "Drop the video to attach it…"
-    : (onItsWay && gate.placeholder) || (target === "internet" ? "Search the internet for a moment…" : "Ask anything…")
+    : (onItsWay && gate.placeholder) || (target === "internet" ? "Search the internet for a moment…" : "Ask for a moment…")
 
   const pick = (files: File[]) => {
     const file = files[0]
