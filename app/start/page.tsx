@@ -11,6 +11,7 @@ import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { SearchShell } from "@/components/moments/search-shell"
 import { FollowUpComposer, SearchHome } from "@/components/moments/search-home"
+import { AskComposer } from "@/components/moments/ask-composer"
 import { InternetStage } from "@/components/moments/internet-stage"
 import { ResultsStage } from "@/components/moments/results-stage"
 import { MomentConversation } from "@/components/moments/moment-conversation"
@@ -886,7 +887,7 @@ export default function StartPage() {
   const resultsHref = addressOf({ video: video?.id ?? null, search: stagedExchange?.request.id ?? null, moment: null })
 
   return (
-    <SearchShell variant={screen === "home" ? "home" : screen === "results" ? "canvas" : "app"}>
+    <SearchShell variant={screen === "home" ? "home" : screen === "results" || screen === "internet" ? "canvas" : "app"}>
       <div ref={screenRoot} className="flex w-full flex-1 flex-col">
         <AnimatePresence mode="wait" initial={false}>
           {screen === "home" && (
@@ -946,6 +947,21 @@ export default function StartPage() {
                 failure={internetSearch?.searchId === address.ask ? internetSearch.failure : undefined}
                 candidatesFound={internetSearch?.searchId === address.ask ? internetSearch.candidatesFound : 0}
                 candidatesWatched={internetSearch?.searchId === address.ask ? internetSearch.candidatesWatched : undefined}
+                composer={
+                  <AskComposer
+                    size="thread"
+                    value={promptDraft}
+                    onChange={setPromptDraft}
+                    onSubmit={(value) => {
+                      void startInternetSearch(value)
+                    }}
+                    placeholder="Search the internet…"
+                    label="Search the internet"
+                    sendLabel="Search"
+                    disabled={busy}
+                    canSend={!busy}
+                  />
+                }
               />
             </motion.div>
           )}
