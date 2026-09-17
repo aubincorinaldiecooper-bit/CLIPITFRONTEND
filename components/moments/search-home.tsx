@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, type DragEvent } from "react"
-import { Globe2, Paperclip } from "lucide-react"
+import { Globe2, Plus } from "lucide-react"
 import { motion } from "motion/react"
 import { toast } from "sonner"
 import { VIDEO_ACCEPT, type UploadEntry } from "@/components/flow/upload-package"
@@ -55,6 +55,7 @@ const EXAMPLES = [
   "Find the moment the crowd realises what happened",
   "Every time someone says “let’s go”",
   "Where the car pulls out of the driveway",
+  "Show me when the speaker points at the screen",
 ]
 
 export function SearchHome({
@@ -129,22 +130,22 @@ export function SearchHome({
   }
 
   return (
-    <div className="w-full max-w-[760px]" data-testid="search-home">
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-        <p className="mb-3 text-center text-[12px] font-medium tracking-[0.14em] text-[#7f91a4] uppercase">Clipit</p>
-        <h1 className="mx-auto max-w-[680px] text-center text-[clamp(34px,5vw,54px)] font-medium leading-[1.05] tracking-[-0.035em] text-[#122033]">
+    <div className="w-full max-w-[900px]" data-testid="search-home">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }} className="text-center">
+        <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-full bg-[#ffd24a] text-[13px] font-semibold text-[#111827]">
+          ci
+        </div>
+        <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] text-[#111318]">
           What do you want to find?
         </h1>
-        <p className="mx-auto mt-4 max-w-[520px] text-center text-[15px] leading-relaxed text-[#718197]">
-          Search what happens in video — from your footage or across the web.
-        </p>
+        <p className="mt-2 text-[15px] text-[#667085]">Ask about a video.</p>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05 }}
-        className="mt-9"
+        className="mt-8"
         onDragOver={onDragOver}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
@@ -194,12 +195,13 @@ export function SearchHome({
             <>
               <Button
                 variant="ghost"
+                size="icon"
                 disabled={disabled}
+                aria-label={entries.length > 0 || attached ? "Replace video" : "Attach video"}
                 onClick={() => picker.current?.click()}
-                className="h-9 rounded-full px-3 text-[13px] font-normal text-[#718197] hover:bg-[#f1f7fc] hover:text-[#26374a]"
+                className="size-9 rounded-full text-[#4b5563] hover:bg-[#eef0f2] hover:text-[#111318]"
               >
-                <Paperclip className="size-[15px]" />
-                {entries.length > 0 || attached ? "Replace video" : "Attach video"}
+                <Plus className="size-[17px]" />
               </Button>
               <Button
                 variant={webSearchEnabled ? "secondary" : "ghost"}
@@ -208,23 +210,23 @@ export function SearchHome({
                 onClick={toggleWebSearch}
                 className={
                   webSearchEnabled
-                    ? "h-9 rounded-full border border-[#c7e8ff] bg-[#eaf7ff] px-3 text-[13px] font-medium text-[#265476] hover:bg-[#e1f3ff]"
-                    : "h-9 rounded-full px-3 text-[13px] font-normal text-[#718197] hover:bg-[#f1f7fc] hover:text-[#26374a]"
+                    ? "h-9 rounded-xl border border-[#111318] bg-[#111318] px-3 text-[13px] font-medium text-white hover:bg-[#111318]/90"
+                    : "h-9 rounded-xl border border-[#dfe2e6] bg-white px-3 text-[13px] font-medium text-[#333944] hover:bg-[#f6f7f8]"
                 }
               >
                 <Globe2 className="size-[15px]" />
-                Web search
+                Web
               </Button>
             </>
           }
         />
       </motion.div>
 
-      <p className="mt-3 min-h-5 text-center text-[13px] text-[#8797a8]" aria-live="polite">
+      <p className="mt-3 min-h-5 text-center text-[13px] text-[#7a828d]" aria-live="polite">
         {waitingOn}
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+      <div className="mx-auto mt-6 grid w-fit grid-cols-1 gap-2 sm:grid-cols-2">
         {EXAMPLES.map((example, index) => (
           <motion.div key={example} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + index * 0.04 }}>
             <Button
@@ -235,7 +237,7 @@ export function SearchHome({
                 onPromptChange(example)
                 box.current?.focus()
               }}
-              className="rounded-full border-[#dfe8f1] bg-white px-3.5 font-normal text-[#687b8f] shadow-[0_4px_14px_rgba(61,90,120,0.04)] hover:border-[#cbe5f8] hover:bg-[#f9fcff] hover:text-[#2e4157]"
+              className="h-9 rounded-full border-[#dfe2e6] bg-white px-4 font-normal text-[#20242b] shadow-none hover:bg-[#f7f7f8]"
             >
               {example}
             </Button>
