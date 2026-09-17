@@ -886,7 +886,7 @@ export default function StartPage() {
   const resultsHref = addressOf({ video: video?.id ?? null, search: stagedExchange?.request.id ?? null, moment: null })
 
   return (
-    <SearchShell variant={screen === "home" ? "home" : "app"}>
+    <SearchShell variant={screen === "home" ? "home" : screen === "results" ? "canvas" : "app"}>
       <div ref={screenRoot} className="flex w-full flex-1 flex-col">
         <AnimatePresence mode="wait" initial={false}>
           {screen === "home" && (
@@ -957,7 +957,7 @@ export default function StartPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22, ease: EASE }}
-              className="flex w-full flex-1 flex-col pb-16"
+              className="flex w-full flex-1 flex-col"
             >
               <ResultsStage
                 exchange={stagedExchange}
@@ -974,17 +974,17 @@ export default function StartPage() {
                 onPickOther={(requestId) => go({ search: requestId, moment: null })}
                 muted={muted}
                 onMutedChange={setMuted}
+                composer={
+                  <FollowUpComposer
+                    video={video}
+                    promptValue={promptDraft}
+                    onPromptChange={setPromptDraft}
+                    onSubmit={handleNext}
+                    disabled={busy}
+                    searching={searchRunning}
+                  />
+                }
               />
-              <div className="mx-auto mt-10 w-full max-w-[640px] px-4">
-                <FollowUpComposer
-                  video={video}
-                  promptValue={promptDraft}
-                  onPromptChange={setPromptDraft}
-                  onSubmit={handleNext}
-                  disabled={busy}
-                  searching={searchRunning}
-                />
-              </div>
             </motion.div>
           )}
 
