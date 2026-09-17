@@ -19,6 +19,12 @@ export function SearchShell({ children }: { children: React.ReactNode }) {
         className="shadcn-scope min-h-dvh w-full bg-[#f7fbff] text-[#111827]"
         data-testid="search-shell"
       >
+        <style jsx global>{`
+          [data-testid="results-stage"] + div {
+            display: none !important;
+          }
+        `}</style>
+
         <a
           href="#content"
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-xl focus:bg-white focus:px-3 focus:py-2 focus:text-sm"
