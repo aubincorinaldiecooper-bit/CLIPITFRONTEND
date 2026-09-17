@@ -1,17 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useMemo, type ReactNode } from "react"
+import { Library, Plus, Search, Users } from "lucide-react"
 import { motion } from "motion/react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import { Button } from "@/components/space/button"
-import { CoverflowCarousel, type CoverflowApi } from "@/components/space/coverflow-carousel"
+import { buttonVariants } from "@/components/space/button"
 import { Skeleton } from "@/components/space/skeleton"
 import { MatchBadge } from "@/components/moments/match-badge"
-import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
 import { siteName } from "@/lib/video-embed"
 import { cn } from "@/lib/utils"
+import { Logo } from "@/components/brand/logo"
 
 export const MAX_SLOTS = 5
 export type InternetSearchPhase = "loading" | "searching" | "answered" | "failed"
@@ -137,108 +136,155 @@ function words(
 
 type Slot = { kind: "moment"; key: string; moment: InternetMoment } | { kind: "pending"; key: string }
 
-export function InternetStage({ query, phase, moments, outcome, failure, candidatesFound = 0, candidatesWatched }: InternetStageProps) {
-  const compact = useMediaQuery(PHONE)
-  const apiRef = useRef<CoverflowApi | null>(null)
+export function InternetStage({
+  query,
+  phase,
+  moments,
+  outcome,
+  failure,
+  candidatesFound = 0,
+  candidatesWatched,
+  composer,
+}: InternetStageProps & { composer?: ReactNode }) {
   const found = useMemo(() => moments.slice(0, MAX_SLOTS), [moments])
-  const slots = useMemo<Slot[]>(() => {
-    if (phase === "loading") return []
-    const taken: Slot[] = found.map((moment) => ({ kind: "moment", key: moment.id, moment }))
-    if (phase !== "searching") return taken
-    return [
-      ...taken,
-      ...Array.from({ length: Math.max(0, MAX_SLOTS - taken.length) }, (_, index) => ({ kind: "pending" as const, key: `pending@${taken.length + index}` })),
-    ]
-  }, [found, phase])
-
-  const [activeKey, setActiveKey] = useState<string | null>(null)
-  const slotsRef = useRef(slots)
-  slotsRef.current = slots
-  const onSelect = useCallback((index: number) => {
-    const slot = slotsRef.current[index]
-    if (slot) setActiveKey(slot.key)
-  }, [])
-  const onApi = useCallback((api: CoverflowApi) => {
-    apiRef.current = api
-  }, [])
-  const activeIndex = activeKey ? slots.findIndex((slot) => slot.key === activeKey) : -1
-  const active = activeIndex >= 0 ? slots[activeIndex] : slots[0]
-  const activeMoment = active?.kind === "moment" ? active.moment : null
-
-  useEffect(() => {
-    if (activeIndex >= 0 || slots.length === 0) return
-    setActiveKey(slots[0]!.key)
-  }, [activeIndex, slots])
-
-  const slides = useMemo(() => slots.map((slot) => ({ alt: slot.kind === "moment" ? titleOf(slot.moment) : "A moment still being looked for" })), [slots])
+  const pendingCount = phase === "searching" ? Math.max(0, MAX_SLOTS - found.length) : 0
   const ended = phase === "answered" || phase === "failed"
   const line = words(phase, moments.length, found.length, outcome, failure, candidatesFound, candidatesWatched)
 
   return (
-    <div className="w-full py-6" data-testid="internet-stage" data-phase={phase}>
-      <div className="mx-auto w-full max-w-[900px] px-5 text-center sm:px-8">
-        <p className="text-[11px] font-medium tracking-[0.14em] text-[#8b9bad] uppercase">{phase === "answered" ? "Found for" : phase === "failed" ? "Searched for" : "Looking for"}</p>
-        <h2 className="mx-auto mt-2 max-w-[720px] text-[clamp(22px,3vw,32px)] leading-tight font-medium tracking-[-0.025em] text-[#152337]" data-testid="internet-question">
-          {query}
-        </h2>
-        <div className="mx-auto mt-3 max-w-[640px] text-sm leading-relaxed text-[#76889b]" aria-live="polite" data-testid="internet-words">
-          {ended ? <p>{line}</p> : <TextShimmer as="p">{line}</TextShimmer>}
+    <div
+      className="grid min-h-dvh w-full bg-white text-[#17191d] lg:grid-cols-[270px_minmax(0,1fr)_390px]"
+      data-testid="internet-stage"
+      data-phase={phase}
+    >
+      <aside className="hidden border-r border-[#e5e7eb] bg-[#fbfbfb] lg:flex lg:min-h-dvh lg:flex-col">
+        <div className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
+          <a href="/start" aria-label="Clipit home" className="inline-flex items-center">
+            <Logo size={18} />
+          </a>
         </div>
-      </div>
 
-      {slots.length > 0 && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 w-full">
-          <CoverflowCarousel
-            slides={slides}
-            onSelect={onSelect}
-            onApi={onApi}
-            loop={slots.length > 2}
-            label="Moments found on the internet"
-            cardWidth={compact ? "clamp(260px,78vw,360px)" : "clamp(360px,38vw,520px)"}
-            cardHeight={compact ? "calc(clamp(260px,78vw,360px) * 3 / 4)" : "calc(clamp(360px,38vw,520px) * 3 / 4)"}
-            rotate={compact ? 2 : 8}
-            depth={compact ? 0.03 : 0.08}
-            perspective={7}
-            falloff={0.9}
-            fade={0.12}
-            gap={0.08}
-            frameClassName={compact ? "py-5" : "py-8"}
-            cardClassName="rounded-[26px] border border-[#dfe9f3] bg-white p-2.5 shadow-[0_18px_50px_rgba(71,111,153,0.10)]"
-            renderSlide={(_slide, index, isActive) => {
-              const slot = slots[index]!
-              if (slot.kind === "pending") return <Skeleton aria-hidden className="size-full rounded-[19px] bg-[#edf4fa]" data-testid="moment-slot-pending" />
-              const moment = slot.moment
-              const percent = matchPercent(moment)
-              return (
-                <motion.div animate={{ y: isActive ? -2 : 0 }} className={cn("relative size-full overflow-hidden rounded-[19px] bg-neutral-950", isActive && "shadow-[0_20px_52px_rgba(27,50,73,0.18)]")} data-testid="moment-slot-filled">
+        <nav className="flex-1 px-4 py-5">
+          <a
+            href="/start"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#262b31] hover:bg-[#f0f1f2]",
+            )}
+          >
+            <Plus className="size-4" />
+            New search
+          </a>
+          <a
+            href="/clips"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
+            )}
+          >
+            <Library className="size-4" />
+            Library
+          </a>
+          <a
+            href="/shared"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
+            )}
+          >
+            <Users className="size-4" />
+            Shared
+          </a>
+        </nav>
+      </aside>
+
+      <section className="min-w-0 border-r border-[#e5e7eb]">
+        <header className="flex h-16 items-center justify-between border-b border-[#e5e7eb] px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <Search className="size-4 shrink-0 text-[#4b525b]" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#1d2127]">Internet results</p>
+              <p className="truncate text-xs text-[#7a818b]" data-testid="internet-question">{query}</p>
+            </div>
+          </div>
+          <a
+            href="/start"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "rounded-lg border-[#dfe2e6] bg-white font-medium text-[#262b31]",
+            )}
+          >
+            New search
+          </a>
+        </header>
+
+        <div className="space-y-4 px-5 py-5">
+          {found.map((moment) => {
+            const percent = matchPercent(moment)
+            return (
+              <motion.a
+                key={moment.id}
+                href={moment.pageUrl}
+                target="_blank"
+                rel="noreferrer"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="block overflow-hidden rounded-[18px] border border-[#e6e8eb] bg-[#f7f8f9] transition-colors hover:border-[#d4d7db]"
+                data-testid="moment-slot-filled"
+              >
+                <div className="relative aspect-[16/7] min-h-[170px] w-full overflow-hidden bg-[#f1f2f3]">
                   {moment.still ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={moment.still} alt="" draggable={false} className="size-full object-cover" />
                   ) : (
-                    <p className="flex size-full items-center justify-center px-5 text-center text-xs text-white/70"><span className="line-clamp-5">{titleOf(moment)}</span></p>
+                    <div className="flex size-full items-center justify-center px-8 text-center text-sm text-[#707780]">
+                      {titleOf(moment)}
+                    </div>
                   )}
                   {percent !== null && <MatchBadge value={percent} className="absolute top-3 left-3" />}
-                </motion.div>
-              )
-            }}
-          />
+                </div>
+                <div className="px-4 py-3.5">
+                  <p className="line-clamp-2 text-sm font-medium text-[#20242a]">{titleOf(moment)}</p>
+                  <p className="mt-1 truncate text-xs text-[#7a818b]">
+                    {siteName(moment.pageUrl) ?? moment.source ?? ""}
+                  </p>
+                </div>
+              </motion.a>
+            )
+          })}
 
-          <div className="mx-auto flex max-w-[620px] flex-col items-center px-6 text-center" data-testid="internet-caption">
-            <div className="flex min-h-16 flex-col items-center justify-start">
-              {activeMoment && (
-                <motion.div key={activeMoment.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[48ch]">
-                  <p className="line-clamp-2 text-[17px] leading-snug text-[#1d2b3d]" title={titleOf(activeMoment)}>{titleOf(activeMoment)}</p>
-                  <p className="mt-2 truncate text-[13px] text-[#7e8fa2]">{siteName(activeMoment.pageUrl) ?? activeMoment.source ?? ""}</p>
-                </motion.div>
-              )}
+          {Array.from({ length: pendingCount }, (_, index) => (
+            <Skeleton
+              key={`pending-${index}`}
+              aria-hidden
+              className="h-[clamp(170px,22vh,230px)] w-full rounded-[18px] bg-[#f5f6f7]"
+              data-testid="moment-slot-pending"
+            />
+          ))}
+        </div>
+      </section>
+
+      <aside className="flex min-h-[540px] flex-col bg-white lg:min-h-dvh">
+        <header className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
+          <p className="text-sm font-semibold text-[#1d2127]">Search chat</p>
+        </header>
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex flex-1 flex-col items-center justify-center px-7 py-8 text-center">
+            <div className="flex size-11 items-center justify-center rounded-full border border-[#e0e3e7] bg-[#f7f8f9]">
+              <Search className="size-4 text-[#343a42]" />
             </div>
-            <div className={cn("mt-4 flex items-center gap-3", slots.length < 2 && "invisible")}>
-              <Button variant="outline" size="icon-sm" aria-label="Previous moment" onClick={() => apiRef.current?.prev()} className="rounded-full border-[#dfe8f1] bg-white"><ChevronLeft className="size-4" /></Button>
-              <Button variant="outline" size="icon-sm" aria-label="Next moment" onClick={() => apiRef.current?.next()} className="rounded-full border-[#dfe8f1] bg-white"><ChevronRight className="size-4" /></Button>
+            <p className="mt-5 max-w-[28ch] text-[17px] font-semibold leading-snug text-[#1d2127]">
+              {query}
+            </p>
+            <div className="mt-3 max-w-[32ch] text-sm leading-relaxed text-[#68707a]" aria-live="polite" data-testid="internet-words">
+              {ended ? <p>{line}</p> : <TextShimmer as="p">{line}</TextShimmer>}
             </div>
           </div>
-        </motion.div>
-      )}
+
+          {composer && <div className="border-t border-[#e5e7eb] p-3">{composer}</div>}
+        </div>
+      </aside>
     </div>
   )
 }
