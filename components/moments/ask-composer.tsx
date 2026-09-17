@@ -26,7 +26,7 @@ export interface AskComposerProps {
 }
 
 const gradient =
-  "bg-[linear-gradient(135deg,#d8f6ff_0%,#a9e3ff_48%,#bfcbff_100%)] text-[#102033] shadow-[0_8px_24px_rgba(100,190,255,0.26)] hover:brightness-[0.985]"
+  "bg-[linear-gradient(135deg,#d8f6ff_0%,#a9e3ff_48%,#bfcbff_100%)] text-[#102033] shadow-[0_5px_16px_rgba(100,190,255,0.22)] hover:brightness-[0.985]"
 
 export function AskComposer({
   value,
@@ -66,11 +66,11 @@ export function AskComposer({
       data-size={size}
       transition={{ duration: 0.18 }}
       className={cn(
-        "flex w-full flex-col border border-[#dfe9f3] bg-white/95 backdrop-blur-xl transition-[box-shadow,border-color,transform] focus-within:-translate-y-px",
+        "flex w-full flex-col border bg-[#fbfcfd] transition-[box-shadow,border-color]",
         home
-          ? "rounded-[28px] p-2 shadow-[0_18px_50px_rgba(71,111,153,0.10)] focus-within:border-[#b9dcf7] focus-within:shadow-[0_22px_60px_rgba(71,111,153,0.14)]"
-          : "rounded-[22px] p-1.5 shadow-[0_8px_30px_rgba(71,111,153,0.09)] focus-within:border-[#b9dcf7]",
-        dragging && "border-[#9ed8ff] shadow-[0_22px_60px_rgba(71,111,153,0.16)]",
+          ? "rounded-[18px] border-[#e1e5e9] p-1.5 shadow-[0_3px_12px_rgba(15,23,42,0.05)] focus-within:border-[#cbd7e2] focus-within:shadow-[0_5px_18px_rgba(15,23,42,0.07)]"
+          : "rounded-[22px] border-[#dfe9f3] bg-white/95 p-1.5 shadow-[0_8px_30px_rgba(71,111,153,0.09)] backdrop-blur-xl focus-within:border-[#b9dcf7]",
+        dragging && "border-[#9ed8ff] shadow-[0_8px_24px_rgba(71,111,153,0.10)]",
         className,
       )}
     >
@@ -87,9 +87,9 @@ export function AskComposer({
           autoFocus={autoFocus}
           rows={1}
           className={cn(
-            "resize-none border-0 bg-transparent text-[#172033] shadow-none placeholder:text-[#9aa9b8] focus-visible:border-0 focus-visible:ring-0 disabled:bg-transparent",
+            "resize-none border-0 bg-transparent text-[#172033] shadow-none placeholder:text-[#8d99a7] focus-visible:border-0 focus-visible:ring-0 disabled:bg-transparent",
             home
-              ? "min-h-[76px] rounded-[22px] px-4 pt-4 pb-2 text-[15px] max-[860px]:text-base!"
+              ? "min-h-[52px] rounded-[14px] px-3.5 pt-3.5 pb-1.5 text-[15px] max-[860px]:text-base!"
               : "min-h-[46px] max-h-[150px] px-3 py-3 text-[14px] max-[860px]:text-base!",
           )}
         />
@@ -109,15 +109,15 @@ export function AskComposer({
       </div>
 
       {home && (
-        <div className="flex items-center justify-between gap-2 px-1 pt-1 pb-0.5">
+        <div className="flex min-h-10 items-center justify-between gap-2 px-1.5 pb-1 pt-0.5">
           <span className="flex min-w-0 flex-wrap items-center gap-1">{actions}</span>
           <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.95 }}>
             <Button
-              size="icon-lg"
+              size="icon"
               aria-label={sendLabel}
               disabled={!sendable}
               onClick={submit}
-              className={cn("shrink-0 rounded-full border-0 disabled:opacity-30", gradient)}
+              className={cn("size-9 shrink-0 rounded-full border-0 disabled:opacity-30", gradient)}
             >
               <ArrowUp className="size-4" />
             </Button>
