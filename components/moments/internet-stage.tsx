@@ -14,7 +14,7 @@ import {
   CarouselPrevious,
   type CarouselApi,
 } from "@/components/space/carousel"
-import { SearchTrace } from "@/components/moments/search-trace"
+import { StepRows } from "@/components/moments/step-rows"
 import { StreamedText } from "@/components/start/streamed-text"
 import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -357,18 +357,21 @@ export function InternetStage({
             </div>
 
             {/* The work, then what it concluded — the order the owner's
-                reference puts them in, and the order they happened in. */}
-            {(phase === "searching" || ended) && (
-              <div className="mt-4">
-                <SearchTrace
-                  query={query}
-                  moments={moments}
-                  watching={!ended}
-                  candidatesFound={candidatesFound}
-                  candidatesWatched={candidatesWatched}
-                />
-              </div>
-            )}
+                reference puts them in, and the order they happened in.
+
+                Shown from the first frame, including while the first poll is
+                still in flight: a row spinning on "Searched the internet" is
+                the truth at that moment, and an empty panel is not. */}
+            <div className="mt-4">
+              <StepRows
+                phase={phase}
+                moments={moments}
+                candidatesFound={candidatesFound}
+                candidatesWatched={candidatesWatched}
+                outcome={outcome}
+                failure={failure}
+              />
+            </div>
 
             <div
               className="mt-3.5 text-[13.5px] leading-relaxed text-[#3d444c]"
