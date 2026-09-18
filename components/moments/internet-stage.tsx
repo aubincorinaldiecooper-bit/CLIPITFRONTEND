@@ -7,6 +7,8 @@ import { TextShimmer } from "@/components/loading-ui/text-shimmer"
 import { buttonVariants } from "@/components/space/button"
 import { Skeleton } from "@/components/space/skeleton"
 import { MatchBadge } from "@/components/moments/match-badge"
+import { SearchTrace } from "@/components/moments/search-trace"
+import { StreamedText } from "@/components/start/streamed-text"
 import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
 import { siteName } from "@/lib/video-embed"
 import { cn } from "@/lib/utils"
@@ -156,7 +158,13 @@ export function InternetStage({
       data-testid="internet-stage"
       data-phase={phase}
     >
-      <aside className="hidden border-r border-[#e5e7eb] bg-[#fbfbfb] lg:flex lg:min-h-dvh lg:flex-col">
+            {/* Both side columns stay put while the middle scrolls, which is what
+          "fixed rail" and "fixed chat panel" mean and what they were not.
+          Without this they are ordinary grid cells: they stretch to the
+          height of the results column, and because the chat centres itself
+          inside that column, five results put it about 1100px down the page.
+          The panel existed and nobody could see it. */}
+      <aside className="hidden border-r border-[#e5e7eb] bg-[#fbfbfb] lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
         <div className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
           <a href="/start" aria-label="Clipit home" className="inline-flex items-center">
             <Logo size={18} />
@@ -263,22 +271,37 @@ export function InternetStage({
         </div>
       </section>
 
-      <aside className="flex min-h-[540px] flex-col bg-white lg:min-h-dvh">
+      <aside className="flex min-h-[540px] flex-col bg-white lg:sticky lg:top-0 lg:h-dvh">
         <header className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
           <p className="text-sm font-semibold text-[#1d2127]">Search chat</p>
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-1 flex-col items-center justify-center px-7 py-8 text-center">
+          <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-7 py-8 text-center">
             <div className="flex size-11 items-center justify-center rounded-full border border-[#e0e3e7] bg-[#f7f8f9]">
               <Search className="size-4 text-[#343a42]" />
             </div>
             <p className="mt-5 max-w-[28ch] text-[17px] font-semibold leading-snug text-[#1d2127]">
               {query}
             </p>
+            {/* While it is running the line is a status that keeps changing,
+                so it shimmers in place. Once it settles it is the answer, and
+                an answer arrives the way someone tells you one. */}
             <div className="mt-3 max-w-[32ch] text-sm leading-relaxed text-[#68707a]" aria-live="polite" data-testid="internet-words">
-              {ended ? <p>{line}</p> : <TextShimmer as="p">{line}</TextShimmer>}
+              {ended ? <p><StreamedText text={line} /></p> : <TextShimmer as="p">{line}</TextShimmer>}
             </div>
+
+            {(phase === "searching" || ended) && (
+              <div className="mt-5 w-full max-w-[32ch] text-left">
+                <SearchTrace
+                  query={query}
+                  moments={moments}
+                  watching={!ended}
+                  candidatesFound={candidatesFound}
+                  candidatesWatched={candidatesWatched}
+                />
+              </div>
+            )}
           </div>
 
           {composer && <div className="border-t border-[#e5e7eb] p-3">{composer}</div>}

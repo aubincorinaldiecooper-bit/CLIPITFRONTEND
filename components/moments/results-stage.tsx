@@ -90,7 +90,13 @@ export function ResultsStage({
       className="grid min-h-dvh w-full bg-white text-[#17191d] lg:grid-cols-[270px_minmax(0,1fr)_390px]"
       data-testid="results-stage"
     >
-      <aside className="hidden border-r border-[#e5e7eb] bg-[#fbfbfb] lg:flex lg:min-h-dvh lg:flex-col">
+            {/* Both side columns stay put while the middle scrolls, which is what
+          "fixed rail" and "fixed chat panel" mean and what they were not.
+          Without this they are ordinary grid cells: they stretch to the
+          height of the results column, and because the chat centres itself
+          inside that column, five results put it about 1100px down the page.
+          The panel existed and nobody could see it. */}
+      <aside className="hidden border-r border-[#e5e7eb] bg-[#fbfbfb] lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
         <div className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
           <a href="/start" aria-label="Clipit home" className="inline-flex items-center">
             <Logo size={18} />
@@ -249,7 +255,7 @@ export function ResultsStage({
         )}
       </section>
 
-      <aside className="flex min-h-[540px] flex-col bg-white lg:min-h-dvh">
+      <aside className="flex min-h-[540px] flex-col bg-white lg:sticky lg:top-0 lg:h-dvh">
         <header className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
           <p className="text-sm font-semibold text-[#1d2127]">Search chat</p>
         </header>
