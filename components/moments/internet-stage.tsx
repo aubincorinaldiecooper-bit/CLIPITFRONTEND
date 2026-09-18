@@ -3,9 +3,17 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight, Library, Plus, Search, Users } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import { Button, buttonVariants } from "@/components/space/button"
+import { buttonVariants } from "@/components/space/button"
 import { Skeleton } from "@/components/space/skeleton"
-import { VideoTile } from "@/components/moments/video-tile"
+import { VideoCaption, VideoTile } from "@/components/moments/video-tile"
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+  type CarouselApi,
+} from "@/components/space/carousel"
 import { SearchTrace } from "@/components/moments/search-trace"
 import { StreamedText } from "@/components/start/streamed-text"
 import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
@@ -151,13 +159,26 @@ export function InternetStage({
   const line = words(phase, moments.length, found.length, outcome, failure, candidatesFound, candidatesWatched)
   const slides = found.length + pendingCount
 
-  // Which one is on screen. Clamped rather than trusted: results arrive while
-  // the search runs, and a skeleton the person had paged to can be replaced by
-  // a real card or disappear entirely when the count settles.
+  // Which one is on screen. Read back from the carousel rather than kept
+  // alongside it, so dragging, the arrows, the dots and the arrow keys can
+  // never disagree about where we are. Embla re-reads its own slides when
+  // results arrive mid-search, which is what keeps this honest as the count
+  // grows.
+  const [api, setApi] = useState<CarouselApi>()
   const [at, setAt] = useState(0)
   useEffect(() => {
-    setAt((n) => Math.min(Math.max(0, n), Math.max(0, slides - 1)))
-  }, [slides])
+    if (!api) return
+    const read = () => setAt(api.selectedScrollSnap())
+    read()
+    api.on("select", read)
+    api.on("reInit", read)
+    return () => {
+      api.off("select", read)
+      api.off("reInit", read)
+    }
+  }, [api])
+
+  const here = at < found.length ? found[at] : undefined
 
 
   return (
@@ -256,71 +277,65 @@ export function InternetStage({
                 <p className="text-[13px] text-[#9aa1aa]">Nothing to show here.</p>
               </div>
             ) : (
-              <>
-                <div className="relative min-h-0 flex-1 overflow-hidden py-1">
-                  <div
-                    className="flex h-full transition-transform duration-[420ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
-                    style={{ transform: `translateX(-${at * 100}%)` }}
-                  >
-                    {found.map((moment, index) => (
-                      <div
-                        key={moment.id}
-                        className="flex h-full w-full shrink-0 justify-center"
-                        aria-hidden={index !== at}
-                      >
+              <Carousel
+                setApi={setApi}
+                opts={{ align: "center", containScroll: false }}
+                aria-label="Videos found"
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <div className="relative min-h-0 flex-1">
+                  <CarouselContent>
+                    {found.map((moment) => (
+                      <CarouselItem key={moment.id} className="flex h-full justify-center">
                         <VideoTile moment={moment} />
-                      </div>
+                      </CarouselItem>
                     ))}
 
                     {Array.from({ length: pendingCount }, (_, index) => (
-                      <div
-                        key={`pending-${index}`}
-                        className="flex h-full w-full shrink-0 justify-center"
-                        aria-hidden
-                      >
+                      <CarouselItem key={`pending-${index}`} className="flex h-full justify-center">
                         <Skeleton
-                          className="aspect-[9/16] min-h-0 w-auto flex-1 rounded-[18px] bg-[#e3e6e9]"
+                          className="aspect-[9/16] h-full w-auto rounded-[18px] bg-[#e3e6e9]"
                           data-testid="moment-slot-pending"
                         />
-                      </div>
+                      </CarouselItem>
                     ))}
+                  </CarouselContent>
+
+                  {/* The arrows belong to the picture's edges, not the
+                      column's. This box is invisible and carries the same
+                      height and ratio as the card, so its sides are the
+                      card's sides however the window is resized — the width
+                      of a 9:16 card is only knowable from its height. */}
+                  <div className="pointer-events-none absolute inset-y-0 left-1/2 aspect-[9/16] -translate-x-1/2">
+                    <CarouselPrevious className="pointer-events-auto absolute top-1/2 -left-14 -translate-y-1/2">
+                      <ChevronLeft className="size-4" />
+                    </CarouselPrevious>
+                    <CarouselNext className="pointer-events-auto absolute top-1/2 -right-14 -translate-y-1/2">
+                      <ChevronRight className="size-4" />
+                    </CarouselNext>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center justify-center gap-3 px-4 pt-1 pb-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Previous video"
-                    disabled={at === 0}
-                    onClick={() => setAt((n) => Math.max(0, n - 1))}
-                    className="size-8 rounded-lg text-[#4b525b] hover:bg-white/70 disabled:opacity-30"
-                  >
-                    <ChevronLeft className="size-4" />
-                  </Button>
+                <div className="shrink-0 pt-3.5">
+                  {here && <VideoCaption moment={here} />}
 
-                  <p
-                    className="min-w-[5.5rem] text-center text-[12px] tabular-nums whitespace-nowrap text-[#68707a]"
-                    aria-live="polite"
-                    data-testid="deck-position"
-                  >
-                    {at + 1} of {slides}
-                  </p>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Next video"
-                    disabled={at >= slides - 1}
-                    onClick={() => setAt((n) => Math.min(slides - 1, n + 1))}
-                    className="size-8 rounded-lg text-[#4b525b] hover:bg-white/70 disabled:opacity-30"
-                  >
-                    <ChevronRight className="size-4" />
-                  </Button>
+                  <div className="mt-3.5 flex items-center justify-center gap-2" data-testid="deck-dots">
+                    {Array.from({ length: slides }, (_, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => api?.scrollTo(index)}
+                        aria-label={`Video ${index + 1} of ${slides}`}
+                        aria-current={index === at}
+                        className={cn(
+                          "h-2 rounded-full transition-all duration-300 motion-reduce:transition-none",
+                          index === at ? "w-6 bg-[#1d2127]" : "w-2 bg-[#c3c8ce] hover:bg-[#a7adb4]",
+                        )}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </>
+              </Carousel>
             )}
           </div>
 

@@ -40,3 +40,32 @@ if (typeof window !== "undefined" && typeof (window as unknown as { ResizeObserv
   Object.defineProperty(window, "ResizeObserver", { writable: true, value: StillObserver })
   Object.defineProperty(globalThis, "ResizeObserver", { writable: true, value: StillObserver })
 }
+
+/*
+ * And no IntersectionObserver. Embla asks for one the moment it initialises,
+ * to track which slides are in view, so without this every internet-stage
+ * test fails on a missing browser API rather than on anything about the
+ * stage — which is exactly what happened when the results deck moved onto
+ * the carousel.
+ *
+ * It observes nothing and never fires, so "in view" stays empty here. That
+ * costs these tests nothing: they count what is in the page, and every slide
+ * is in the page whether or not it is on screen. It does mean the suite
+ * cannot tell you the carousel really scrolls — that has to be driven in a
+ * real browser, and was.
+ */
+if (typeof window !== "undefined" && typeof (window as unknown as { IntersectionObserver?: unknown }).IntersectionObserver !== "function") {
+  class BlindObserver {
+    readonly root = null
+    readonly rootMargin = ""
+    readonly thresholds: number[] = []
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return []
+    }
+  }
+  Object.defineProperty(window, "IntersectionObserver", { writable: true, value: BlindObserver })
+  Object.defineProperty(globalThis, "IntersectionObserver", { writable: true, value: BlindObserver })
+}

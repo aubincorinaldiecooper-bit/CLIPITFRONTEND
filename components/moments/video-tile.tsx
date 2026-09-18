@@ -26,6 +26,11 @@ import type { InternetMoment } from "@/lib/types"
  *
  * The height comes from the parent and the width follows from the ratio, so
  * the card grows and shrinks with the window without ever being letterboxed.
+ *
+ * The words live in `VideoCaption`, below the deck rather than inside the
+ * slide, so the arrows can be anchored to the picture's own edges. The
+ * picture's width is only knowable from its height, and a slide carrying a
+ * caption of unknown height does not give you that.
  */
 
 export interface VideoTileProps {
@@ -50,18 +55,16 @@ function evidenceOf(moment: InternetMoment): string | null {
 export function VideoTile({ moment }: VideoTileProps) {
   const still = moment.still
   const percent = percentOf(moment)
-  const where = siteName(moment.pageUrl) ?? moment.source ?? ""
-  const evidence = evidenceOf(moment)
 
   return (
     <a
       href={moment.pageUrl}
       target="_blank"
       rel="noreferrer"
-      className="group flex h-full min-h-0 w-full flex-col items-center"
+      className="group block h-full"
       data-testid="moment-slot-filled"
     >
-      <div className="relative aspect-[9/16] min-h-0 w-auto flex-1 overflow-hidden rounded-[18px] bg-[#0d0f12] ring-1 ring-black/5 transition-shadow duration-200 group-hover:shadow-[0_10px_30px_rgba(16,20,26,0.18)]">
+      <div className="relative aspect-[9/16] h-full w-auto overflow-hidden rounded-[18px] bg-[#0d0f12] ring-1 ring-black/5 transition-shadow duration-200 group-hover:shadow-[0_10px_30px_rgba(16,20,26,0.18)]">
         {still ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={still} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />
@@ -73,16 +76,30 @@ export function VideoTile({ moment }: VideoTileProps) {
 
         {percent !== null && <MatchBadge value={percent} className="absolute top-3 left-3" />}
       </div>
-
-      <div className="mt-3 w-full max-w-[min(100%,29rem)] shrink-0 text-center">
-        <p className="line-clamp-2 text-[14px] leading-snug font-medium text-[#20242a]">{titleOf(moment)}</p>
-        <p className="mt-1 truncate text-[12px] text-[#7a818b]">{where}</p>
-        {evidence && (
-          <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-[#5f6771]" data-testid="moment-evidence">
-            {evidence}
-          </p>
-        )}
-      </div>
     </a>
+  )
+}
+
+/**
+ * The words for whichever video is on screen.
+ *
+ * The evidence line is the watcher's own description of what it saw at the
+ * first approved moment. It is the only line here that says why this video
+ * came back at all — the rest is the video's name and where it lives.
+ */
+export function VideoCaption({ moment }: { moment: InternetMoment }) {
+  const where = siteName(moment.pageUrl) ?? moment.source ?? ""
+  const evidence = evidenceOf(moment)
+
+  return (
+    <div className="mx-auto w-full max-w-[34rem] text-center">
+      <p className="line-clamp-2 text-[14px] leading-snug font-medium text-[#20242a]">{titleOf(moment)}</p>
+      <p className="mt-1 truncate text-[12px] text-[#7a818b]">{where}</p>
+      {evidence && (
+        <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-[#5f6771]" data-testid="moment-evidence">
+          {evidence}
+        </p>
+      )}
+    </div>
   )
 }
