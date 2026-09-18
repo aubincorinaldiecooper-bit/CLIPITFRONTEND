@@ -261,7 +261,12 @@ export function ResultsStage({
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-1 flex-col items-center justify-center px-7 py-8 text-center">
+          {/* Scrolls, and starts at the top. It did neither: the content was
+              centred in a box with no overflow, so this is the screen where a
+              model actually writes prose and the prose could not be reached
+              once it ran past the panel. The internet panel already had the
+              scroll; this one was missed. */}
+          <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-7 py-8 text-center">
             <div className="flex size-11 items-center justify-center rounded-full border border-[#e0e3e7] bg-[#f7f8f9]">
               <Search className="size-4 text-[#343a42]" />
             </div>

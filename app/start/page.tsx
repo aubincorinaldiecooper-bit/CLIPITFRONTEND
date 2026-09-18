@@ -20,7 +20,7 @@ import { clipRowFor, needsKeep, publishableFor } from "@/components/start/produc
 import { oneAtATime, runKeep } from "@/components/start/keep-flow"
 import { feedMoments, type FeedMoment } from "@/components/start/moments"
 import { askGate, askTarget } from "@/components/start/ask-gate"
-import { nextRead } from "@/components/start/search-polling"
+import { nextRead, searchIsRunning } from "@/components/start/search-polling"
 import type { Exchange } from "@/components/start/types"
 import { consumeSearchParams, matchForClip, restoreConversation } from "@/components/start/restore"
 import { writeSearchParams } from "@/lib/search-params"
@@ -335,6 +335,20 @@ export default function StartPage() {
    * routed back to the search in flight instead of starting a second one.
    */
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
+
+  /**
+   * Whether the internet search on screen is still working.
+   *
+   * `busy` cannot answer this. It covers the request that *starts* a search
+   * and is back to false within milliseconds, while the watching it kicked
+   * off runs for minutes. So the results panel's Send was effectively never
+   * disabled: pressing it mid-search started a second search, navigated to
+   * it, and left the first one opening videos on a GPU that nobody was
+   * watching and nobody would ever see the results of.
+   */
+  const shownInternetPhase =
+    internetSearch?.searchId === address.ask ? internetSearch.phase : "loading"
+  const internetRunning = searchIsRunning(shownInternetPhase)
 
   /**
    * Which screen, from the address alone: a moment it names that is on
@@ -951,7 +965,7 @@ export default function StartPage() {
               */}
               <InternetStage
                 query={internetSearch?.query ?? promptDraft}
-                phase={internetSearch?.searchId === address.ask ? internetSearch.phase : "loading"}
+                phase={shownInternetPhase}
                 moments={internetSearch?.searchId === address.ask ? internetSearch.moments : []}
                 outcome={internetSearch?.searchId === address.ask ? internetSearch.outcome : undefined}
                 failure={internetSearch?.searchId === address.ask ? internetSearch.failure : undefined}
@@ -963,13 +977,23 @@ export default function StartPage() {
                     value={promptDraft}
                     onChange={setPromptDraft}
                     onSubmit={(value) => {
-                      void startInternetSearch(value)
+                      // Cleared only once the new search exists, the same way
+                      // handleNext does it: clearing first would leave someone
+                      // whose connection dropped staring at an error and an
+                      // empty box with their question gone.
+                      void startInternetSearch(value).then((found) => {
+                        if (found) setPromptDraft("")
+                      })
                     }}
-                    placeholder="Search the internet…"
+                    placeholder={
+                      internetRunning
+                        ? "Searching… you can ask again when this finishes"
+                        : "Search the internet…"
+                    }
                     label="Search the internet"
                     sendLabel="Search"
-                    disabled={busy}
-                    canSend={!busy}
+                    disabled={busy || internetRunning}
+                    canSend={!busy && !internetRunning}
                   />
                 }
               />

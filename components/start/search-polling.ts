@@ -35,9 +35,29 @@ export const MAX_FAILURES = 5
  * there is nothing in one reply to tell them apart; what tells them apart is
  * that one of them recovers.
  */
+export type SearchPhase = "loading" | "searching" | "answered" | "failed"
+
+/**
+ * Is this search still working?
+ *
+ * One source of truth, because two places need the answer and they must not
+ * disagree: the page keeps polling while a search runs, and the composer
+ * refuses to start a second one while a search runs. If those two ever drift
+ * apart you get a screen that is still asking for updates while inviting you
+ * to throw the search away — or worse, the other way round.
+ *
+ * `busy` is not this. It covers the request that starts a search and is back
+ * to false within milliseconds, while the watching it began runs for minutes.
+ * The results panel's Send was guarded on `busy` and so was never really
+ * guarded at all.
+ */
+export function searchIsRunning(phase: SearchPhase | undefined): boolean {
+  return phase !== "answered" && phase !== "failed"
+}
+
 export function nextRead(outcome: {
   failed: boolean
-  phase?: "loading" | "searching" | "answered" | "failed"
+  phase?: SearchPhase
   /** Reads that have failed in a row, this one included. */
   consecutiveFailures?: number
 }): number | null {
@@ -46,6 +66,7 @@ export function nextRead(outcome: {
   }
   // Both ending states are endings. A search that gave up is not going to
   // start again, and asking it every two seconds until the tab closes helps
-  // nobody.
-  return outcome.phase === "answered" || outcome.phase === "failed" ? null : POLL_MS
+  // nobody. Asked through the shared judgement so this and the composer's
+  // guard cannot drift apart.
+  return searchIsRunning(outcome.phase) ? POLL_MS : null
 }
