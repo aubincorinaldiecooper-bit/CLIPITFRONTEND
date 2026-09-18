@@ -1,16 +1,14 @@
 "use client"
 
-import { useMemo, type ReactNode } from "react"
-import { Library, Plus, Search, Users } from "lucide-react"
-import { motion } from "motion/react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { ChevronLeft, ChevronRight, Library, Plus, Search, Users } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import { buttonVariants } from "@/components/space/button"
+import { Button, buttonVariants } from "@/components/space/button"
 import { Skeleton } from "@/components/space/skeleton"
-import { MatchBadge } from "@/components/moments/match-badge"
+import { VideoTile } from "@/components/moments/video-tile"
 import { SearchTrace } from "@/components/moments/search-trace"
 import { StreamedText } from "@/components/start/streamed-text"
 import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
-import { siteName } from "@/lib/video-embed"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/brand/logo"
 
@@ -151,148 +149,197 @@ export function InternetStage({
   const pendingCount = phase === "searching" ? Math.max(0, MAX_SLOTS - found.length) : 0
   const ended = phase === "answered" || phase === "failed"
   const line = words(phase, moments.length, found.length, outcome, failure, candidatesFound, candidatesWatched)
+  const slides = found.length + pendingCount
+
+  // Which one is on screen. Clamped rather than trusted: results arrive while
+  // the search runs, and a skeleton the person had paged to can be replaced by
+  // a real card or disappear entirely when the count settles.
+  const [at, setAt] = useState(0)
+  useEffect(() => {
+    setAt((n) => Math.min(Math.max(0, n), Math.max(0, slides - 1)))
+  }, [slides])
+
 
   return (
+    /* A canvas, with the three panels floating on it (the owner's reference,
+       2026-09-18). They used to be flush columns divided by hairlines, which
+       reads as a dashboard; separate surfaces on a ground read as a
+       workspace. The grid is exactly the viewport tall and every panel
+       scrolls inside itself, so none of them can push another off screen —
+       which is the bug that hid the chat panel entirely before this. */
     <div
-      className="grid min-h-dvh w-full bg-white text-[#17191d] lg:grid-cols-[270px_minmax(0,1fr)_390px]"
+      className="h-dvh w-full overflow-hidden bg-[#eceef0] p-3 text-[#17191d]"
       data-testid="internet-stage"
       data-phase={phase}
     >
-            {/* Both side columns stay put while the middle scrolls, which is what
-          "fixed rail" and "fixed chat panel" mean and what they were not.
-          Without this they are ordinary grid cells: they stretch to the
-          height of the results column, and because the chat centres itself
-          inside that column, five results put it about 1100px down the page.
-          The panel existed and nobody could see it. */}
-      <aside className="hidden border-r border-[#e5e7eb] bg-[#fbfbfb] lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
-        <div className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
-          <a href="/start" aria-label="Clipit home" className="inline-flex items-center">
-            <Logo size={18} />
-          </a>
-        </div>
-
-        <nav className="flex-1 px-4 py-5">
-          <a
-            href="/start"
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "default" }),
-              "w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#262b31] hover:bg-[#f0f1f2]",
-            )}
-          >
-            <Plus className="size-4" />
-            New search
-          </a>
-          <a
-            href="/clips"
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "default" }),
-              "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
-            )}
-          >
-            <Library className="size-4" />
-            Library
-          </a>
-          <a
-            href="/shared"
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "default" }),
-              "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
-            )}
-          >
-            <Users className="size-4" />
-            Shared
-          </a>
-        </nav>
-      </aside>
-
-      <section className="min-w-0 border-r border-[#e5e7eb]">
-        <header className="flex h-16 items-center justify-between border-b border-[#e5e7eb] px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <Search className="size-4 shrink-0 text-[#4b525b]" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[#1d2127]">Internet results</p>
-              <p className="truncate text-xs text-[#7a818b]" data-testid="internet-question">{query}</p>
-            </div>
+      <div className="grid h-full w-full gap-3 lg:grid-cols-[248px_minmax(0,1fr)_392px]">
+        <aside className="hidden min-h-0 flex-col overflow-hidden rounded-2xl bg-white lg:flex">
+          <div className="flex h-14 shrink-0 items-center px-4">
+            <a href="/start" aria-label="Clipit home" className="inline-flex items-center">
+              <Logo size={18} />
+            </a>
           </div>
-          <a
-            href="/start"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "sm" }),
-              "rounded-lg border-[#dfe2e6] bg-white font-medium text-[#262b31]",
-            )}
-          >
-            New search
-          </a>
-        </header>
 
-        <div className="space-y-4 px-5 py-5">
-          {found.map((moment) => {
-            const percent = matchPercent(moment)
-            return (
-              <motion.a
-                key={moment.id}
-                href={moment.pageUrl}
-                target="_blank"
-                rel="noreferrer"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="block overflow-hidden rounded-[18px] border border-[#e6e8eb] bg-[#f7f8f9] transition-colors hover:border-[#d4d7db]"
-                data-testid="moment-slot-filled"
-              >
-                <div className="relative aspect-[16/7] min-h-[170px] w-full overflow-hidden bg-[#f1f2f3]">
-                  {moment.still ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={moment.still} alt="" draggable={false} className="size-full object-cover" />
-                  ) : (
-                    <div className="flex size-full items-center justify-center px-8 text-center text-sm text-[#707780]">
-                      {titleOf(moment)}
-                    </div>
-                  )}
-                  {percent !== null && <MatchBadge value={percent} className="absolute top-3 left-3" />}
+          <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+            <a
+              href="/start"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "default" }),
+                "w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#262b31] hover:bg-[#f0f1f2]",
+              )}
+            >
+              <Plus className="size-4" />
+              New search
+            </a>
+            <a
+              href="/clips"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "default" }),
+                "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
+              )}
+            >
+              <Library className="size-4" />
+              Library
+            </a>
+            <a
+              href="/shared"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "default" }),
+                "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
+              )}
+            >
+              <Users className="size-4" />
+              Shared
+            </a>
+          </nav>
+        </aside>
+
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-white">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[#eef0f2] px-4">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <Search className="size-4 shrink-0 text-[#4b525b]" />
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-[#1d2127]">Internet results</p>
+                <p className="truncate text-[11.5px] text-[#7a818b]" data-testid="internet-question">
+                  {query}
+                </p>
+              </div>
+            </div>
+            <a
+              href="/start"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "shrink-0 rounded-lg border-[#dfe2e6] bg-white font-medium whitespace-nowrap text-[#262b31]",
+              )}
+            >
+              New search
+            </a>
+          </header>
+
+          {/* One result at a time (the owner's decision, 2026-09-18). Every
+              result stays in the page and the track slides, rather than the
+              others being torn out and rebuilt — so the count of what came
+              back is always really there, and moving between them costs
+              nothing. Reduced motion turns the slide off; the card still
+              changes. */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {slides === 0 ? (
+              <div className="flex min-h-0 flex-1 items-center justify-center px-6">
+                {/* Deliberately about this panel, not about the world. Why
+                    there is nothing is the chat panel's job to say, and it is
+                    the only place that knows whether anything was watched. */}
+                <p className="text-[13px] text-[#9aa1aa]">Nothing to show here.</p>
+              </div>
+            ) : (
+              <>
+                <div className="relative min-h-0 flex-1 overflow-hidden px-6 py-5">
+                  <div
+                    className="flex h-full transition-transform duration-[420ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
+                    style={{ transform: `translateX(-${at * 100}%)` }}
+                  >
+                    {found.map((moment, index) => (
+                      <div
+                        key={moment.id}
+                        className="flex h-full w-full shrink-0 justify-center"
+                        aria-hidden={index !== at}
+                      >
+                        <VideoTile moment={moment} />
+                      </div>
+                    ))}
+
+                    {Array.from({ length: pendingCount }, (_, index) => (
+                      <div
+                        key={`pending-${index}`}
+                        className="flex h-full w-full shrink-0 justify-center"
+                        aria-hidden
+                      >
+                        <Skeleton
+                          className="aspect-[9/16] min-h-0 w-auto flex-1 rounded-[18px] bg-[#f2f3f5]"
+                          data-testid="moment-slot-pending"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="px-4 py-3.5">
-                  <p className="line-clamp-2 text-sm font-medium text-[#20242a]">{titleOf(moment)}</p>
-                  <p className="mt-1 truncate text-xs text-[#7a818b]">
-                    {siteName(moment.pageUrl) ?? moment.source ?? ""}
+
+                <div className="flex shrink-0 items-center justify-center gap-3 border-t border-[#eef0f2] px-4 py-2.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Previous video"
+                    disabled={at === 0}
+                    onClick={() => setAt((n) => Math.max(0, n - 1))}
+                    className="size-8 rounded-lg text-[#4b525b] hover:bg-[#f0f1f2] disabled:opacity-30"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Button>
+
+                  <p
+                    className="min-w-[5.5rem] text-center text-[12px] tabular-nums whitespace-nowrap text-[#68707a]"
+                    aria-live="polite"
+                    data-testid="deck-position"
+                  >
+                    {at + 1} of {slides}
                   </p>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Next video"
+                    disabled={at >= slides - 1}
+                    onClick={() => setAt((n) => Math.min(slides - 1, n + 1))}
+                    className="size-8 rounded-lg text-[#4b525b] hover:bg-[#f0f1f2] disabled:opacity-30"
+                  >
+                    <ChevronRight className="size-4" />
+                  </Button>
                 </div>
-              </motion.a>
-            )
-          })}
+              </>
+            )}
+          </div>
 
-          {Array.from({ length: pendingCount }, (_, index) => (
-            <Skeleton
-              key={`pending-${index}`}
-              aria-hidden
-              className="h-[clamp(170px,22vh,230px)] w-full rounded-[18px] bg-[#f5f6f7]"
-              data-testid="moment-slot-pending"
-            />
-          ))}
-        </div>
-      </section>
+        </section>
 
-      <aside className="flex min-h-[540px] flex-col bg-white lg:sticky lg:top-0 lg:h-dvh">
-        <header className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
-          <p className="text-sm font-semibold text-[#1d2127]">Search chat</p>
-        </header>
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl bg-white">
+          <header className="flex h-14 shrink-0 items-center border-b border-[#eef0f2] px-4">
+            <p className="text-[13px] font-semibold text-[#1d2127]">Search chat</p>
+          </header>
 
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-7 py-8 text-center">
-            <div className="flex size-11 items-center justify-center rounded-full border border-[#e0e3e7] bg-[#f7f8f9]">
-              <Search className="size-4 text-[#343a42]" />
-            </div>
-            <p className="mt-5 max-w-[28ch] text-[17px] font-semibold leading-snug text-[#1d2127]">
-              {query}
-            </p>
-            {/* While it is running the line is a status that keeps changing,
-                so it shimmers in place. Once it settles it is the answer, and
-                an answer arrives the way someone tells you one. */}
-            <div className="mt-3 max-w-[32ch] text-sm leading-relaxed text-[#68707a]" aria-live="polite" data-testid="internet-words">
-              {ended ? <p><StreamedText text={line} /></p> : <TextShimmer as="p">{line}</TextShimmer>}
+          {/* The conversation starts at the top and grows downward, like any
+              chat. It used to centre itself, which is why a single question
+              and answer sat marooned in the middle of an empty column. */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div className="flex justify-end">
+              <p className="max-w-[86%] rounded-[16px] bg-[#f1f2f4] px-3.5 py-2.5 text-[13.5px] leading-relaxed text-[#1d2127]">
+                {query}
+              </p>
             </div>
 
+            {/* The work, then what it concluded — the order the owner's
+                reference puts them in, and the order they happened in. */}
             {(phase === "searching" || ended) && (
-              <div className="mt-5 w-full max-w-[32ch] text-left">
+              <div className="mt-4">
                 <SearchTrace
                   query={query}
                   moments={moments}
@@ -302,11 +349,19 @@ export function InternetStage({
                 />
               </div>
             )}
+
+            <div
+              className="mt-3.5 text-[13.5px] leading-relaxed text-[#3d444c]"
+              aria-live="polite"
+              data-testid="internet-words"
+            >
+              {ended ? <p><StreamedText text={line} /></p> : <TextShimmer as="p">{line}</TextShimmer>}
+            </div>
           </div>
 
-          {composer && <div className="border-t border-[#e5e7eb] p-3">{composer}</div>}
-        </div>
-      </aside>
+          {composer && <div className="shrink-0 border-t border-[#eef0f2] p-3">{composer}</div>}
+        </aside>
+      </div>
     </div>
   )
 }
