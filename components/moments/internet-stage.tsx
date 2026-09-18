@@ -214,8 +214,13 @@ export function InternetStage({
           </nav>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-white">
-          <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[#eef0f2] px-4">
+        {/* No surface behind the media (the owner, 2026-09-18). The reference
+            has two things on the canvas — the media and the chat — not three
+            panels. A white card behind a card is a frame around a frame, and
+            it is what made the result look small and marooned. The header and
+            the pager sit directly on the ground with it. */}
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-3 px-1">
             <div className="flex min-w-0 items-center gap-2.5">
               <Search className="size-4 shrink-0 text-[#4b525b]" />
               <div className="min-w-0">
@@ -252,7 +257,7 @@ export function InternetStage({
               </div>
             ) : (
               <>
-                <div className="relative min-h-0 flex-1 overflow-hidden px-6 py-5">
+                <div className="relative min-h-0 flex-1 overflow-hidden py-1">
                   <div
                     className="flex h-full transition-transform duration-[420ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
                     style={{ transform: `translateX(-${at * 100}%)` }}
@@ -274,7 +279,7 @@ export function InternetStage({
                         aria-hidden
                       >
                         <Skeleton
-                          className="aspect-[9/16] min-h-0 w-auto flex-1 rounded-[18px] bg-[#f2f3f5]"
+                          className="aspect-[9/16] min-h-0 w-auto flex-1 rounded-[18px] bg-[#e3e6e9]"
                           data-testid="moment-slot-pending"
                         />
                       </div>
@@ -282,7 +287,7 @@ export function InternetStage({
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center justify-center gap-3 border-t border-[#eef0f2] px-4 py-2.5">
+                <div className="flex shrink-0 items-center justify-center gap-3 px-4 pt-1 pb-2">
                   <Button
                     type="button"
                     variant="ghost"
@@ -290,7 +295,7 @@ export function InternetStage({
                     aria-label="Previous video"
                     disabled={at === 0}
                     onClick={() => setAt((n) => Math.max(0, n - 1))}
-                    className="size-8 rounded-lg text-[#4b525b] hover:bg-[#f0f1f2] disabled:opacity-30"
+                    className="size-8 rounded-lg text-[#4b525b] hover:bg-white/70 disabled:opacity-30"
                   >
                     <ChevronLeft className="size-4" />
                   </Button>
@@ -310,7 +315,7 @@ export function InternetStage({
                     aria-label="Next video"
                     disabled={at >= slides - 1}
                     onClick={() => setAt((n) => Math.min(slides - 1, n + 1))}
-                    className="size-8 rounded-lg text-[#4b525b] hover:bg-[#f0f1f2] disabled:opacity-30"
+                    className="size-8 rounded-lg text-[#4b525b] hover:bg-white/70 disabled:opacity-30"
                   >
                     <ChevronRight className="size-4" />
                   </Button>
