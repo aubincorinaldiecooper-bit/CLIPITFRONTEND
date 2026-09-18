@@ -1,4 +1,9 @@
-import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
+import type {
+  InternetMoment,
+  InternetSearchCandidate,
+  InternetSearchFailureKind,
+  InternetSearchOutcome,
+} from "@/lib/types"
 
 /**
  * What the search did, as rows.
@@ -59,6 +64,8 @@ export interface SearchStepsInput {
   candidatesWatched?: number
   outcome?: InternetSearchOutcome
   failure?: { kind: InternetSearchFailureKind; count: number }
+  /** The pages themselves. Absent on an older reply, or before scouts are sent. */
+  candidates?: InternetSearchCandidate[]
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -114,13 +121,49 @@ export function searchSteps(input: SearchStepsInput): SearchStep[] {
   const unwatched = Math.max(0, found - watched)
   const quiet = Math.max(0, watched - moments.length)
 
+  // What discovery turned up. Display text, never links — some of these are
+  // pages nobody opened, and the server redacts them for that reason.
+  const roll = input.candidates ?? []
+  const foundDetails: StepDetail[] = roll.map((candidate) => ({
+    label: candidate.page ?? candidate.source ?? "A page we could not read the address of",
+    meta: "",
+  }))
+
   const watchedDetails: StepDetail[] = []
   if (watchedState !== "pending" && found > 0) {
     watchedDetails.push({ label: "Opened and watched", meta: String(watched) })
-    if (unwatched > 0) {
+
+    if (roll.length > 0) {
+      // Split, because `found - watched` lumps together two different facts.
+      // A run with one watched, two broken and one never handed out would
+      // otherwise read "Would not open: 3" over a list showing two that broke
+      // and one nobody touched — the summary claiming a failure for a page
+      // that was never opened, directly above the lines that say otherwise.
+      const tried = roll.filter((candidate) => candidate.state === "unwatched").length
+      const never = roll.filter((candidate) => candidate.state === "not_reached").length
+      if (tried > 0) {
+        watchedDetails.push({
+          label: failure ? becauseOf(failure.kind) : "Opened, no watch came back",
+          meta: String(tried),
+        })
+      }
+      if (never > 0) watchedDetails.push({ label: "Never reached", meta: String(never) })
+    } else if (unwatched > 0) {
+      // No pages in the reply, so we cannot tell "tried and broke" from "never
+      // got to it". Saying neither is the only honest line available.
+      watchedDetails.push({ label: "Not watched", meta: String(unwatched) })
+    }
+    // And which ones. This is the question people actually have when a search
+    // comes back thin, and until the pages were sent it could only be answered
+    // by reading the worker's logs.
+    for (const candidate of roll) {
+      if (candidate.state === "watched" || candidate.state === "watching") continue
       watchedDetails.push({
-        label: failure ? becauseOf(failure.kind) : "Could not be opened",
-        meta: String(unwatched),
+        label: candidate.page ?? candidate.source ?? "A page we could not read the address of",
+        // Two different facts, kept apart on purpose: one was opened and gave
+        // nothing back, the other was never opened at all.
+        meta: candidate.state === "unwatched" ? "no watch" : "not reached",
+        aside: true,
       })
     }
   }
@@ -145,7 +188,7 @@ export function searchSteps(input: SearchStepsInput): SearchStep[] {
       label: "Searched the internet",
       amount: found > 0 ? `${found} ${plural(found, "video", "videos")}` : ended ? "none" : "",
       state: foundState,
-      details: [],
+      details: foundDetails,
     },
     {
       key: "watched",

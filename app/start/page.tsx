@@ -971,6 +971,15 @@ export default function StartPage() {
                 failure={internetSearch?.searchId === address.ask ? internetSearch.failure : undefined}
                 candidatesFound={internetSearch?.searchId === address.ask ? internetSearch.candidatesFound : 0}
                 candidatesWatched={internetSearch?.searchId === address.ask ? internetSearch.candidatesWatched : undefined}
+                candidates={internetSearch?.searchId === address.ask ? internetSearch.candidates : undefined}
+                onSearchAgain={() => {
+                  // The same words, run fresh. Not a resume — there is nothing
+                  // on the server to resume — so this pays for a whole new
+                  // search, which is why it is a button someone chooses to
+                  // press rather than anything automatic.
+                  const again = internetSearch?.query ?? promptDraft
+                  if (again.trim()) void startInternetSearch(again)
+                }}
                 composer={
                   <AskComposer
                     size="thread"

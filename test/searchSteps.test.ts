@@ -150,4 +150,103 @@ describe("what the step rows claim", () => {
     const steps = run({ phase: "loading" })
     expect(steps.map((s) => s.amount)).toEqual(["", "", ""])
   })
+
+  describe("once the pages themselves are sent", () => {
+    const roll = [
+      { id: "c1", page: "https://www.youtube.com/watch?v=a", source: "youtube.com", state: "watched" as const },
+      { id: "c2", page: "https://vimeo.com/123", source: "vimeo.com", state: "unwatched" as const },
+      { id: "c3", page: "https://www.dailymotion.com/video/x9", source: "dailymotion.com", state: "not_reached" as const },
+    ]
+
+    it("opens the first row onto what the search turned up", () => {
+      const steps = run({ phase: "answered", outcome: "partly_watched", candidatesFound: 3, candidatesWatched: 1, candidates: roll })
+      const first = steps.find((s) => s.key === "found")!
+      expect(first.details.map((d) => d.label)).toEqual([
+        "https://www.youtube.com/watch?v=a",
+        "https://vimeo.com/123",
+        "https://www.dailymotion.com/video/x9",
+      ])
+      // Display text. Some of these are pages nobody opened.
+      expect(first.details.every((d) => d.href === undefined)).toBe(true)
+    })
+
+    /*
+     * The distinction the whole payload change was made for.
+     *
+     * "We opened it and got nothing back" and "we never opened it" are
+     * different facts, and collapsing them is how a search invents a failure
+     * for a page nobody touched.
+     */
+    it("keeps a page that was tried apart from one that was never reached", () => {
+      const steps = run({ phase: "answered", outcome: "partly_watched", candidatesFound: 3, candidatesWatched: 1, candidates: roll })
+      const watched = steps.find((s) => s.key === "watched")!
+      const named = watched.details.filter((d) => d.aside)
+      expect(named.map((d) => [d.label, d.meta])).toEqual([
+        ["https://vimeo.com/123", "no watch"],
+        ["https://www.dailymotion.com/video/x9", "not reached"],
+      ])
+    })
+
+    it("does not list the ones that were watched — the counts already say those", () => {
+      const steps = run({ phase: "answered", outcome: "partly_watched", candidatesFound: 3, candidatesWatched: 1, candidates: roll })
+      const watched = steps.find((s) => s.key === "watched")!
+      expect(watched.details.some((d) => d.label.includes("youtube.com/watch?v=a"))).toBe(false)
+      // The counts still lead.
+      expect(watched.details.slice(0, 2).map((d) => d.meta)).toEqual(["1", "1"])
+    })
+
+    it("says nothing about pages when the reply does not carry them", () => {
+      const steps = run({ phase: "answered", outcome: "partly_watched", candidatesFound: 3, candidatesWatched: 1 })
+      expect(steps.find((s) => s.key === "found")!.details).toEqual([])
+      // The counts survive on their own, so an older reply still reads right.
+      expect(steps.find((s) => s.key === "watched")!.details.map((d) => [d.label, d.meta])).toEqual([
+        ["Opened and watched", "1"],
+        ["Not watched", "2"],
+      ])
+    })
+
+    it("falls back to the site when an address could not be read", () => {
+      const steps = run({
+        phase: "answered",
+        outcome: "matched",
+        candidatesFound: 1,
+        candidatesWatched: 1,
+        candidates: [{ id: "c9", page: null, source: "example.com", state: "watched" as const }],
+      })
+      expect(steps.find((s) => s.key === "found")!.details[0].label).toBe("example.com")
+    })
+
+    /*
+     * The summary line and the list under it must not contradict each other.
+     *
+     * `found - watched` lumps "we opened it and got nothing back" together
+     * with "we never opened it at all". Caught by driving this in a browser:
+     * the row read "Would not open: 3" directly above two pages marked no
+     * watch and one marked not reached.
+     */
+    it("never counts a page nobody opened among the ones that would not open", () => {
+      const steps = run({
+        phase: "failed",
+        outcome: "search_failed",
+        candidatesFound: 4,
+        candidatesWatched: 1,
+        failure: { kind: "browser_unavailable", count: 2 },
+        candidates: [
+          { id: "c1", page: "https://a.example/1", source: "a.example", state: "watched" as const },
+          { id: "c2", page: "https://b.example/2", source: "b.example", state: "unwatched" as const },
+          { id: "c3", page: "https://c.example/3", source: "c.example", state: "unwatched" as const },
+          { id: "c4", page: "https://d.example/4", source: "d.example", state: "not_reached" as const },
+        ],
+      })
+      const watched = steps.find((s) => s.key === "watched")!
+      const counts = watched.details.filter((d) => !d.aside)
+      expect(counts.map((d) => [d.label, d.meta])).toEqual([
+        ["Opened and watched", "1"],
+        ["Would not open", "2"],
+        ["Never reached", "1"],
+      ])
+      // And the three numbers account for every page, exactly once.
+      expect(counts.reduce((total, d) => total + Number(d.meta), 0)).toBe(4)
+    })
+  })
 })

@@ -639,11 +639,40 @@ export type InternetSearchFailureKind =
   | "timed_out"
   | "unknown"
 
+/**
+ * One page the search was given, and how far it got with it.
+ *
+ * `page` is redacted on the server and is display text, never a link. The
+ * search engine hands back whatever it indexed, so an address can carry a
+ * token; the server keeps the origin, the path, and an allowlist of
+ * parameters that name a video rather than unlock one. The matched moments
+ * carry real links — those are videos that were verified. These include
+ * pages nobody watched.
+ *
+ * The four states are four different claims:
+ *
+ *   watching     a scout is on it now
+ *   watched      a scout got a watch out of it
+ *   unwatched    a scout was sent and no watch ever came back
+ *   not_reached  nobody was ever sent — no claim about the page at all
+ *
+ * `not_reached` is why this is not a boolean. A page nobody opened must never
+ * be drawn as one that would not open.
+ */
+export interface InternetSearchCandidate {
+  id: string
+  page: string | null
+  source: string | null
+  state: "watching" | "watched" | "unwatched" | "not_reached"
+}
+
 export interface InternetSearchState {
   searchId: string
   query: string
   phase: "loading" | "searching" | "answered" | "failed"
   moments: InternetMoment[]
+  /** The pages themselves. Absent until the scouts are given something. */
+  candidates?: InternetSearchCandidate[]
   candidatesFound: number
   /** Pages the search could not watch. Not the same as finding nothing. */
   unexamined?: number

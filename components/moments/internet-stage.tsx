@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { ChevronLeft, ChevronRight, Library, Plus, Search, Users } from "lucide-react"
+import { ChevronLeft, ChevronRight, Library, Plus, RotateCw, Search, Users } from "lucide-react"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import { buttonVariants } from "@/components/space/button"
+import { Button, buttonVariants } from "@/components/space/button"
 import { Skeleton } from "@/components/space/skeleton"
 import { VideoCaption, VideoTile } from "@/components/moments/video-tile"
 import {
@@ -16,7 +16,12 @@ import {
 } from "@/components/space/carousel"
 import { StepRows } from "@/components/moments/step-rows"
 import { StreamedText } from "@/components/start/streamed-text"
-import type { InternetMoment, InternetSearchFailureKind, InternetSearchOutcome } from "@/lib/types"
+import type {
+  InternetMoment,
+  InternetSearchCandidate,
+  InternetSearchFailureKind,
+  InternetSearchOutcome,
+} from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/brand/logo"
 
@@ -35,6 +40,18 @@ export interface InternetStageProps {
   candidatesFound?: number
   /** How many of those it managed to watch. */
   candidatesWatched?: number
+  /** The pages themselves, as far as the search got with each. */
+  candidates?: InternetSearchCandidate[]
+  /**
+   * Run the same words again. Absent when there is nothing to offer.
+   *
+   * Deliberately a labelled button and not the retry glyph the reference
+   * tucks inside the Failed pill. It does not resume anything — there is no
+   * way to resume a Clipit search — it pays for a whole new one, watchers and
+   * all. A twelve-pixel icon you can catch with a thumb is the wrong control
+   * for something that costs money every time it is pressed.
+   */
+  onSearchAgain?: () => void
 }
 
 function matchPercent(moment: InternetMoment): number | null {
@@ -151,6 +168,8 @@ export function InternetStage({
   failure,
   candidatesFound = 0,
   candidatesWatched,
+  candidates,
+  onSearchAgain,
   composer,
 }: InternetStageProps & { composer?: ReactNode }) {
   const found = useMemo(() => moments.slice(0, MAX_SLOTS), [moments])
@@ -368,6 +387,7 @@ export function InternetStage({
                 moments={moments}
                 candidatesFound={candidatesFound}
                 candidatesWatched={candidatesWatched}
+                candidates={candidates}
                 outcome={outcome}
                 failure={failure}
               />
@@ -380,6 +400,27 @@ export function InternetStage({
             >
               {ended ? <p><StreamedText text={line} /></p> : <TextShimmer as="p">{line}</TextShimmer>}
             </div>
+
+            {/* Beside the sentence that says what went wrong, which is where
+                someone reads "this did not work" and wants to do something
+                about it. Only on a search that failed: offering it after a
+                search that finished and found nothing would be inviting
+                someone to pay again for the same answer. */}
+            {phase === "failed" && onSearchAgain && (
+              <div className="mt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onSearchAgain}
+                  className="h-8 rounded-lg border-[#dfe2e6] bg-white px-3 text-[12.5px] font-medium whitespace-nowrap text-[#262b31]"
+                  data-testid="search-again"
+                >
+                  <RotateCw className="mr-1.5 size-3.5" />
+                  Search again
+                </Button>
+              </div>
+            )}
           </div>
 
           {composer && <div className="shrink-0 border-t border-[#eef0f2] p-3">{composer}</div>}
