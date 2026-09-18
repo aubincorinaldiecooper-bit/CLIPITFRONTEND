@@ -127,3 +127,33 @@ describe("ResultsStage — AI Chat 04 reference shell", () => {
     expect(onPickOther).toHaveBeenCalledWith("req-2")
   })
 })
+
+/*
+ * A card used to be a button with the whole media area inside it — including
+ * the player once the card was selected, and the player carries its own Play
+ * and Mute buttons. Nesting a control inside a control is invalid markup:
+ * React can fail hydration on it, and neither a keyboard nor a screen reader
+ * can reliably reach the inner controls. Caught by Codex on #113.
+ *
+ * Asserted structurally rather than by naming the two components, so it also
+ * catches the next thing someone drops inside a clickable card.
+ */
+describe("no control is nested inside another control", () => {
+  const nested = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll("button, a[href]")).filter((outer) =>
+      outer.querySelector("button, a[href]"),
+    )
+
+  it("keeps the card free of nested controls before anything is selected", () => {
+    const one = exchange([match({ id: "m1" }), match({ id: "m2" })])
+    const { container } = renderStage(one)
+    expect(nested(container)).toHaveLength(0)
+  })
+
+  it("keeps the card free of nested controls once a moment is selected and the player appears", async () => {
+    const one = exchange([match({ id: "m1" }), match({ id: "m2" })])
+    const { container } = renderStage(one, { initialMomentId: "m1" })
+    await waitFor(() => expect(container.querySelector("video, [data-testid='moment-player']")).toBeTruthy())
+    expect(nested(container)).toHaveLength(0)
+  })
+})

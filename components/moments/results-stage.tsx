@@ -191,32 +191,45 @@ export function ResultsStage({
                     selected ? "border-[#cfd3d8]" : "border-[#e6e8eb] hover:border-[#d7dade]",
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setActiveId(entry.match.id)}
-                    className="block w-full text-left"
-                    aria-label={`Select ${momentTitle(entry.match)}`}
-                  >
-                    <div className="relative aspect-[16/7] min-h-[170px] w-full overflow-hidden bg-[#f1f2f3]">
-                      {selected ? (
-                        <MomentPlayer
-                          compact
-                          moment={entry}
-                          video={video}
-                          muted={muted}
-                          onMutedChange={onMutedChange}
-                        />
-                      ) : entry.still ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={entry.still} alt="" draggable={false} className="size-full object-cover" />
-                      ) : (
-                        <div className="flex size-full items-center justify-center px-8 text-center text-sm text-[#707780]">
-                          {momentTitle(entry.match)}
-                        </div>
-                      )}
-                      <MatchBadge value={match} className="absolute top-3 left-3" />
-                    </div>
-                  </button>
+                  {/* The card used to be a button with the whole media area
+                      inside it, including the player once selected — and the
+                      player has its own Play and Mute buttons. Buttons inside
+                      a button is invalid markup: React can fail hydration on
+                      it, and a keyboard or screen reader cannot reliably
+                      reach the inner controls.
+
+                      So the button only exists while there is something to
+                      select. A selected card is already selected and holds
+                      the player, so it is a plain region. Caught by Codex on
+                      #113. */}
+                  <div className="relative aspect-[16/7] min-h-[170px] w-full overflow-hidden bg-[#f1f2f3]">
+                    {selected ? (
+                      <MomentPlayer
+                        compact
+                        moment={entry}
+                        video={video}
+                        muted={muted}
+                        onMutedChange={onMutedChange}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setActiveId(entry.match.id)}
+                        className="absolute inset-0 block size-full text-left"
+                        aria-label={`Select ${momentTitle(entry.match)}`}
+                      >
+                        {entry.still ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={entry.still} alt="" draggable={false} className="size-full object-cover" />
+                        ) : (
+                          <span className="flex size-full items-center justify-center px-8 text-center text-sm text-[#707780]">
+                            {momentTitle(entry.match)}
+                          </span>
+                        )}
+                      </button>
+                    )}
+                    <MatchBadge value={match} className="absolute top-3 left-3" />
+                  </div>
 
                   <div className="flex items-center justify-between gap-4 px-4 py-3.5">
                     <div className="min-w-0">
