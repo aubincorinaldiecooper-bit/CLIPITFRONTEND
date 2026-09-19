@@ -11,6 +11,7 @@ import { useVideoUploads } from "@/components/flow/use-video-uploads"
 import { UpgradeDialog } from "@/components/flow/upgrade-dialog"
 import { SearchShell } from "@/components/moments/search-shell"
 import { FollowUpComposer, SearchHome } from "@/components/moments/search-home"
+import { AskComposer } from "@/components/moments/ask-composer"
 import { InternetStage } from "@/components/moments/internet-stage"
 import { ResultsStage } from "@/components/moments/results-stage"
 import { MomentConversation } from "@/components/moments/moment-conversation"
@@ -19,7 +20,7 @@ import { clipRowFor, needsKeep, publishableFor } from "@/components/start/produc
 import { oneAtATime, runKeep } from "@/components/start/keep-flow"
 import { feedMoments, type FeedMoment } from "@/components/start/moments"
 import { askGate, askTarget } from "@/components/start/ask-gate"
-import { nextRead } from "@/components/start/search-polling"
+import { nextRead, searchIsRunning } from "@/components/start/search-polling"
 import type { Exchange } from "@/components/start/types"
 import { consumeSearchParams, matchForClip, restoreConversation } from "@/components/start/restore"
 import { writeSearchParams } from "@/lib/search-params"
@@ -334,6 +335,20 @@ export default function StartPage() {
    * routed back to the search in flight instead of starting a second one.
    */
   const searchRunning = currentRequest?.status === "pending" || currentRequest?.status === "searching"
+
+  /**
+   * Whether the internet search on screen is still working.
+   *
+   * `busy` cannot answer this. It covers the request that *starts* a search
+   * and is back to false within milliseconds, while the watching it kicked
+   * off runs for minutes. So the results panel's Send was effectively never
+   * disabled: pressing it mid-search started a second search, navigated to
+   * it, and left the first one opening videos on a GPU that nobody was
+   * watching and nobody would ever see the results of.
+   */
+  const shownInternetPhase =
+    internetSearch?.searchId === address.ask ? internetSearch.phase : "loading"
+  const internetRunning = searchIsRunning(shownInternetPhase)
 
   /**
    * Which screen, from the address alone: a moment it names that is on
@@ -886,7 +901,7 @@ export default function StartPage() {
   const resultsHref = addressOf({ video: video?.id ?? null, search: stagedExchange?.request.id ?? null, moment: null })
 
   return (
-    <SearchShell variant={screen === "home" ? "home" : "app"}>
+    <SearchShell variant={screen === "home" ? "home" : screen === "results" || screen === "internet" ? "canvas" : "app"}>
       <div ref={screenRoot} className="flex w-full flex-1 flex-col">
         <AnimatePresence mode="wait" initial={false}>
           {screen === "home" && (
@@ -899,12 +914,22 @@ export default function StartPage() {
               className="flex w-full flex-1 flex-col px-4 py-10 sm:px-6"
             >
               {/*
-                The composer keeps this whole region to itself — basis-full and
-                no shrinking — so results arriving underneath cannot move it.
+                The composer keeps this whole region to itself, and never
+                shrinks, so results arriving underneath cannot move it.
                 Centring the two together would slide the box upward by half
                 the height of whatever came back, the moment Search was used.
+
+                `grow basis-0` and not `basis-full`: a percentage flex-basis
+                needs a definite main size on the container to resolve
+                against, and does not get one here — the parent is itself a
+                `flex-1` child — so it silently fell back to the content's own
+                height. 426px of composer in an 820px region, the region never
+                kept, and the box sitting at the top with half the screen
+                empty under it. Growing from zero needs no percentage to
+                resolve, so it actually fills. `shrink-0` still holds the
+                floor the comment above is about.
               */}
-              <div className="flex w-full shrink-0 basis-full flex-col items-center justify-center">
+              <div className="flex w-full grow basis-0 shrink-0 flex-col items-center justify-center">
                 <SearchHome
                   entries={uploads}
                   video={video}
@@ -940,12 +965,46 @@ export default function StartPage() {
               */}
               <InternetStage
                 query={internetSearch?.query ?? promptDraft}
-                phase={internetSearch?.searchId === address.ask ? internetSearch.phase : "loading"}
+                phase={shownInternetPhase}
                 moments={internetSearch?.searchId === address.ask ? internetSearch.moments : []}
                 outcome={internetSearch?.searchId === address.ask ? internetSearch.outcome : undefined}
                 failure={internetSearch?.searchId === address.ask ? internetSearch.failure : undefined}
                 candidatesFound={internetSearch?.searchId === address.ask ? internetSearch.candidatesFound : 0}
                 candidatesWatched={internetSearch?.searchId === address.ask ? internetSearch.candidatesWatched : undefined}
+                candidates={internetSearch?.searchId === address.ask ? internetSearch.candidates : undefined}
+                onSearchAgain={() => {
+                  // The same words, run fresh. Not a resume — there is nothing
+                  // on the server to resume — so this pays for a whole new
+                  // search, which is why it is a button someone chooses to
+                  // press rather than anything automatic.
+                  const again = internetSearch?.query ?? promptDraft
+                  if (again.trim()) void startInternetSearch(again)
+                }}
+                composer={
+                  <AskComposer
+                    size="thread"
+                    value={promptDraft}
+                    onChange={setPromptDraft}
+                    onSubmit={(value) => {
+                      // Cleared only once the new search exists, the same way
+                      // handleNext does it: clearing first would leave someone
+                      // whose connection dropped staring at an error and an
+                      // empty box with their question gone.
+                      void startInternetSearch(value).then((found) => {
+                        if (found) setPromptDraft("")
+                      })
+                    }}
+                    placeholder={
+                      internetRunning
+                        ? "Searching… you can ask again when this finishes"
+                        : "Search the internet…"
+                    }
+                    label="Search the internet"
+                    sendLabel="Search"
+                    disabled={busy || internetRunning}
+                    canSend={!busy && !internetRunning}
+                  />
+                }
               />
             </motion.div>
           )}
@@ -957,7 +1016,7 @@ export default function StartPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22, ease: EASE }}
-              className="flex w-full flex-1 flex-col pb-16"
+              className="flex w-full flex-1 flex-col"
             >
               <ResultsStage
                 exchange={stagedExchange}
@@ -974,17 +1033,17 @@ export default function StartPage() {
                 onPickOther={(requestId) => go({ search: requestId, moment: null })}
                 muted={muted}
                 onMutedChange={setMuted}
+                composer={
+                  <FollowUpComposer
+                    video={video}
+                    promptValue={promptDraft}
+                    onPromptChange={setPromptDraft}
+                    onSubmit={handleNext}
+                    disabled={busy}
+                    searching={searchRunning}
+                  />
+                }
               />
-              <div className="mx-auto mt-10 w-full max-w-[640px] px-4">
-                <FollowUpComposer
-                  video={video}
-                  promptValue={promptDraft}
-                  onPromptChange={setPromptDraft}
-                  onSubmit={handleNext}
-                  disabled={busy}
-                  searching={searchRunning}
-                />
-              </div>
             </motion.div>
           )}
 

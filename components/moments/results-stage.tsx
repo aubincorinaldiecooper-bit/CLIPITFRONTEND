@@ -1,17 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, Play } from "lucide-react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { Clock3, Library, Plus, Search, Users } from "lucide-react"
 import { motion } from "motion/react"
+import { Logo } from "@/components/brand/logo"
 import { TextShimmer } from "@/components/loading-ui/text-shimmer"
-import { Badge } from "@/components/space/badge"
 import { Button, buttonVariants } from "@/components/space/button"
-import { CoverflowCarousel, type CoverflowApi } from "@/components/space/coverflow-carousel"
+import { Skeleton } from "@/components/space/skeleton"
 import { candidatesLine, progressLine } from "@/components/start/answer-words"
 import { exchangeLines, isSearching } from "@/components/start/conversation"
 import { evidenceWords, formatRange, momentTitle, type FeedMoment } from "@/components/start/moments"
 import type { Exchange } from "@/components/start/types"
-import { PHONE, useMediaQuery } from "@/hooks/use-media-query"
 import type { Video } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { MatchBadge } from "./match-badge"
@@ -30,13 +29,18 @@ export interface ResultsStageProps {
   onPickOther?: (requestId: string) => void
   muted: boolean
   onMutedChange: (muted: boolean) => void
+  composer?: ReactNode
 }
 
-function SearchingCard() {
+function SearchingStack() {
   return (
-    <div className="mx-auto flex aspect-[4/3] w-[clamp(260px,42vw,520px)] flex-col items-center justify-center gap-3 rounded-[24px] border border-[#dfe9f3] bg-white p-6 text-center shadow-[0_18px_50px_rgba(71,111,153,0.09)]">
-      <span aria-hidden className="size-2.5 animate-pulse rounded-full bg-[#91d7ff]" />
-      <p className="text-sm text-[#7b8da0]">Moments land here once they&apos;re found.</p>
+    <div className="space-y-4 px-5 py-5" data-testid="stage-searching">
+      {[0, 1, 2].map((index) => (
+        <Skeleton
+          key={index}
+          className="h-[clamp(170px,22vh,230px)] w-full rounded-[18px] bg-[#f5f6f7]"
+        />
+      ))}
     </div>
   )
 }
@@ -50,143 +54,291 @@ export function ResultsStage({
   onActiveChange,
   momentHref,
   onOpen,
+  others = [],
+  onPickOther,
   muted,
   onMutedChange,
+  composer,
 }: ResultsStageProps) {
   const { request } = exchange
   const searching = isSearching(exchange)
-  const compact = useMediaQuery(PHONE)
-  const apiRef = useRef<CoverflowApi | null>(null)
-  const initialIndex = Math.max(0, initialMomentId ? moments.findIndex((moment) => moment.match.id === initialMomentId) : 0)
+  const initialIndex = Math.max(
+    0,
+    initialMomentId ? moments.findIndex((moment) => moment.match.id === initialMomentId) : 0,
+  )
   const [activeId, setActiveId] = useState<string | null>(moments[initialIndex]?.match.id ?? null)
   const activeIndex = activeId ? moments.findIndex((moment) => moment.match.id === activeId) : -1
   const active = activeIndex >= 0 ? moments[activeIndex] : moments[0]
-  const momentsRef = useRef(moments)
-  momentsRef.current = moments
 
-  const onSelect = useCallback((index: number) => {
-    const moment = momentsRef.current[index]
-    if (moment) setActiveId(moment.match.id)
-  }, [])
-  const onApi = useCallback((api: CoverflowApi) => {
-    apiRef.current = api
-  }, [])
-
-  const lastIndex = useRef(activeIndex)
-  useEffect(() => {
-    if (activeIndex >= 0 && activeIndex !== lastIndex.current) apiRef.current?.goTo(activeIndex)
-    lastIndex.current = activeIndex
-  }, [activeIndex])
   useEffect(() => {
     if (activeIndex < 0 && moments.length > 0) setActiveId(moments[0]!.match.id)
   }, [activeIndex, moments])
+
   useEffect(() => {
     onActiveChange?.(active)
     return () => onActiveChange?.(undefined)
   }, [active, onActiveChange])
 
-  const lines = useMemo(() => exchangeLines(exchange, video?.index?.readThroughSeconds, followUp), [exchange, video, followUp])
+  const lines = useMemo(
+    () => exchangeLines(exchange, video?.index?.readThroughSeconds, followUp),
+    [exchange, video, followUp],
+  )
   const candidates = searching ? candidatesLine(request) : null
-  const count = moments.length
-  const slides = useMemo(() => moments.map((moment) => ({ alt: momentTitle(moment.match) })), [moments])
 
   return (
-    <div className="w-full py-6" data-testid="results-stage">
-      <div className="mx-auto w-full max-w-[900px] px-5 text-center sm:px-8">
-        <p className="text-[11px] font-medium tracking-[0.14em] text-[#8b9bad] uppercase">{searching ? "Looking for" : "Found for"}</p>
-        <h2 className="mx-auto mt-2 max-w-[720px] text-[clamp(22px,3vw,32px)] leading-tight font-medium tracking-[-0.025em] text-[#152337]" data-testid="stage-question">
-          {request.instruction}
-        </h2>
-        <div className="mx-auto mt-3 max-w-[640px] text-sm leading-relaxed text-[#76889b]" data-testid="stage-words">
-          {searching ? (
-            <>
-              <TextShimmer as="p">{progressLine(request, video)}</TextShimmer>
-              {candidates && <p className="mt-1">{candidates}</p>}
-            </>
-          ) : (
-            lines.map((line, index) => <p key={`${request.id}-${index}`} className={index > 0 ? "mt-1" : undefined}>{line}</p>)
-          )}
+    <div
+      className="grid min-h-dvh w-full bg-white text-[#17191d] lg:grid-cols-[270px_minmax(0,1fr)_390px]"
+      data-testid="results-stage"
+    >
+            {/* Both side columns stay put while the middle scrolls, which is what
+          "fixed rail" and "fixed chat panel" mean and what they were not.
+          Without this they are ordinary grid cells: they stretch to the
+          height of the results column, and because the chat centres itself
+          inside that column, five results put it about 1100px down the page.
+          The panel existed and nobody could see it. */}
+      <aside className="hidden border-r border-[#e5e7eb] bg-[#fbfbfb] lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
+        <div className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
+          <a href="/start" aria-label="Clipit home" className="inline-flex items-center">
+            <Logo size={18} />
+          </a>
         </div>
-      </div>
 
-      {count > 0 ? (
-        <div className="mt-3 w-full">
-          <CoverflowCarousel
-            key={request.id}
-            slides={slides}
-            initialIndex={initialIndex}
-            onSelect={onSelect}
-            onApi={onApi}
-            loop={count > 2}
-            label="Moments found"
-            cardWidth={compact ? "clamp(260px,78vw,360px)" : "clamp(360px,38vw,520px)"}
-            cardHeight={compact ? "calc(clamp(260px,78vw,360px) * 3 / 4)" : "calc(clamp(360px,38vw,520px) * 3 / 4)"}
-            rotate={compact ? 2 : 8}
-            depth={compact ? 0.03 : 0.08}
-            perspective={7}
-            falloff={0.9}
-            fade={0.12}
-            gap={0.08}
-            frameClassName={compact ? "py-5" : "py-8"}
-            cardClassName="rounded-[26px] border border-[#dfe9f3] bg-white p-2.5 shadow-[0_18px_50px_rgba(71,111,153,0.10)]"
-            renderSlide={(_slide, index, isActive) => {
-              const entry = moments[index]!
+        <nav className="flex-1 px-4 py-5">
+          <a
+            href="/start"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#262b31] hover:bg-[#f0f1f2]",
+            )}
+          >
+            <Plus className="size-4" />
+            New search
+          </a>
+          <a
+            href="/clips"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
+            )}
+          >
+            <Library className="size-4" />
+            Library
+          </a>
+          <a
+            href="/shared"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "mt-1 w-full justify-start gap-2 rounded-lg px-2.5 font-normal text-[#4b525b] hover:bg-[#f0f1f2]",
+            )}
+          >
+            <Users className="size-4" />
+            Shared
+          </a>
+
+          {others.length > 0 && (
+            <div className="mt-8">
+              <p className="px-2.5 text-xs font-medium text-[#747b84]">Recent</p>
+              <div className="mt-2 space-y-1">
+                {others.slice(0, 6).map((other) => (
+                  <Button
+                    key={other.id}
+                    variant="ghost"
+                    onClick={() => onPickOther?.(other.id)}
+                    className="h-auto w-full justify-start gap-2 rounded-lg px-2.5 py-2 text-left font-normal text-[#4b525b] hover:bg-[#f0f1f2]"
+                  >
+                    <Clock3 className="size-3.5 shrink-0" />
+                    <span className="truncate">{other.instruction}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+        </nav>
+      </aside>
+
+      <section className="min-w-0 border-r border-[#e5e7eb]">
+        <header className="flex h-16 items-center justify-between border-b border-[#e5e7eb] px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <Search className="size-4 shrink-0 text-[#4b525b]" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#1d2127]">Results</p>
+              <p className="truncate text-xs text-[#7a818b]">{request.instruction}</p>
+            </div>
+          </div>
+          <a
+            href="/start"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "rounded-lg border-[#dfe2e6] bg-white font-medium text-[#262b31]",
+            )}
+          >
+            New search
+          </a>
+        </header>
+
+        {moments.length > 0 ? (
+          <div className="space-y-4 px-5 py-5">
+            {moments.map((entry) => {
+              const selected = active?.match.id === entry.match.id
               const match = Math.round(entry.match.confidence * 100)
               return (
-                <motion.div
-                  animate={{ y: isActive ? -2 : 0 }}
-                  transition={{ duration: 0.2 }}
-                  className={cn("relative size-full overflow-hidden rounded-[19px] bg-neutral-950", isActive && "shadow-[0_20px_52px_rgba(27,50,73,0.18)]")}
+                <motion.article
+                  key={entry.match.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    "overflow-hidden rounded-[18px] border bg-[#f7f8f9] transition-colors",
+                    selected ? "border-[#cfd3d8]" : "border-[#e6e8eb] hover:border-[#d7dade]",
+                  )}
                 >
-                  {isActive ? (
-                    <MomentPlayer compact moment={entry} video={video} muted={muted} onMutedChange={onMutedChange} />
-                  ) : entry.still ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={entry.still} alt="" draggable={false} className="size-full object-cover" />
-                  ) : (
-                    <p className="flex size-full items-center justify-center px-5 text-center text-xs text-white/70">{momentTitle(entry.match)}</p>
-                  )}
-                  <MatchBadge value={match} className="absolute top-3 left-3" />
-                  {!isActive && (
-                    <>
-                      <Badge variant="ghost" className="absolute right-3 bottom-3 h-auto bg-black/36 px-2.5 py-1 text-[11px] font-normal text-white/85 backdrop-blur-md hover:bg-black/36">
-                        {formatRange(entry.match)}
-                      </Badge>
-                      <span className="absolute top-1/2 left-1/2 flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/14 text-white backdrop-blur-sm">
-                        <Play className="ml-0.5 size-4 fill-current" />
-                      </span>
-                    </>
-                  )}
-                </motion.div>
-              )
-            }}
-          />
+                  {/* The card used to be a button with the whole media area
+                      inside it, including the player once selected — and the
+                      player has its own Play and Mute buttons. Buttons inside
+                      a button is invalid markup: React can fail hydration on
+                      it, and a keyboard or screen reader cannot reliably
+                      reach the inner controls.
 
-          {active && (
-            <motion.div key={active.match.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mx-auto flex max-w-[620px] flex-col items-center px-6 text-center" data-testid="stage-caption">
-              <p className="max-w-[48ch] text-[17px] leading-snug text-[#1d2b3d]">{momentTitle(active.match)}</p>
-              <p className="mt-2 text-[13px] text-[#7e8fa2]"><span className="tabular-nums">{formatRange(active.match)}</span> · {evidenceWords(active.match)}</p>
-              <div className="mt-5 flex items-center gap-3">
-                <Button variant="outline" size="icon-sm" aria-label="Previous moment" onClick={() => apiRef.current?.prev()} className={cn("rounded-full border-[#dfe8f1] bg-white", count < 2 && "invisible")}><ChevronLeft className="size-4" /></Button>
-                <a
-                  href={momentHref(active)}
-                  onClick={(event) => {
-                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
-                    event.preventDefault()
-                    onOpen(active)
-                  }}
-                  className={cn(buttonVariants({ variant: "default", size: "default" }), "rounded-full border-0 bg-[linear-gradient(135deg,#d8f6ff_0%,#a9e3ff_48%,#bfcbff_100%)] px-5 text-[#102033] shadow-[0_10px_28px_rgba(100,190,255,0.24)]")}
-                >
-                  Ask about moment
-                </a>
-                <Button variant="outline" size="icon-sm" aria-label="Next moment" onClick={() => apiRef.current?.next()} className={cn("rounded-full border-[#dfe8f1] bg-white", count < 2 && "invisible")}><ChevronRight className="size-4" /></Button>
+                      So the button only exists while there is something to
+                      select. A selected card is already selected and holds
+                      the player, so it is a plain region. Caught by Codex on
+                      #113. */}
+                  <div className="relative aspect-[16/7] min-h-[170px] w-full overflow-hidden bg-[#f1f2f3]">
+                    {selected ? (
+                      <MomentPlayer
+                        compact
+                        moment={entry}
+                        video={video}
+                        muted={muted}
+                        onMutedChange={onMutedChange}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setActiveId(entry.match.id)}
+                        className="absolute inset-0 block size-full text-left"
+                        aria-label={`Select ${momentTitle(entry.match)}`}
+                      >
+                        {entry.still ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={entry.still} alt="" draggable={false} className="size-full object-cover" />
+                        ) : (
+                          <span className="flex size-full items-center justify-center px-8 text-center text-sm text-[#707780]">
+                            {momentTitle(entry.match)}
+                          </span>
+                        )}
+                      </button>
+                    )}
+                    <MatchBadge value={match} className="absolute top-3 left-3" />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[#20242a]">{momentTitle(entry.match)}</p>
+                      <p className="mt-1 text-xs text-[#7a818b]">
+                        {formatRange(entry.match)} · {evidenceWords(entry.match)}
+                      </p>
+                    </div>
+                    <a
+                      href={momentHref(entry)}
+                      onClick={(event) => {
+                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+                        event.preventDefault()
+                        onOpen(entry)
+                      }}
+                      className={cn(
+                        buttonVariants({ variant: "outline", size: "sm" }),
+                        "shrink-0 rounded-lg border-[#dfe2e6] bg-white text-[#2b3037]",
+                      )}
+                    >
+                      Open moment
+                    </a>
+                  </div>
+                </motion.article>
+              )
+            })}
+          </div>
+        ) : searching ? (
+          <SearchingStack />
+        ) : (
+          <div className="flex min-h-[420px] items-center justify-center px-8 text-center">
+            <p className="max-w-md text-sm leading-relaxed text-[#707780]">
+              {lines[0] ?? "No moments to show."}
+            </p>
+          </div>
+        )}
+      </section>
+
+      <aside className="flex min-h-[540px] flex-col bg-white lg:sticky lg:top-0 lg:h-dvh">
+        <header className="flex h-16 items-center border-b border-[#e5e7eb] px-5">
+          <p className="text-sm font-semibold text-[#1d2127]">Search chat</p>
+        </header>
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* Scrolls, and starts at the top. It did neither: the content was
+              centred in a box with no overflow, so this is the screen where a
+              model actually writes prose and the prose could not be reached
+              once it ran past the panel. The internet panel already had the
+              scroll; this one was missed. */}
+          <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-7 py-8 text-center">
+            <div className="flex size-11 items-center justify-center rounded-full border border-[#e0e3e7] bg-[#f7f8f9]">
+              <Search className="size-4 text-[#343a42]" />
+            </div>
+            <p className="mt-5 max-w-[28ch] text-[17px] font-semibold leading-snug text-[#1d2127]" data-testid="stage-question">
+              {request.instruction}
+            </p>
+            <div className="mt-3 max-w-[32ch] text-sm leading-relaxed text-[#68707a]" data-testid="stage-words">
+              {searching ? (
+                <>
+                  <TextShimmer as="p">{progressLine(request, video)}</TextShimmer>
+                  {candidates && <p className="mt-1">{candidates}</p>}
+                </>
+              ) : (
+                lines.map((line, index) => (
+                  <p key={`${request.id}-${index}`} className={index > 0 ? "mt-1" : undefined}>
+                    {line}
+                  </p>
+                ))
+              )}
+            </div>
+
+            {active && (
+              <motion.div
+                key={active.match.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-7 w-full max-w-[310px] rounded-xl border border-[#e4e7ea] bg-[#fafafa] px-4 py-3 text-left"
+                data-testid="stage-caption"
+              >
+                <p className="line-clamp-2 text-sm font-medium text-[#2a2f36]">{momentTitle(active.match)}</p>
+                <p className="mt-1.5 text-xs text-[#7a818b]">
+                  {formatRange(active.match)} · {evidenceWords(active.match)}
+                </p>
+              </motion.div>
+            )}
+
+            {others.length > 0 && (
+              <div className="mt-6 flex w-full max-w-[310px] flex-col gap-2">
+                {others.slice(0, 3).map((other) => (
+                  <Button
+                    key={other.id}
+                    variant="outline"
+                    onClick={() => onPickOther?.(other.id)}
+                    className="h-auto min-h-9 rounded-full border-[#dfe2e6] bg-white px-4 py-2 text-sm font-normal text-[#262b31]"
+                  >
+                    <span className="truncate">{other.instruction}</span>
+                  </Button>
+                ))}
               </div>
-            </motion.div>
+            )}
+          </div>
+
+          {composer && (
+            <div className="border-t border-[#e5e7eb] p-3">
+              {composer}
+            </div>
           )}
         </div>
-      ) : searching ? (
-        <div className="py-10"><SearchingCard /></div>
-      ) : null}
+      </aside>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { MAX_FAILURES, nextRead, POLL_MS, RETRY_MS } from "../components/start/search-polling"
+import { MAX_FAILURES, nextRead, POLL_MS, RETRY_MS, searchIsRunning } from "../components/start/search-polling"
 
 describe("when to read a running search again", () => {
   it("keeps reading while it is still working", () => {
@@ -45,5 +45,42 @@ describe("when to read a running search again", () => {
 
   it("waits longer after a failure than after a good read", () => {
     expect(RETRY_MS).toBeGreaterThan(POLL_MS)
+  })
+})
+
+describe("searchIsRunning", () => {
+  const PHASES = ["loading", "searching", "answered", "failed"] as const
+
+  it("treats only the two ending phases as finished", () => {
+    expect(searchIsRunning("loading")).toBe(true)
+    expect(searchIsRunning("searching")).toBe(true)
+    expect(searchIsRunning("answered")).toBe(false)
+    expect(searchIsRunning("failed")).toBe(false)
+  })
+
+  it("counts a search we know nothing about yet as still running", () => {
+    // The first poll has not landed. Treating unknown as finished would open
+    // the composer during a search that is very much alive.
+    expect(searchIsRunning(undefined)).toBe(true)
+  })
+
+  /*
+   * The invariant this file exists to protect.
+   *
+   * The page polls while a search runs, and the composer refuses to start a
+   * second search while a search runs. Those are the same question, and the
+   * moment they are answered by two different pieces of code they can drift:
+   * a screen that is still asking for updates while inviting you to throw the
+   * search away, or a composer locked open on a search nobody is watching.
+   *
+   * Mutating searchIsRunning to exclude "loading" fails this; so does
+   * reverting nextRead to its own phase comparison and then changing one of
+   * them. Both were checked.
+   */
+  it("never disagrees with the polling clock about whether a search is over", () => {
+    for (const phase of PHASES) {
+      const stillPolling = nextRead({ failed: false, phase }) !== null
+      expect(stillPolling).toBe(searchIsRunning(phase))
+    }
   })
 })

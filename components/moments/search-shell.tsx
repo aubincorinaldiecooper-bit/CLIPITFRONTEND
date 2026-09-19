@@ -17,9 +17,10 @@ export function SearchShell({
   variant = "app",
 }: {
   children: React.ReactNode
-  variant?: "home" | "app"
+  variant?: "home" | "app" | "canvas"
 }) {
   const home = variant === "home"
+  const canvas = variant === "canvas"
   return (
     <WorkspaceSignInGate>
       <div className="shadcn-scope min-h-dvh w-full bg-white text-[#111827]" data-testid="search-shell">
@@ -30,7 +31,7 @@ export function SearchShell({
           Skip to content
         </a>
 
-        {!home && (
+        {!home && !canvas && (
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[#edf1f5] bg-white/90 px-4 backdrop-blur-xl sm:px-6">
             <div className="flex items-center gap-3">
               <a href="/start" aria-label="Clipit home" className="flex items-center text-foreground">
@@ -59,7 +60,7 @@ export function SearchShell({
           id="content"
           className={cn(
             "flex w-full flex-col overflow-x-hidden",
-            home ? "min-h-dvh" : "min-h-[calc(100dvh-4rem)]",
+            home || canvas ? "min-h-dvh" : "min-h-[calc(100dvh-4rem)]",
           )}
         >
           {children}
